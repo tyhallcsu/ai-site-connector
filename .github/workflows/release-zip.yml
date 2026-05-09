@@ -56,6 +56,8 @@ jobs:
             --exclude='phpunit.xml.dist' \
             --exclude='tests/' \
             --exclude='TESTING_CHECKLIST.md' \
+            --exclude='assets/brand/*.png' \
+            --exclude='docs/BRAND_ASSETS.md' \
             ./ build/ai-site-connector/
 
       - name: Verify staging contents

@@ -228,6 +228,7 @@ rsync -a \
   --exclude='connection-pack.json' --exclude='*-connection-pack.json' \
   --exclude='composer.json' --exclude='composer.lock' \
   --exclude='phpcs.xml.dist' --exclude='TESTING_CHECKLIST.md' \
+  --exclude='assets/brand/*.png' --exclude='docs/BRAND_ASSETS.md' \
   ./ build/ai-site-connector/
 ( cd build && zip -r "ai-site-connector-v$(grep -E '^[[:space:]]*\*[[:space:]]*Version:' ../ai-site-connector.php | head -1 | sed -E 's/.*Version:[[:space:]]*//' | tr -d '[:space:]').zip" ai-site-connector )
 ```
@@ -264,11 +265,12 @@ RewriteRule .* - [E=HTTP_AUTHORIZATION:%1]
 
 ## Brand assets
 
-- `assets/brand/ai-site-connector-logo.svg` - horizontal logo with wordmark.
-- `assets/brand/ai-site-connector-mark.svg` - compact icon/mark for admin UI and small placements.
-- `assets/brand/ai-site-connector-readme-banner.svg` - README banner with tagline.
+- `assets/brand/ai-site-connector-mark.svg` — compact icon/mark; **shipped at runtime** (rendered by the Tools → AI Site Connector admin page header).
+- `assets/brand/ai-site-connector-logo.svg` — horizontal logo with wordmark; for README, repo, social previews.
+- `assets/brand/ai-site-connector-readme-banner.svg` — README banner with the tagline "Secure REST API access for AI coding agents".
+- `assets/brand/ai-site-connector-logo-256.png` / `-logo-512.png` / `-banner.png` — optional PNG exports for surfaces that don't render SVG (excluded from the plugin install ZIP to keep the distribution lean).
 
-The assets are original repo artwork with no embedded stock images, no copied third-party logos, and no trademarked logo reuse. They are safe to use for this private plugin and related documentation.
+The assets are original vector artwork authored for this repo. They contain no embedded stock images, no copied third-party logos, and no trademarked logo reuse. Released under the same [MIT License](LICENSE) as the rest of the plugin — fork, modify, ship.
 
 See [docs/BRAND_ASSETS.md](docs/BRAND_ASSETS.md) for file notes and PNG export commands.
 

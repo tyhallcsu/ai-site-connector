@@ -43,6 +43,7 @@ class AI_Site_Connector_Plugin {
 			// the registered subcommands.
 			WP_CLI::add_command( 'ai-connector status', array( 'AI_Site_Connector_CLI', 'status' ) );
 			WP_CLI::add_command( 'ai-connector health', array( 'AI_Site_Connector_CLI', 'health' ) );
+			WP_CLI::add_command( 'ai-connector self-test', array( 'AI_Site_Connector_CLI', 'self_test' ) );
 			WP_CLI::add_command( 'ai-connector create-user', array( 'AI_Site_Connector_CLI', 'create_user' ) );
 			WP_CLI::add_command( 'ai-connector generate-password', array( 'AI_Site_Connector_CLI', 'generate_password' ) );
 			WP_CLI::add_command( 'ai-connector revoke-password', array( 'AI_Site_Connector_CLI', 'revoke_password' ) );

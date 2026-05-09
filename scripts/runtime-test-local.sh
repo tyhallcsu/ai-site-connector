@@ -287,9 +287,20 @@ http_code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 [ "$(http_code -u "ai-agent:${APP_PASSWORD}" "${URL}/wp-json/ai-site-connector/v1/themes")"    = "403" ] || fail "operator /themes should be 403"
 [ "$(http_code "${URL}/wp-json/ai-site-connector/v1/site-info")"                                = "401" ] || fail "unauth /site-info should be 401"
 
-step "12/12 revoke and verify same App Pwd is now 401"
+step "12/13 wp ai-connector self-test (round-trips a temporary App Pwd)"
+SELF_TEST_OUT="$(wp_q ai-connector self-test --username=ai-agent --format=json | extract_json)"
+echo "$SELF_TEST_OUT" | jq -e '
+	.ok == true
+	and (.checks | map(select(.name == "credential_round_trip")) | .[0].ok == true)
+' >/dev/null || fail "self-test --username did not report ok=true: $SELF_TEST_OUT"
+# self-test must never print the temp plaintext password.
+if printf '%s' "$SELF_TEST_OUT" | grep -Ei -q '"application_password"\s*:'; then
+	fail "self-test JSON unexpectedly contains an application_password field"
+fi
+
+step "13/13 revoke and verify original App Pwd is now 401"
 wp_q ai-connector revoke-password --username=ai-agent --uuid="$APP_UUID" >/dev/null
 [ "$(http_code -u "ai-agent:${APP_PASSWORD}" "${URL}/wp-json/wp/v2/users/me")" = "401" ] \
 	|| fail "revoked App Pwd unexpectedly still works"
 
-green "All 12 runtime tests passed."
+green "All 13 runtime tests passed."

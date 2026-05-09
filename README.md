@@ -99,6 +99,22 @@ Or via WP-CLI:
 wp ai-connector generate-password --username=ai-agent --format=json
 ```
 
+## Health check / self-test (for CI, Ansible, cron)
+
+```bash
+# Quick checks — role caps, audit table, App Passwords available, /v1/health payload shape:
+wp ai-connector self-test
+
+# End-to-end: also mints a temporary Application Password for ai-agent,
+# uses it against /wp-json/wp/v2/users/me, and revokes it.
+wp ai-connector self-test --username=ai-agent
+
+# Machine-readable output, exits non-zero on any failure:
+wp ai-connector self-test --username=ai-agent --format=json
+```
+
+The self-test never prints the temporary password and revokes it on every exit path (including a fatal error mid-test). Successful runs are recorded in the audit log as `self_test_run`.
+
 ## How Claude / Codex should authenticate
 
 Agents send standard HTTP Basic Auth on every REST request. The connection pack tells the agent everything it needs:

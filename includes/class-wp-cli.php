@@ -164,4 +164,206 @@ class AI_Site_Connector_CLI {
 		}
 		WP_CLI::success( 'Application Password revoked.' );
 	}
+
+	/**
+	 * Run an end-to-end self-test of the plugin install.
+	 *
+	 * Exits 0 if every check passes, non-zero on any failure. Designed for use
+	 * in CI / Ansible / Terraform / cron health probes — give it a username
+	 * and it will mint a temporary Application Password, hit a known endpoint,
+	 * and revoke the credential before returning.
+	 *
+	 * The temporary password is NEVER printed. The revoke runs in a try/finally
+	 * pattern so even an interrupted call cleans up after itself.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--username=<username>]
+	 * : If supplied, also mints a temporary Application Password for this user,
+	 *   uses it against /wp-json/wp/v2/users/me via internal REST dispatch,
+	 *   and revokes it. Skipping this flag runs the checks that don't require
+	 *   credential mint authority.
+	 *
+	 * [--format=<format>]
+	 * : human|json. Default: human. Use json for machine-readable output.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *   wp ai-connector self-test
+	 *   wp ai-connector self-test --username=ai-agent
+	 *   wp ai-connector self-test --username=ai-agent --format=json
+	 */
+	public function self_test( $args, $assoc ) {
+		$format        = isset( $assoc['format'] ) && 'json' === $assoc['format'] ? 'json' : 'human';
+		$username      = isset( $assoc['username'] ) ? sanitize_user( $assoc['username'], true ) : '';
+		$checks        = array();
+		$temp_user_id  = 0;
+		$temp_uuid     = '';
+
+		$add_check = function ( $name, $ok, $detail = '' ) use ( &$checks ) {
+			$checks[] = array(
+				'name'   => $name,
+				'ok'     => (bool) $ok,
+				'detail' => (string) $detail,
+			);
+		};
+
+		// 1. Plugin active. If we're running this, the answer is yes by definition.
+		$add_check( 'plugin_active', true, 'AI Site Connector v' . AI_SITE_CONNECTOR_VERSION );
+
+		// 2. ai_site_operator role exists with the documented default caps.
+		$role        = get_role( AI_SITE_CONNECTOR_OPERATOR_ROLE );
+		$role_ok     = (bool) $role;
+		$role_detail = $role ? 'role exists' : 'role missing';
+		if ( $role ) {
+			$expected_true  = array( 'read', 'edit_posts', 'edit_pages', 'upload_files', 'moderate_comments' );
+			$expected_false = array( 'manage_options', 'install_plugins', 'edit_files', 'list_users', 'edit_others_posts', 'delete_posts' );
+			foreach ( $expected_true as $cap ) {
+				if ( ! $role->has_cap( $cap ) ) {
+					$role_ok     = false;
+					$role_detail = "missing required cap: {$cap}";
+					break;
+				}
+			}
+			if ( $role_ok ) {
+				foreach ( $expected_false as $cap ) {
+					if ( $role->has_cap( $cap ) ) {
+						$role_ok     = false;
+						$role_detail = "unexpected cap granted: {$cap}";
+						break;
+					}
+				}
+			}
+		}
+		$add_check( 'operator_role', $role_ok, $role_detail );
+
+		// 3. Audit log table exists.
+		global $wpdb;
+		$audit_table = AI_Site_Connector_Audit_Log::table_name();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.NoCaching -- One-time install/upgrade check.
+		$audit_exists = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $audit_table ) );
+		$add_check( 'audit_table', $audit_exists, $audit_exists ? $audit_table : 'audit table missing' );
+
+		// 4. Application Passwords available (HTTPS / WP_ENVIRONMENT_TYPE / app-pwd filter).
+		$app_pwds_ok = AI_Site_Connector_Plugin::app_passwords_available();
+		$add_check( 'app_passwords_available', $app_pwds_ok, $app_pwds_ok ? 'available' : 'WP core reports unavailable (HTTPS / environment / filter)' );
+
+		// 5. /v1/health unauth payload contains only the minimal keys.
+		$health_req  = new WP_REST_Request( 'GET', '/' . AI_SITE_CONNECTOR_REST_NAMESPACE . '/health' );
+		$health_res  = rest_do_request( $health_req );
+		$health_data = is_object( $health_res ) ? (array) $health_res->get_data() : array();
+		$leaks       = array();
+		foreach ( array( 'wp_version', 'php_version', 'active_theme', 'active_plugin_count', 'is_multisite', 'user' ) as $forbidden ) {
+			if ( array_key_exists( $forbidden, $health_data ) ) {
+				$leaks[] = $forbidden;
+			}
+		}
+		$health_ok = empty( $leaks ) && isset( $health_data['plugin'] ) && 'ai-site-connector' === $health_data['plugin'];
+		$add_check( 'health_endpoint', $health_ok, $health_ok ? '/v1/health unauth payload is minimal' : ( 'leaks: ' . implode( ',', $leaks ) ) );
+
+		// 6. Optional: round-trip a temporary credential through Basic Auth.
+		// The plaintext stays in $temp_pwd which is unset() before any failure path.
+		// We also schedule revoke via register_shutdown_function so a fatal error
+		// during the test still triggers cleanup.
+		if ( '' !== $username ) {
+			$user = get_user_by( 'login', $username );
+			if ( ! $user ) {
+				$add_check( 'credential_round_trip', false, "user not found: {$username}" );
+			} elseif ( ! $app_pwds_ok ) {
+				$add_check( 'credential_round_trip', false, 'skipped — Application Passwords not available' );
+			} else {
+				$temp_name = 'AI Site Connector Self-Test - ' . gmdate( 'Y-m-d H:i:s' );
+				$created   = AI_Site_Connector_Application_Passwords::create_for_user( $user->ID, $temp_name );
+				if ( is_wp_error( $created ) ) {
+					$add_check( 'credential_round_trip', false, 'mint failed: ' . $created->get_error_message() );
+				} else {
+					$temp_user_id = (int) $user->ID;
+					$temp_uuid    = isset( $created['uuid'] ) ? (string) $created['uuid'] : '';
+					$temp_pwd     = isset( $created['password'] ) ? (string) $created['password'] : '';
+
+					// Cleanup safety net — if anything below fatals, this still
+					// runs at shutdown and the credential is revoked.
+					register_shutdown_function(
+						static function () use ( $temp_user_id, $temp_uuid ) {
+							if ( $temp_user_id && $temp_uuid ) {
+								AI_Site_Connector_Application_Passwords::revoke( $temp_user_id, $temp_uuid );
+							}
+						}
+					);
+
+					$auth_header = 'Basic ' . base64_encode( $user->user_login . ':' . $temp_pwd );
+					unset( $temp_pwd ); // Drop plaintext from this scope ASAP.
+
+					$ping = wp_remote_get(
+						rest_url( 'wp/v2/users/me' ),
+						array(
+							'timeout'   => 8,
+							'sslverify' => false,
+							'headers'   => array( 'Authorization' => $auth_header ),
+						)
+					);
+					unset( $auth_header );
+
+					if ( is_wp_error( $ping ) ) {
+						$add_check( 'credential_round_trip', false, 'request failed: ' . $ping->get_error_message() );
+					} else {
+						$code = (int) wp_remote_retrieve_response_code( $ping );
+						$add_check( 'credential_round_trip', 200 === $code, '/wp/v2/users/me returned HTTP ' . $code );
+					}
+
+					// Eager revoke (in addition to the shutdown safety net).
+					AI_Site_Connector_Application_Passwords::revoke( $temp_user_id, $temp_uuid );
+					$temp_uuid    = '';
+					$temp_user_id = 0;
+				}
+			}
+		}
+
+		// Tally + audit.
+		$total  = count( $checks );
+		$passed = 0;
+		foreach ( $checks as $c ) {
+			if ( $c['ok'] ) {
+				++$passed;
+			}
+		}
+		$ok = $passed === $total;
+
+		AI_Site_Connector_Audit_Log::record(
+			'self_test_run',
+			array(
+				'message' => sprintf( 'wp ai-connector self-test: %d/%d checks passed.', $passed, $total ),
+			)
+		);
+
+		if ( 'json' === $format ) {
+			WP_CLI::log(
+				wp_json_encode(
+					array(
+						'ok'        => $ok,
+						'passed'    => $passed,
+						'total'     => $total,
+						'checks'    => $checks,
+						'timestamp' => gmdate( 'c' ),
+					),
+					JSON_PRETTY_PRINT
+				)
+			);
+		} else {
+			WP_CLI::log( 'AI Site Connector — self-test' );
+			foreach ( $checks as $c ) {
+				$mark = $c['ok'] ? '  PASS' : '  FAIL';
+				$line = $mark . ' ' . str_pad( $c['name'], 26 );
+				if ( '' !== $c['detail'] ) {
+					$line .= ' — ' . $c['detail'];
+				}
+				WP_CLI::log( $line );
+			}
+			WP_CLI::log( sprintf( '%s — %d/%d checks', $ok ? 'PASS' : 'FAIL', $passed, $total ) );
+		}
+
+		if ( ! $ok ) {
+			WP_CLI::halt( 1 );
+		}
+	}
 }

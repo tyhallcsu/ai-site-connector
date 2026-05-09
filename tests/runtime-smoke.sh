@@ -183,6 +183,11 @@ log "Checking WP-CLI commands."
 wp_cli ai-connector status --path="$WP_DIR" | grep -q 'plugin_version'
 wp_cli ai-connector health --path="$WP_DIR" | jq -e '.plugin == "ai-site-connector" and .authenticated == false' >/dev/null
 
+log "Running self-test (no credential round-trip yet)."
+SELF_TEST_OUT="$(wp_cli ai-connector self-test --format=json --path="$WP_DIR")"
+printf '%s' "$SELF_TEST_OUT" | jq -e '.ok == true and (.checks | length) >= 5' >/dev/null \
+	|| { echo "self-test (no username) did not report ok=true"; printf '%s\n' "$SELF_TEST_OUT" >&2; exit 1; }
+
 log "Creating managed AI user."
 AI_USER="ai-agent"
 wp_cli ai-connector create-user --username="$AI_USER" --role=ai_site_operator --path="$WP_DIR" >/dev/null
@@ -312,8 +317,21 @@ foreach ( $checks as $check ) {
 }
 ' --path="$WP_DIR"
 
+log "Running self-test with credential round-trip (mints + revokes a temp App Pwd)."
+SELF_TEST_OUT="$(wp_cli ai-connector self-test --username="$AI_USER" --format=json --path="$WP_DIR")"
+printf '%s' "$SELF_TEST_OUT" | jq -e '
+	.ok == true
+	and (.checks | map(select(.name == "credential_round_trip")) | .[0].ok == true)
+' >/dev/null || { echo "self-test --username did not pass round-trip"; printf '%s\n' "$SELF_TEST_OUT" >&2; exit 1; }
+# self-test must NEVER expose the temporary password anywhere — assert the
+# JSON does not contain a literal "application_password" field.
+if printf '%s' "$SELF_TEST_OUT" | grep -Ei -q '"application_password"\s*:'; then
+	echo "self-test JSON unexpectedly contains an application_password field" >&2
+	exit 1
+fi
+
 log "Checking audit events."
-for action in plugin_activated ai_user_created application_password_created health_accessed_authenticated; do
+for action in plugin_activated ai_user_created application_password_created health_accessed_authenticated self_test_run; do
 	count="$(wp_cli db query "SELECT COUNT(*) FROM \`${AUDIT_TABLE}\` WHERE action = '${action}';" --path="$WP_DIR" --skip-column-names)"
 	if [ "${count:-0}" -lt 1 ]; then
 		echo "Expected audit event not found: $action" >&2

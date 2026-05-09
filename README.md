@@ -215,22 +215,13 @@ into a confirmation field before it will create the user. The same phrase is enf
 
 ## Building a release ZIP
 
-The repository ships a `workflow_dispatch` workflow at `.github/workflows/release-zip.yml`. Trigger it from the GitHub Actions tab and download the resulting `ai-site-connector-vX.Y.Z.zip` artifact.
+Official plugin ZIPs are published from [GitHub Releases](https://github.com/tyhallcsu/ai-site-connector/releases). The repository also ships a `workflow_dispatch` workflow at `.github/workflows/release-zip.yml` for rebuilding a checked release artifact from CI.
 
 To build locally:
 
 ```bash
-mkdir -p build/ai-site-connector
-rsync -a \
-  --exclude='.git/' --exclude='.github/' --exclude='.DS_Store' \
-  --exclude='node_modules/' --exclude='vendor/' --exclude='build/' \
-  --exclude='*.zip' --exclude='*.log' --exclude='.env*' \
-  --exclude='connection-pack.json' --exclude='*-connection-pack.json' \
-  --exclude='composer.json' --exclude='composer.lock' \
-  --exclude='phpcs.xml.dist' --exclude='TESTING_CHECKLIST.md' \
-  --exclude='assets/brand/*.png' --exclude='docs/BRAND_ASSETS.md' \
-  ./ build/ai-site-connector/
-( cd build && zip -r "ai-site-connector-v$(grep -E '^[[:space:]]*\*[[:space:]]*Version:' ../ai-site-connector.php | head -1 | sed -E 's/.*Version:[[:space:]]*//' | tr -d '[:space:]').zip" ai-site-connector )
+bin/build-release-zip.sh
+tests/package-smoke.sh
 ```
 
 ## How to revoke access

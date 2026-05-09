@@ -125,7 +125,7 @@ wp_cli rewrite structure '/%postname%/' --path="$WP_DIR" --quiet
 wp_cli rewrite flush --hard --path="$WP_DIR" --quiet
 
 log "Checking activation artifacts."
-PREFIX="$(wp_cli db prefix --path="$WP_DIR" --quiet)"
+AUDIT_TABLE="$(wp_cli --path="$WP_DIR" eval 'echo AI_Site_Connector_Audit_Log::table_name();')"
 wp_cli eval '
 global $wpdb;
 $table = AI_Site_Connector_Audit_Log::table_name();
@@ -276,7 +276,7 @@ foreach ( $checks as $check ) {
 
 log "Checking audit events."
 for action in plugin_activated ai_user_created application_password_created health_accessed_authenticated; do
-	count="$(wp_cli db query "SELECT COUNT(*) FROM ${PREFIX}ai_site_connector_log WHERE action = '${action}';" --path="$WP_DIR" --skip-column-names)"
+	count="$(wp_cli db query "SELECT COUNT(*) FROM \`${AUDIT_TABLE}\` WHERE action = '${action}';" --path="$WP_DIR" --skip-column-names)"
 	if [ "${count:-0}" -lt 1 ]; then
 		echo "Expected audit event not found: $action" >&2
 		exit 1
@@ -291,7 +291,7 @@ if [ "$status" != "401" ]; then
 	exit 1
 fi
 
-count="$(wp_cli db query "SELECT COUNT(*) FROM ${PREFIX}ai_site_connector_log WHERE action = 'application_password_revoked';" --path="$WP_DIR" --skip-column-names)"
+count="$(wp_cli db query "SELECT COUNT(*) FROM \`${AUDIT_TABLE}\` WHERE action = 'application_password_revoked';" --path="$WP_DIR" --skip-column-names)"
 if [ "${count:-0}" -lt 1 ]; then
 	echo "Expected application_password_revoked audit event not found." >&2
 	exit 1

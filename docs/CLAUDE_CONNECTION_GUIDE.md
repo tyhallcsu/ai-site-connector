@@ -51,7 +51,16 @@ WordPress accepts the password with or without the spaces — both `xxxx xxxx xx
 
    You should get an HTTP 200 and a JSON object describing the AI user. If you get 401, your credentials are wrong. If you get 403, your role lacks the capability for that endpoint.
 
-3. **Site summary**:
+3. **Capability introspection** — the recommended next call after auth. Tells you exactly what the credential can do, so you can stop guessing or speculatively probing endpoints.
+
+   ```bash
+   curl -u 'ai-agent:xxxx ...' \
+     'https://example.com/wp-json/ai-site-connector/v1/me/capabilities'
+   ```
+
+   Returns the calling user's `user_id`, `login`, `roles`, an `operator_role_active` flag, and a `capabilities` map of curated WP capabilities to booleans. Use it to branch logic before attempting writes.
+
+4. **Site summary**:
 
    ```bash
    curl -u 'ai-agent:xxxx ...' \
@@ -76,6 +85,7 @@ Read and write through the standard WordPress REST API under `/wp-json/wp/v2/`, 
 Plugin-provided helpers under `/wp-json/ai-site-connector/v1/`:
 
 - `GET /health` — version + reachability
+- `GET /me/capabilities` — what the calling credential can do (run this right after auth)
 - `GET /site-info` — site basics
 - `GET /plugins` — installed plugins (admin only)
 - `GET /themes` — installed themes (admin only)

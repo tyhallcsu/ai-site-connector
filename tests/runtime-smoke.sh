@@ -251,6 +251,29 @@ log "Checking authenticated health payload."
 HEALTH_AUTH="$(curl -fsS --user "$AI_USER:$APP_PASSWORD" "$WP_URL/wp-json/ai-site-connector/v1/health")"
 printf '%s' "$HEALTH_AUTH" | jq -e '.authenticated == true and .user.login == "ai-agent" and has("wp_version")' >/dev/null
 
+log "Checking /me/capabilities introspection."
+# /me/capabilities must require auth and never reveal another user's caps.
+status="$(curl -sS -o /dev/null -w '%{http_code}' "$WP_URL/wp-json/ai-site-connector/v1/me/capabilities")"
+if [ "$status" != "401" ]; then
+	echo "Expected unauthenticated /me/capabilities to return 401, got $status." >&2
+	exit 1
+fi
+ME_CAPS="$(curl -fsS --user "$AI_USER:$APP_PASSWORD" "$WP_URL/wp-json/ai-site-connector/v1/me/capabilities")"
+printf '%s' "$ME_CAPS" | jq -e '
+	.login == "ai-agent"
+	and (.roles | index("ai_site_operator"))
+	and .operator_role_active == true
+	and .capabilities.edit_posts == true
+	and .capabilities.upload_files == true
+	and .capabilities.manage_options == false
+	and .capabilities.install_plugins == false
+	and .capabilities.edit_files == false
+' >/dev/null || {
+	echo "/me/capabilities did not report the expected operator-role capability map." >&2
+	echo "$ME_CAPS" | jq '.' >&2
+	exit 1
+}
+
 log "Checking allowed operator REST routes."
 for route in site-info posts pages; do
 	status="$(curl -sS -o /dev/null -w '%{http_code}' --user "$AI_USER:$APP_PASSWORD" "$WP_URL/wp-json/ai-site-connector/v1/$route")"

@@ -31,8 +31,9 @@ This document explains the security posture of the AI Site Connector plugin and 
 
 | Endpoint                            | Required capability   | Method |
 | ----------------------------------- | --------------------- | ------ |
-| `/wp-json/ai-site-connector/v1/health`     | none (richer if auth) | GET    |
-| `/wp-json/ai-site-connector/v1/site-info`  | `list_users`          | GET    |
+| `/wp-json/ai-site-connector/v1/health`             | none (richer if auth) | GET    |
+| `/wp-json/ai-site-connector/v1/me/capabilities`    | any logged-in user (returns ONLY caller's caps) | GET |
+| `/wp-json/ai-site-connector/v1/site-info`          | `edit_posts`          | GET    |
 | `/wp-json/ai-site-connector/v1/plugins`    | `manage_options`      | GET    |
 | `/wp-json/ai-site-connector/v1/themes`     | `manage_options`      | GET    |
 | `/wp-json/ai-site-connector/v1/pages`      | `edit_pages`          | GET    |

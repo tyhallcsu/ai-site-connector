@@ -168,8 +168,9 @@ All endpoints under `/wp-json/ai-site-connector/v1/`.
 
 | Endpoint     | Auth                                       | Returns                                                      |
 | ------------ | ------------------------------------------ | ------------------------------------------------------------ |
-| `/health`    | Public (richer if authenticated)           | Plugin version, site URL, WP/PHP versions, HTTPS, app-pwd availability, current user info if authed |
-| `/site-info` | Authenticated, `list_users`                | Site name, URL, language, theme, multisite flag              |
+| `/health`           | Public (minimal payload; richer if authenticated) | Plugin version, site URL, REST URL, HTTPS, timestamp. Authenticated callers also see WP/PHP versions, theme, plugin count, multisite flag, and current user. |
+| `/me/capabilities`  | Any authenticated user                     | Calling user's `user_id`, `login`, `roles`, `capabilities` map, `operator_role_active`. Never reveals another user's permissions. Extend the cap list via the `ai_site_connector_introspection_caps` filter. |
+| `/site-info`        | Authenticated, `edit_posts`                | Site name, URL, language, theme, multisite flag              |
 | `/plugins`   | Authenticated, `manage_options`            | List of installed plugins (read-only)                        |
 | `/themes`    | Authenticated, `manage_options`            | List of installed themes (read-only)                         |
 | `/pages`     | Authenticated, `edit_pages`                | First 200 pages (id/title/slug/status)                       |

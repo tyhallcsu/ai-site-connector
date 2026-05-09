@@ -259,13 +259,26 @@ echo "$PAYLOAD" | jq -e '
 	and (has("user") | not)
 ' >/dev/null || fail "/health unauth payload leaks data: $PAYLOAD"
 
-step "11/12 /health auth has rich payload, capability gating works"
+step "11/12 /health auth + /me/capabilities + capability gating"
 AUTH_PAYLOAD="$(curl -fsS -u "ai-agent:${APP_PASSWORD}" "${URL}/wp-json/ai-site-connector/v1/health" 2>/dev/null || true)"
 [ -n "$AUTH_PAYLOAD" ] || fail "could not fetch authenticated /health"
 echo "$AUTH_PAYLOAD" | jq -e '.authenticated == true and has("wp_version") and .user.login == "ai-agent"' >/dev/null \
 	|| fail "/health auth payload missing rich fields: $AUTH_PAYLOAD"
 
+ME_CAPS="$(curl -fsS -u "ai-agent:${APP_PASSWORD}" "${URL}/wp-json/ai-site-connector/v1/me/capabilities" 2>/dev/null || true)"
+[ -n "$ME_CAPS" ] || fail "/me/capabilities returned nothing"
+echo "$ME_CAPS" | jq -e '
+	.login == "ai-agent"
+	and .operator_role_active == true
+	and .capabilities.edit_posts == true
+	and .capabilities.upload_files == true
+	and .capabilities.manage_options == false
+	and .capabilities.install_plugins == false
+' >/dev/null || fail "/me/capabilities response did not match operator role: $ME_CAPS"
+
 http_code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
+[ "$(http_code "${URL}/wp-json/ai-site-connector/v1/me/capabilities")" = "401" ] \
+	|| fail "unauth /me/capabilities should be 401"
 [ "$(http_code -u "ai-agent:${APP_PASSWORD}" "${URL}/wp-json/wp/v2/users/me")"      = "200" ] || fail "wp/v2/users/me with App Pwd should be 200"
 [ "$(http_code -u "ai-agent:${APP_PASSWORD}" "${URL}/wp-json/ai-site-connector/v1/site-info")" = "200" ] || fail "operator /site-info should be 200"
 [ "$(http_code -u "ai-agent:${APP_PASSWORD}" "${URL}/wp-json/ai-site-connector/v1/posts")"     = "200" ] || fail "operator /posts should be 200"

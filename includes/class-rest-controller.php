@@ -5,12 +5,13 @@
  * Namespace: ai-site-connector/v1
  *
  * Endpoints:
- *  - GET /health        (public, MINIMAL safe summary; richer payload only when authenticated)
- *  - GET /site-info     (auth, edit_posts)
- *  - GET /plugins       (auth, manage_options)
- *  - GET /themes        (auth, manage_options)
- *  - GET /pages         (auth, edit_pages)
- *  - GET /posts         (auth, edit_posts)
+ *  - GET /health             (public, MINIMAL safe summary; richer payload only when authenticated)
+ *  - GET /me/capabilities    (auth, any logged-in user; returns ONLY the calling user's caps)
+ *  - GET /site-info          (auth, edit_posts)
+ *  - GET /plugins            (auth, manage_options)
+ *  - GET /themes             (auth, manage_options)
+ *  - GET /pages              (auth, edit_pages)
+ *  - GET /posts              (auth, edit_posts)
  *
  * No write endpoints, no arbitrary code paths.
  *
@@ -37,6 +38,16 @@ class AI_Site_Connector_REST_Controller {
 				'methods'             => 'GET',
 				'callback'            => array( __CLASS__, 'route_health' ),
 				'permission_callback' => '__return_true',
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/me/capabilities',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'route_me_capabilities' ),
+				'permission_callback' => array( __CLASS__, 'auth_logged_in' ),
 			)
 		);
 
@@ -95,6 +106,10 @@ class AI_Site_Connector_REST_Controller {
 		return is_user_logged_in() && current_user_can( 'manage_options' );
 	}
 
+	public static function auth_logged_in() {
+		return is_user_logged_in();
+	}
+
 	public static function auth_edit_posts() {
 		return is_user_logged_in() && current_user_can( 'edit_posts' );
 	}
@@ -144,6 +159,98 @@ class AI_Site_Connector_REST_Controller {
 		}
 
 		return rest_ensure_response( $payload );
+	}
+
+	/**
+	 * Return ONLY the calling user's roles + a curated capability map.
+	 *
+	 * Lets an AI agent (or any authenticated client) introspect what it can
+	 * actually do on this site without making 5 speculative requests and
+	 * observing 403s. The endpoint never reveals another user's permissions
+	 * — current_user_can() is keyed to the authenticated user, period.
+	 *
+	 * The capability list is curated rather than comprehensive: it covers
+	 * the WP core caps that matter for content/site automation. Sites that
+	 * need additional caps reported can extend via:
+	 *
+	 *   add_filter( 'ai_site_connector_introspection_caps', function ( $caps ) {
+	 *       $caps[] = 'gf_full_access'; // e.g. a plugin's custom cap
+	 *       return $caps;
+	 *   } );
+	 */
+	public static function route_me_capabilities( WP_REST_Request $request ) {
+		$user = wp_get_current_user();
+
+		$caps = array(
+			// Reading.
+			'read',
+			// Posts and pages — own.
+			'edit_posts',
+			'edit_pages',
+			'edit_published_posts',
+			'edit_published_pages',
+			'publish_posts',
+			'publish_pages',
+			// Posts and pages — others.
+			'edit_others_posts',
+			'edit_others_pages',
+			// Deletes.
+			'delete_posts',
+			'delete_pages',
+			'delete_published_posts',
+			'delete_published_pages',
+			'delete_others_posts',
+			'delete_others_pages',
+			// Media.
+			'upload_files',
+			// Comments.
+			'moderate_comments',
+			// Users.
+			'list_users',
+			'edit_users',
+			'create_users',
+			'delete_users',
+			// Site administration — explicitly listed so AIs can confirm
+			// they do NOT have these (the common case).
+			'manage_options',
+			'manage_categories',
+			'install_plugins',
+			'activate_plugins',
+			'edit_plugins',
+			'install_themes',
+			'switch_themes',
+			'edit_themes',
+			'edit_files',
+			'export',
+			'import',
+			'unfiltered_html',
+		);
+
+		/**
+		 * Filter the capability list reported by /me/capabilities.
+		 *
+		 * Only adds keys to the introspection response — does not grant or
+		 * revoke any capability. Pure introspection extension.
+		 *
+		 * @param string[] $caps Capability slugs.
+		 */
+		$caps = (array) apply_filters( 'ai_site_connector_introspection_caps', $caps );
+		$caps = array_values( array_unique( array_filter( array_map( 'strval', $caps ) ) ) );
+
+		$capabilities = array();
+		foreach ( $caps as $cap ) {
+			$capabilities[ $cap ] = (bool) user_can( $user, $cap );
+		}
+
+		return rest_ensure_response(
+			array(
+				'user_id'              => (int) $user->ID,
+				'login'                => $user->user_login,
+				'roles'                => array_values( (array) $user->roles ),
+				'capabilities'         => $capabilities,
+				'operator_role_active' => in_array( AI_SITE_CONNECTOR_OPERATOR_ROLE, (array) $user->roles, true ),
+			)
+		);
 	}
 
 	public static function route_site_info( WP_REST_Request $request ) {

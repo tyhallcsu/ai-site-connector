@@ -125,7 +125,22 @@ wp_cli rewrite structure '/%postname%/' --path="$WP_DIR" --quiet
 wp_cli rewrite flush --hard --path="$WP_DIR" --quiet
 
 log "Checking activation artifacts."
-AUDIT_TABLE="$(wp_cli --path="$WP_DIR" eval 'echo AI_Site_Connector_Audit_Log::table_name();')"
+# wp_cli eval can print PHP startup notices (memory_limit, deprecation warnings)
+# to stdout under some PHP configurations, which then pollutes captured output.
+# Strip stderr, take only the final line, and assert it looks like a real
+# WordPress table name (must contain the prefix). Empty / unprefixed output is
+# a hard fail — silently letting it through means downstream queries hit the
+# wrong table name and the smoke test reports a misleading error.
+AUDIT_TABLE="$(wp_cli --path="$WP_DIR" eval 'echo AI_Site_Connector_Audit_Log::table_name();' 2>/dev/null | tail -n 1)"
+case "$AUDIT_TABLE" in
+	*ai_site_connector_log)
+		: ;;
+	*)
+		echo "Could not resolve audit table name (got: '${AUDIT_TABLE}'). Plugin likely not loaded yet." >&2
+		exit 1
+		;;
+esac
+log "Audit table resolved as: ${AUDIT_TABLE}"
 wp_cli eval '
 global $wpdb;
 $table = AI_Site_Connector_Audit_Log::table_name();

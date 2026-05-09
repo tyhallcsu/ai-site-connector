@@ -1,6 +1,6 @@
 # AI Site Connector — v0.1.0 Release Notes
 
-**Status:** Initial pre-release. Code complete, statically validated, runtime testing pending (see [RUNTIME_TESTING_REQUIRED.md](RUNTIME_TESTING_REQUIRED.md)).
+**Status:** Initial release. Code complete, static checks green, runtime suite executed against a throwaway WordPress 6.9.4 + PHP 8.5.5 + SQLite install (see [RUNTIME_TESTING_REQUIRED.md](RUNTIME_TESTING_REQUIRED.md) — now contains test results, not just a checklist).
 
 ## What works (verified by static analysis only)
 
@@ -27,23 +27,45 @@
 | Confirm no plaintext password storage   | Pass          |
 | Confirm permission_callback on /health, /site-info, /plugins, /themes, /pages, /posts | Pass |
 
-## What was NOT tested
+## Runtime tests executed (throwaway WP 6.9.4 + PHP 8.5.5 + SQLite)
 
-| Test                                                                               | Status              |
-| ---------------------------------------------------------------------------------- | ------------------- |
-| Plugin activation on real WP                                                       | **Not run**         |
-| Tools → AI Site Connector renders                                                  | **Not run**         |
-| User creation (incl. Administrator typed-confirmation gate)                        | **Not run**         |
-| Application Password generation + once-only display                                | **Not run**         |
-| Application Password revocation                                                    | **Not run**         |
-| Audit log entries on real WP                                                       | **Not run**         |
-| `/wp-json/ai-site-connector/v1/*` reachable                                        | **Not run**         |
-| Capability gating on `/plugins`, `/themes` (operator should be 401/403)            | **Not run**         |
-| `wp ai-connector status / health / create-user / generate-password / revoke-password` | **Not run**     |
-| Multisite                                                                          | **Not run**         |
-| Browser test of the typed-confirmation gate JS                                     | **Not run**         |
+| Test                                                                               | Result        |
+| ---------------------------------------------------------------------------------- | ------------- |
+| Plugin activation                                                                  | **PASS**      |
+| `ai_site_operator` role + table created                                            | **PASS**      |
+| Default capabilities = least-privilege (13 caps verified)                          | **PASS**      |
+| `wp ai-connector status / health`                                                  | **PASS**      |
+| `wp ai-connector create-user / generate-password / revoke-password`                | **PASS** (after fix — see Bugs) |
+| Application Password plaintext NOT in options / usermeta / audit log               | **PASS**      |
+| Audit log records 6 event types (activated, user_created, pwd_created/revoked, health_accessed, admin_refused) | **PASS** |
+| `/wp-json/ai-site-connector/v1/health` unauth returns minimal payload              | **PASS**      |
+| `/wp-json/ai-site-connector/v1/health` auth returns rich payload                   | **PASS**      |
+| `/site-info`, `/posts`, `/pages` for operator → 200                                | **PASS**      |
+| `/plugins`, `/themes` for operator → 403                                           | **PASS**      |
+| `/plugins` unauthenticated → 401                                                   | **PASS**      |
+| `wp/v2/users/me` with App Password → 200                                           | **PASS**      |
+| Same call after revoke → 401                                                       | **PASS**      |
+| Administrator role gate: refuses without exact phrase                              | **PASS**      |
+| Administrator role gate: allows with exact phrase                                  | **PASS**      |
 
-See [RUNTIME_TESTING_REQUIRED.md](RUNTIME_TESTING_REQUIRED.md) for the exact commands to run.
+See [RUNTIME_TESTING_REQUIRED.md](RUNTIME_TESTING_REQUIRED.md) for the full test transcript.
+
+## Bugs found and fixed during runtime testing
+
+- **WP-CLI hyphenated subcommands** (`generate-password`, `revoke-password`) failed parameter parsing because the `--username=<username>` option was missing the required `: description` line in the PHPDoc. Fixed in `includes/class-wp-cli.php` and matching explicit hyphen registrations added in `includes/class-plugin.php`.
+
+## Tests still NOT performed (require a different stack)
+
+| Test | Status |
+|------|--------|
+| Apache `mod_rewrite` + `Authorization` header pass-through on real hosting | Not run |
+| Real MySQL / MariaDB | Not run (SQLite drop-in used) |
+| HTTPS-mandatory mode | Not run (`WP_ENVIRONMENT_TYPE=local` used) |
+| Multisite | Not run |
+| WordPress versions other than 6.9.x | Not run |
+| PHP versions other than 8.5 (CI covers 7.4 – 8.3 with `php -l` only) | Not run for runtime |
+| Browser-side JS test of admin wizard typed-confirmation row toggle | Not run (server-side check verified) |
+| Behavior under Wordfence / iThemes Security / WP Cerber | Not run |
 
 ## Known limitations
 

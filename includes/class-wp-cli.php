@@ -95,6 +95,7 @@ class AI_Site_Connector_CLI {
 	 * ## OPTIONS
 	 *
 	 * --username=<username>
+	 * : Login of the WordPress user that owns the new Application Password.
 	 *
 	 * [--name=<name>]
 	 * : App password name; default: "Claude AI Connector - <host> - <date>".
@@ -141,8 +142,10 @@ class AI_Site_Connector_CLI {
 	 * ## OPTIONS
 	 *
 	 * --username=<username>
+	 * : Login of the WordPress user whose password is being revoked.
 	 *
 	 * --uuid=<uuid>
+	 * : UUID of the Application Password to revoke (from `wp user application-password list` or the plugin UI).
 	 *
 	 * ## EXAMPLES
 	 *

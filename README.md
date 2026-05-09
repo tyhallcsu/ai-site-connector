@@ -1,10 +1,19 @@
 # AI Site Connector
 
+<p align="center">
+  <img src="assets/brand/ai-site-connector-readme-banner.svg" alt="AI Site Connector - Secure REST API access for AI coding agents" width="900">
+</p>
+
+<p align="center">
+  <strong>Secure REST API access for Claude, Codex, and other AI coding agents on self-hosted WordPress.</strong><br>
+  No WordPress.com, no Jetpack, no backdoors - just WordPress core Application Passwords with admin-controlled setup.
+</p>
+
 [![CI](https://github.com/tyhallcsu/ai-site-connector/actions/workflows/ci.yml/badge.svg)](https://github.com/tyhallcsu/ai-site-connector/actions/workflows/ci.yml)
 [![Build release ZIP](https://github.com/tyhallcsu/ai-site-connector/actions/workflows/release-zip.yml/badge.svg)](https://github.com/tyhallcsu/ai-site-connector/actions/workflows/release-zip.yml)
 ![PHP](https://img.shields.io/badge/PHP-7.4%20%7C%208.0%20%7C%208.1%20%7C%208.2%20%7C%208.3-777BB4?logo=php&logoColor=white)
 ![WordPress](https://img.shields.io/badge/WordPress-5.6%2B-21759B?logo=wordpress&logoColor=white)
-![License](https://img.shields.io/badge/license-Proprietary-lightgrey)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A WordPress plugin that lets Claude, Codex, and other AI coding agents authenticate to a self-hosted WordPress site over the REST API using **Application Passwords** — with **no WordPress.com account, no Jetpack, and no third-party cloud service** required.
 
@@ -253,8 +262,20 @@ RewriteRule .* - [E=HTTP_AUTHORIZATION:%1]
 
 ---
 
+## Brand assets
+
+- `assets/brand/ai-site-connector-logo.svg` - horizontal logo with wordmark.
+- `assets/brand/ai-site-connector-mark.svg` - compact icon/mark for admin UI and small placements.
+- `assets/brand/ai-site-connector-readme-banner.svg` - README banner with tagline.
+
+The assets are original repo artwork with no embedded stock images, no copied third-party logos, and no trademarked logo reuse. They are safe to use for this private plugin and related documentation.
+
+See [docs/BRAND_ASSETS.md](docs/BRAND_ASSETS.md) for file notes and PNG export commands.
+
+---
+
 ## License
 
-Proprietary. © sharmanhall. All rights reserved.
+MIT © 2026 sharmanhall — see [LICENSE](LICENSE).
 
 This plugin ships with no warranty. Audit before use on production sites.

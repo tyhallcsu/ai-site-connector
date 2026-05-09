@@ -1,3 +1,7 @@
+.ai-site-connector-wrap .asc-page-header { display: flex; align-items: center; gap: 16px; margin: 18px 0 16px; }
+.ai-site-connector-wrap .asc-page-logo { display: block; width: 64px; height: 64px; flex: 0 0 64px; border-radius: 14px; box-shadow: 0 6px 14px rgba(15,23,42,0.16); }
+.ai-site-connector-wrap .asc-page-header h1 { margin: 0 0 4px; padding: 0; }
+.ai-site-connector-wrap .asc-page-header .description { margin: 0; max-width: 780px; }
 .ai-site-connector-wrap .asc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 16px; }
 .ai-site-connector-wrap .asc-card { background: #fff; border: 1px solid #c3c4c7; border-radius: 4px; padding: 16px 20px; box-shadow: 0 1px 1px rgba(0,0,0,0.04); }
 .ai-site-connector-wrap .asc-card h2, .ai-site-connector-wrap .asc-card h3 { margin-top: 0; }
@@ -11,3 +15,7 @@
 .ai-site-connector-wrap .asc-pack details { margin: 12px 0; }
 .ai-site-connector-wrap .asc-pack h4 { margin-bottom: 4px; }
 .ai-site-connector-wrap .asc-pack .button { margin-top: 4px; }
+@media (max-width: 600px) {
+	.ai-site-connector-wrap .asc-page-header { align-items: flex-start; }
+	.ai-site-connector-wrap .asc-page-logo { width: 52px; height: 52px; flex-basis: 52px; border-radius: 12px; }
+}

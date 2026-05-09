@@ -5,7 +5,8 @@ Requires at least: 5.6
 Tested up to: 6.5
 Requires PHP: 7.4
 Stable tag: 0.1.0
-License: Proprietary
+License: MIT
+License URI: https://opensource.org/licenses/MIT
 
 Connect Claude / Codex / AI coding agents to a self-hosted WordPress site over the REST API using Application Passwords. No WordPress.com required.
 

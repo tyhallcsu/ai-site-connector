@@ -31,7 +31,15 @@ class AI_Site_Connector_Plugin {
 		}
 
 		if ( defined( 'WP_CLI' ) && WP_CLI && class_exists( 'AI_Site_Connector_CLI' ) ) {
+			// Register the parent command so `wp help ai-connector` works.
 			WP_CLI::add_command( 'ai-connector', 'AI_Site_Connector_CLI' );
+			// Register each subcommand with its hyphenated public name. Method names
+			// must use underscores in PHP, so we map them explicitly here.
+			WP_CLI::add_command( 'ai-connector status', array( 'AI_Site_Connector_CLI', 'status' ) );
+			WP_CLI::add_command( 'ai-connector health', array( 'AI_Site_Connector_CLI', 'health' ) );
+			WP_CLI::add_command( 'ai-connector create-user', array( 'AI_Site_Connector_CLI', 'create_user' ) );
+			WP_CLI::add_command( 'ai-connector generate-password', array( 'AI_Site_Connector_CLI', 'generate_password' ) );
+			WP_CLI::add_command( 'ai-connector revoke-password', array( 'AI_Site_Connector_CLI', 'revoke_password' ) );
 		}
 	}
 

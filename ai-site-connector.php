@@ -8,7 +8,8 @@
  * Requires PHP:      7.4
  * Author:            sharmanhall
  * Author URI:        https://github.com/tyhallcsu
- * License:           Proprietary
+ * License:           MIT
+ * License URI:       https://opensource.org/licenses/MIT
  * Text Domain:       ai-site-connector
  *
  * @package AI_Site_Connector

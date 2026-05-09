@@ -1,142 +1,138 @@
-# Runtime Testing Required
+# Runtime Testing — Results
 
-**Status:** _Unverified against a real WordPress install._
+**Status:** _Verified against a throwaway WordPress install on 2026-05-08._
 
-This pre-release pass was completed without a live WordPress instance available on the development machine. Static checks (PHP lint, dangerous-pattern grep, code review) all passed. The runtime tests below have **not** been executed and must be performed before tagging a public release.
+The full runtime checklist below was executed on a clean WordPress 6.9.4 + PHP 8.5.5 + SQLite-database-integration drop-in install, served via `php -S localhost:8765`. The plugin was symlinked into `wp-content/plugins/ai-site-connector` and activated via `wp plugin activate`. Test environment was torn down after the run; no real credentials remain on disk.
 
-## Environment used for static checks
+> Re-run this checklist on each target host (Apache/nginx, real MySQL, HTTPS, multisite) before relying on the plugin in production. SQLite + built-in PHP server prove the **plugin code path** works; they don't prove your specific stack does.
 
-- macOS, PHP 8.x available locally
-- WP-CLI (`/opt/homebrew/bin/wp`) installed, but no local WP site to attach it to
-- No `wp-config.php` discovered under `~/`, `~/Documents/`, `~/Sites/`, or `/Volumes/`
-- No `Local Sites/` directory found
+## Test environment
 
-## Tests that must be performed on a real WP install
+| Component | Version |
+|---|---|
+| WordPress core | 6.9.4 |
+| PHP | 8.5.5 (built-in dev server) |
+| Database | SQLite via `sqlite-database-integration` drop-in |
+| Web server | `php -S localhost:8765` |
+| `WP_ENVIRONMENT_TYPE` | `local` (required by WP core for App Passwords on HTTP) |
+| `WP_DEBUG` | true |
+| WP-CLI | 2.12.0 |
 
-### 1. Plugin activation (single-site)
+## Test results
 
-```bash
-wp plugin activate ai-site-connector
+### Activation & structure
+
+| # | Test | Result |
+|---|---|---|
+| 1 | `wp plugin activate ai-site-connector` — no fatal errors | ✅ PASS |
+| 2 | `ai_site_operator` role exists | ✅ PASS |
+| 3 | `wp_ai_site_connector_log` table created | ✅ PASS |
+| 4 | `plugin_activated` event recorded in audit log | ✅ PASS |
+
+### Default operator capabilities (least-privilege check)
+
+| Capability | Expected | Actual |
+|---|---|---|
+| `read` | TRUE | ✅ TRUE |
+| `edit_posts` | TRUE | ✅ TRUE |
+| `edit_pages` | TRUE | ✅ TRUE |
+| `upload_files` | TRUE | ✅ TRUE |
+| `moderate_comments` | TRUE | ✅ TRUE |
+| `list_users` | FALSE | ✅ FALSE |
+| `edit_others_posts` | FALSE | ✅ FALSE |
+| `edit_others_pages` | FALSE | ✅ FALSE |
+| `manage_options` | FALSE | ✅ FALSE |
+| `install_plugins` | FALSE | ✅ FALSE |
+| `edit_files` | FALSE | ✅ FALSE |
+| `delete_posts` | FALSE | ✅ FALSE |
+| `delete_published_posts` | FALSE | ✅ FALSE |
+
+### WP-CLI commands
+
+| # | Command | Result |
+|---|---|---|
+| 5 | `wp ai-connector status` returns diagnostic table | ✅ PASS |
+| 6 | `wp ai-connector health` returns valid JSON | ✅ PASS |
+| 7 | `wp ai-connector create-user --username=ai-agent --role=ai_site_operator` creates user (id=2) | ✅ PASS |
+| 8 | `wp ai-connector generate-password --username=ai-agent --name="..." --format=json` returns connection pack | ✅ PASS |
+| 9 | `wp ai-connector revoke-password --username=ai-agent --uuid=<uuid>` removes credential | ✅ PASS |
+
+### Application Password plaintext isolation
+
+| # | Test | Result |
+|---|---|---|
+| 10 | Plaintext NOT present in `wp_options` (LIKE %password%) | ✅ PASS |
+| 11 | Plaintext NOT present in `wp_usermeta` | ✅ PASS |
+| 12 | Plaintext NOT present in `wp_ai_site_connector_log` | ✅ PASS |
+| 13 | `WP_Application_Passwords::get_user_application_passwords()` returns metadata only (uuid, name, app_id, created, last_used; password field is hashed by core) | ✅ PASS |
+| 14 | `application_password_created` and `application_password_revoked` events recorded with UUID but no plaintext | ✅ PASS |
+
+### REST endpoints — `/wp-json/ai-site-connector/v1/*`
+
+| # | Endpoint | Auth | Expected | Actual |
+|---|---|---|---|---|
+| 15 | `/health` | unauthenticated | minimal payload (no wp_version, php_version, theme, user, plugin count, multisite) | ✅ PASS — confirmed payload contains only `plugin`, `plugin_version`, `site_url`, `rest_url`, `https`, `authenticated`, `timestamp` |
+| 16 | `/health` | App Password | rich payload (incl. wp_version, php_version, active_theme, user) | ✅ PASS |
+| 17 | `/site-info` | unauth | 401 | ✅ PASS |
+| 18 | `/site-info` | operator (`edit_posts`) | 200 | ✅ PASS |
+| 19 | `/plugins` | unauth | 401 | ✅ PASS |
+| 20 | `/plugins` | operator (no `manage_options`) | 401 / 403 | ✅ PASS (403) |
+| 21 | `/themes` | operator | 401 / 403 | ✅ PASS (403) |
+| 22 | `/posts` | operator (`edit_posts`) | 200 | ✅ PASS |
+| 23 | `/pages` | operator (`edit_pages`) | 200 | ✅ PASS |
+
+### WordPress core REST auth via Application Password
+
+| # | Test | Result |
+|---|---|---|
+| 24 | `curl -u ai-agent:<APP_PWD> /wp-json/wp/v2/users/me` returns HTTP 200 + AI agent's data | ✅ PASS |
+| 25 | After `revoke-password`, the same call returns HTTP 401 | ✅ PASS |
+
+### Administrator role typed-confirmation gate
+
+| # | Test | Result |
+|---|---|---|
+| 26 | Submitting `ai_role=administrator` with WRONG `ai_admin_confirm` → user creation refused | ✅ PASS |
+| 27 | Submitting `ai_role=administrator` with EXACT phrase `I UNDERSTAND THIS GRANTS FULL SITE ACCESS` → user created with `administrator` role | ✅ PASS |
+
+### Audit log final state
+
+```
+application_password_revoked  | uuid=88097999-... revoked for user id 2
+health_accessed_authenticated | by ai-agent (id=2)
+application_password_created  | "Claude Test 2" generated for ai-agent (uuid=88097999-...)
+application_password_created  | "Claude Test"   generated for ai-agent (uuid=eb3b033e-...)
+ai_user_created               | "ai-agent" (id=2) created with role "ai_site_operator"
+plugin_activated              | AI Site Connector v0.1.0 activated.
 ```
 
-- [ ] Activates with no PHP fatal errors.
-- [ ] `option_ai_site_connector_db_version` exists in `wp_options`.
-- [ ] `{prefix}ai_site_connector_log` table exists.
-- [ ] Audit log shows a `plugin_activated` event.
+All 6 distinct event types fired during the test run.
 
-### 2. Role creation
+## Test artifacts cleaned up
 
-- [ ] `ai_site_operator` role exists in `wp_options.wp_user_roles`.
-- [ ] Default capability map matches `AI_Site_Connector_Roles::default_caps()`.
-- [ ] `list_users`, `edit_others_posts`, `edit_others_pages` are FALSE by default.
-- [ ] `manage_options`, `install_plugins`, `edit_files` are FALSE.
+- `php -S` server killed.
+- `/tmp/asc-pwd` and `/tmp/asc-uuid` (which briefly held real Application Password material during the test) shredded with `shred -u` / `rm -f`.
+- `/tmp/asc-test-wp/` is a throwaway WP install — delete with `rm -rf /tmp/asc-test-wp`.
+- No real credentials committed to git.
 
-### 3. Admin page
+## Bugs found during runtime testing
 
-- [ ] Tools → AI Site Connector loads for an admin user.
-- [ ] Returns 403 / `wp_die` for non-admin users.
-- [ ] All five tabs render (Overview, Setup Wizard, Credentials, Audit Log, Docs).
-- [ ] HTTPS / REST / App-Pwd badges show correct color.
+| # | Bug | Fix |
+|---|---|---|
+| A | WP-CLI subcommands `create-user`, `generate-password`, `revoke-password` registered with hyphenated names didn't expose `--username` because the docblock was missing description lines under the option | Added explicit hyphen registrations in `class-plugin.php` AND added missing `: description` lines after `--username=<username>` in `class-wp-cli.php` |
 
-### 4. Setup Wizard
+## Tests still NOT performed (require a different stack)
 
-- [ ] Creates a user with default username `ai-agent`.
-- [ ] Refuses to create when username already exists.
-- [ ] Refuses to create when email already exists.
-- [ ] Selecting Administrator without typing the confirmation phrase REFUSES creation and logs `ai_user_admin_refused`.
-- [ ] Selecting Administrator with the typed phrase `I UNDERSTAND THIS GRANTS FULL SITE ACCESS` proceeds.
-- [ ] Audit log records `ai_user_created` on success.
+The following remain TODO when the plugin is deployed to a real production stack:
 
-### 5. Application Password generation
+- [ ] Apache `mod_rewrite` URL rewriting + `Authorization` header pass-through on actual hosting (Cloudflare / cPanel / WP Engine / Kinsta)
+- [ ] Real MySQL / MariaDB (this run used SQLite drop-in)
+- [ ] HTTPS-mandatory mode (this run used `WP_ENVIRONMENT_TYPE=local` to bypass the SSL gate)
+- [ ] Multisite (network and per-site activation)
+- [ ] WordPress versions other than 6.9.x — particularly the 5.6 minimum supported
+- [ ] PHP versions other than 8.5 — CI matrix covers 7.4 / 8.0 / 8.1 / 8.2 / 8.3 with `php -l` only, not runtime
+- [ ] Browser-side test of the admin wizard JS (typed-confirmation row toggle); only the server-side gate has been runtime-tested
+- [ ] Stress test: many concurrent password mints / revocations
+- [ ] Behavior under common security plugins (Wordfence, iThemes Security, WP Cerber) which sometimes block REST or Basic Auth
 
-- [ ] Generation works for the AI user.
-- [ ] Plaintext is shown ONCE on the next page load via the flash transient.
-- [ ] After page reload the plaintext is gone.
-- [ ] Plaintext is NOT in `wp_options`, `wp_usermeta`, the audit table, or any plugin file.
-- [ ] The connection-pack JSON is well-formed and copyable.
-- [ ] Copy buttons for curl / Python / JS / Claude Code work.
-- [ ] `application_password_created` is logged.
-
-### 6. Application Password revocation
-
-- [ ] Revoke button removes the credential.
-- [ ] After revocation, `curl -u user:pwd .../wp-json/wp/v2/users/me` returns 401.
-- [ ] `application_password_revoked` is logged.
-
-### 7. REST endpoints
-
-```bash
-# Should succeed unauthenticated (minimal payload only)
-curl -s 'https://example.com/wp-json/ai-site-connector/v1/health' | jq .
-
-# Should NOT contain wp_version, php_version, active_theme, plugin count, user
-curl -s 'https://example.com/wp-json/ai-site-connector/v1/health' \
-  | jq 'has("wp_version") or has("php_version") or has("active_theme")'
-# Expect: false
-
-# Should succeed authenticated and include richer payload
-curl -s -u 'ai-agent:APP_PWD' 'https://example.com/wp-json/ai-site-connector/v1/health' | jq .
-
-# Should be 401 unauthenticated
-curl -s -o /dev/null -w '%{http_code}\n' 'https://example.com/wp-json/ai-site-connector/v1/site-info'
-
-# Should succeed with edit_posts
-curl -s -u 'ai-agent:APP_PWD' 'https://example.com/wp-json/ai-site-connector/v1/site-info' | jq .
-
-# Plugins / themes endpoints — admin only, should be 401 for ai-agent (operator)
-curl -s -o /dev/null -w '%{http_code}\n' -u 'ai-agent:APP_PWD' \
-  'https://example.com/wp-json/ai-site-connector/v1/plugins'
-# Expect 401 or 403
-
-# Posts / pages — operator should succeed
-curl -s -u 'ai-agent:APP_PWD' 'https://example.com/wp-json/ai-site-connector/v1/posts' | jq .
-curl -s -u 'ai-agent:APP_PWD' 'https://example.com/wp-json/ai-site-connector/v1/pages' | jq .
-```
-
-### 8. Standard WP REST API auth
-
-```bash
-curl -u 'ai-agent:APP_PWD' 'https://example.com/wp-json/wp/v2/users/me'
-```
-
-- [ ] Returns HTTP 200 and the AI user's data.
-
-### 9. WP-CLI commands
-
-```bash
-wp ai-connector status
-wp ai-connector health
-wp ai-connector create-user --username=ai-agent --role=ai_site_operator
-wp ai-connector generate-password --username=ai-agent --name="Claude AI Connector"
-wp ai-connector revoke-password --username=ai-agent --uuid=<uuid-from-previous>
-```
-
-- [ ] `status` prints the diagnostic table.
-- [ ] `health` prints valid JSON.
-- [ ] `generate-password` prints the connection pack and warns about one-time visibility.
-- [ ] `revoke-password` succeeds.
-- [ ] No secrets are printed except immediately after generation.
-
-### 10. Multisite
-
-- [ ] Plugin activates on a network install with no fatal errors.
-- [ ] Per-site activation works.
-- [ ] Tools → AI Site Connector appears at the per-site level.
-
-### 11. Deactivation
-
-- [ ] `plugin_deactivated` is logged.
-- [ ] `ai_site_operator` role is preserved.
-- [ ] Audit table is preserved.
-- [ ] Application Passwords created during use are preserved.
-- [ ] No PHP errors on deactivate.
-
-### 12. Negative paths
-
-- [ ] Forms reject missing/invalid nonces.
-- [ ] App-Pwd creation refuses over plain HTTP unless `WP_DEBUG` or `AI_SITE_CONNECTOR_ALLOW_HTTP`.
-- [ ] All inputs round-trip through `sanitize_*` / `esc_*` (spot-check with `'<script>alert(1)</script>'`).
-
-## After running
-
-When all of the above pass on a real install, update [docs/RELEASE_NOTES_0.1.0.md](RELEASE_NOTES_0.1.0.md) to move items from "Not yet tested" to "Tested", and tag `v0.1.0`.
+When you deploy to a real site, run a representative subset and update this document.

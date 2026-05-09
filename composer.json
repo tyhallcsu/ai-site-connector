@@ -2,7 +2,7 @@
     "name": "tyhallcsu/ai-site-connector",
     "description": "Reusable WordPress plugin for securely connecting AI coding agents to self-hosted WordPress sites using REST API Application Passwords.",
     "type": "wordpress-plugin",
-    "license": "proprietary",
+    "license": "MIT",
     "authors": [
         { "name": "sharmanhall" }
     ],

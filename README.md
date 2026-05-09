@@ -1,5 +1,11 @@
 # AI Site Connector
 
+[![CI](https://github.com/tyhallcsu/ai-site-connector/actions/workflows/ci.yml/badge.svg)](https://github.com/tyhallcsu/ai-site-connector/actions/workflows/ci.yml)
+[![Build release ZIP](https://github.com/tyhallcsu/ai-site-connector/actions/workflows/release-zip.yml/badge.svg)](https://github.com/tyhallcsu/ai-site-connector/actions/workflows/release-zip.yml)
+![PHP](https://img.shields.io/badge/PHP-7.4%20%7C%208.0%20%7C%208.1%20%7C%208.2%20%7C%208.3-777BB4?logo=php&logoColor=white)
+![WordPress](https://img.shields.io/badge/WordPress-5.6%2B-21759B?logo=wordpress&logoColor=white)
+![License](https://img.shields.io/badge/license-Proprietary-lightgrey)
+
 A WordPress plugin that lets Claude, Codex, and other AI coding agents authenticate to a self-hosted WordPress site over the REST API using **Application Passwords** — with **no WordPress.com account, no Jetpack, and no third-party cloud service** required.
 
 > Built for site operators who manage many WordPress installs and want a clean, repeatable, least-privilege way to connect AI tooling for maintenance and content work.
@@ -161,13 +167,60 @@ There are intentionally **no write endpoints, no file editor, no SQL exec, no pl
 
 ## Recommended role / capability setup
 
-The default capabilities of `ai_site_operator` are intentionally conservative. Extend them with the filter:
+The default capabilities of `ai_site_operator` are intentionally conservative. By default the role grants:
+
+- `read`, `edit_posts`, `edit_pages`
+- `edit_published_posts`, `edit_published_pages`
+- `upload_files`
+- `moderate_comments`
+
+By default the role does **not** grant:
+
+- `list_users`, `edit_others_posts`, `edit_others_pages`
+- Any `delete_*` capability
+- Any plugin / theme / file / user / option management capability
+
+Extend with the filter — for example, to let the AI revise content authored by humans, list users, or publish on its own:
 
 ```php
 add_filter( 'ai_site_connector_operator_caps', function ( $caps ) {
-    $caps['publish_posts'] = true;
+    $caps['edit_others_posts']   = true;
+    $caps['edit_others_pages']   = true;
+    $caps['list_users']          = true;   // also unlocks /site-info for legacy callers
+    $caps['publish_posts']       = true;
     return $caps;
 } );
+```
+
+Each capability you add expands the agent's authority. Keep the diff minimal.
+
+## Administrator role gate
+
+If you select **Administrator** in the wizard, the plugin requires you to type the phrase
+
+```
+I UNDERSTAND THIS GRANTS FULL SITE ACCESS
+```
+
+into a confirmation field before it will create the user. The same phrase is enforced server-side, so manipulating the form via DevTools does not bypass it. A refused attempt is recorded in the audit log as `ai_user_admin_refused`.
+
+## Building a release ZIP
+
+The repository ships a `workflow_dispatch` workflow at `.github/workflows/release-zip.yml`. Trigger it from the GitHub Actions tab and download the resulting `ai-site-connector-vX.Y.Z.zip` artifact.
+
+To build locally:
+
+```bash
+mkdir -p build/ai-site-connector
+rsync -a \
+  --exclude='.git/' --exclude='.github/' --exclude='.DS_Store' \
+  --exclude='node_modules/' --exclude='vendor/' --exclude='build/' \
+  --exclude='*.zip' --exclude='*.log' --exclude='.env*' \
+  --exclude='connection-pack.json' --exclude='*-connection-pack.json' \
+  --exclude='composer.json' --exclude='composer.lock' \
+  --exclude='phpcs.xml.dist' --exclude='TESTING_CHECKLIST.md' \
+  ./ build/ai-site-connector/
+( cd build && zip -r "ai-site-connector-v$(grep -E '^[[:space:]]*\*[[:space:]]*Version:' ../ai-site-connector.php | head -1 | sed -E 's/.*Version:[[:space:]]*//' | tr -d '[:space:]').zip" ai-site-connector )
 ```
 
 ## How to revoke access

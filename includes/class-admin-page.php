@@ -78,6 +78,8 @@ class AI_Site_Connector_Admin_Page {
 		exit;
 	}
 
+	const ADMIN_CONFIRM_PHRASE = 'I UNDERSTAND THIS GRANTS FULL SITE ACCESS';
+
 	public static function handle_create_user() {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'Insufficient permissions.', 'ai-site-connector' ) );
@@ -88,6 +90,25 @@ class AI_Site_Connector_Admin_Page {
 		$email    = isset( $_POST['ai_email'] ) ? sanitize_email( wp_unslash( $_POST['ai_email'] ) ) : '';
 		$role     = isset( $_POST['ai_role'] ) ? sanitize_key( wp_unslash( $_POST['ai_role'] ) ) : AI_SITE_CONNECTOR_OPERATOR_ROLE;
 		$display  = isset( $_POST['ai_display'] ) ? sanitize_text_field( wp_unslash( $_POST['ai_display'] ) ) : 'AI Agent';
+		$confirm  = isset( $_POST['ai_admin_confirm'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['ai_admin_confirm'] ) ) ) : '';
+
+		if ( 'administrator' === $role && self::ADMIN_CONFIRM_PHRASE !== $confirm ) {
+			self::flash(
+				sprintf(
+					/* translators: %s: required confirmation phrase */
+					__( 'Administrator role refused. Type the exact phrase "%s" in the confirmation field to proceed.', 'ai-site-connector' ),
+					self::ADMIN_CONFIRM_PHRASE
+				),
+				'error'
+			);
+			AI_Site_Connector_Audit_Log::record(
+				'ai_user_admin_refused',
+				array(
+					'message' => sprintf( 'Refused to create AI user with Administrator role for username "%s" — typed confirmation missing or wrong.', $username ),
+				)
+			);
+			self::redirect_back( 'wizard' );
+		}
 
 		$result = AI_Site_Connector_User_Manager::create_user(
 			array(
@@ -163,22 +184,17 @@ class AI_Site_Connector_Admin_Page {
 		}
 		check_admin_referer( self::NONCE_ACTION, self::NONCE_FIELD );
 
-		$response = wp_remote_get(
-			rest_url( 'wp/v2/users/me' ),
-			array(
-				'timeout'   => 8,
-				'sslverify' => false,
-				'headers'   => array(
-					'X-WP-Nonce' => wp_create_nonce( 'wp_rest' ),
-				),
-				'cookies'   => $_COOKIE,
-			)
-		);
-		if ( is_wp_error( $response ) ) {
-			self::flash( __( 'REST test failed: ', 'ai-site-connector' ) . $response->get_error_message(), 'error' );
+		// Internal REST dispatch — runs in-process with the current admin's
+		// capabilities. No HTTP loopback, no $_COOKIE forwarding, no WAF/SSL surprises.
+		$req = new WP_REST_Request( 'GET', '/wp/v2/users/me' );
+		$res = rest_do_request( $req );
+
+		if ( is_wp_error( $res ) ) {
+			self::flash( __( 'REST test failed: ', 'ai-site-connector' ) . $res->get_error_message(), 'error' );
 		} else {
-			$code = wp_remote_retrieve_response_code( $response );
-			self::flash( sprintf( __( 'REST test responded with HTTP %d.', 'ai-site-connector' ), $code ), $code < 400 ? 'success' : 'error' );
+			$code = $res->get_status();
+			$msg  = sprintf( __( 'REST test (internal dispatch) responded with HTTP %d.', 'ai-site-connector' ), $code );
+			self::flash( $msg, $code < 400 ? 'success' : 'error' );
 		}
 		self::redirect_back( 'overview' );
 	}
@@ -328,12 +344,22 @@ class AI_Site_Connector_Admin_Page {
 						<td><input type="text" id="ai_display" name="ai_display" value="AI Agent" class="regular-text" /></td></tr>
 					<tr><th><label for="ai_role"><?php esc_html_e( 'Role', 'ai-site-connector' ); ?></label></th>
 						<td>
-							<select id="ai_role" name="ai_role">
+							<select id="ai_role" name="ai_role" data-asc-role>
 								<?php foreach ( $roles as $slug => $label ) : ?>
 									<option value="<?php echo esc_attr( $slug ); ?>" <?php selected( $slug, AI_SITE_CONNECTOR_OPERATOR_ROLE ); ?>><?php echo esc_html( $label ); ?></option>
 								<?php endforeach; ?>
 							</select>
-							<p class="description"><strong><?php esc_html_e( 'Warning:', 'ai-site-connector' ); ?></strong> <?php esc_html_e( 'Selecting Administrator gives the AI agent full control of the site.', 'ai-site-connector' ); ?></p>
+							<p class="description"><?php esc_html_e( 'AI Site Operator is the recommended least-privilege option.', 'ai-site-connector' ); ?></p>
+						</td></tr>
+					<tr id="asc-admin-warn-row" style="display:none">
+						<th><label for="ai_admin_confirm" style="color:#b3261e"><?php esc_html_e( 'Confirm Administrator', 'ai-site-connector' ); ?></label></th>
+						<td>
+							<div class="notice notice-error inline" style="margin:0 0 8px"><p><strong><?php esc_html_e( 'DANGER:', 'ai-site-connector' ); ?></strong> <?php esc_html_e( 'Administrator gives the AI agent full control of this site, including user creation, plugin install, theme switching, and file editing. The Application Password inherits ALL of those abilities.', 'ai-site-connector' ); ?></p></div>
+							<p><?php
+								/* translators: %s: required confirmation phrase */
+								echo esc_html( sprintf( __( 'To proceed, type the exact phrase below into this field: %s', 'ai-site-connector' ), self::ADMIN_CONFIRM_PHRASE ) );
+							?></p>
+							<input type="text" id="ai_admin_confirm" name="ai_admin_confirm" value="" class="regular-text" autocomplete="off" placeholder="<?php echo esc_attr( self::ADMIN_CONFIRM_PHRASE ); ?>" />
 						</td></tr>
 				</table>
 				<p><button type="submit" class="button button-primary"><?php esc_html_e( 'Create AI user', 'ai-site-connector' ); ?></button></p>

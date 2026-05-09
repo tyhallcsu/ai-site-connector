@@ -5,10 +5,10 @@
  * Namespace: ai-site-connector/v1
  *
  * Endpoints:
- *  - GET /health        (public, safe summary; richer if authenticated)
- *  - GET /site-info     (auth, list_users)
- *  - GET /plugins       (auth, activate_plugins or admin)
- *  - GET /themes        (auth, switch_themes or admin)
+ *  - GET /health        (public, MINIMAL safe summary; richer payload only when authenticated)
+ *  - GET /site-info     (auth, edit_posts)
+ *  - GET /plugins       (auth, manage_options)
+ *  - GET /themes        (auth, manage_options)
  *  - GET /pages         (auth, edit_pages)
  *  - GET /posts         (auth, edit_posts)
  *
@@ -46,7 +46,7 @@ class AI_Site_Connector_REST_Controller {
 			array(
 				'methods'             => 'GET',
 				'callback'            => array( __CLASS__, 'route_site_info' ),
-				'permission_callback' => array( __CLASS__, 'auth_list_users' ),
+				'permission_callback' => array( __CLASS__, 'auth_edit_posts' ),
 			)
 		);
 
@@ -91,10 +91,6 @@ class AI_Site_Connector_REST_Controller {
 		);
 	}
 
-	public static function auth_list_users() {
-		return is_user_logged_in() && current_user_can( 'list_users' );
-	}
-
 	public static function auth_admin() {
 		return is_user_logged_in() && current_user_can( 'manage_options' );
 	}
@@ -108,29 +104,32 @@ class AI_Site_Connector_REST_Controller {
 	}
 
 	public static function route_health( WP_REST_Request $request ) {
-		$user        = wp_get_current_user();
-		$is_auth     = $user && $user->ID > 0;
-		$active_thm  = wp_get_theme();
-		$plugins_act = get_option( 'active_plugins', array() );
+		$user    = wp_get_current_user();
+		$is_auth = $user && $user->ID > 0;
 
+		// Minimal payload for unauthenticated callers — does NOT leak WP/PHP versions,
+		// theme, plugin counts, multisite status, or current user details.
 		$payload = array(
-			'plugin'             => 'ai-site-connector',
-			'plugin_version'     => AI_SITE_CONNECTOR_VERSION,
-			'site_url'           => home_url(),
-			'rest_url'           => rest_url(),
-			'wp_version'         => get_bloginfo( 'version' ),
-			'php_version'        => PHP_VERSION,
-			'is_https'           => AI_Site_Connector_Plugin::is_https(),
-			'is_multisite'       => is_multisite(),
-			'app_passwords'      => AI_Site_Connector_Plugin::app_passwords_available(),
-			'authenticated'      => (bool) $is_auth,
-			'active_theme'       => $active_thm ? $active_thm->get( 'Name' ) : '',
-			'active_plugin_count' => is_array( $plugins_act ) ? count( $plugins_act ) : 0,
-			'timestamp'          => gmdate( 'c' ),
+			'plugin'         => 'ai-site-connector',
+			'plugin_version' => AI_SITE_CONNECTOR_VERSION,
+			'site_url'       => home_url(),
+			'rest_url'       => rest_url(),
+			'https'          => AI_Site_Connector_Plugin::is_https(),
+			'authenticated'  => (bool) $is_auth,
+			'timestamp'      => gmdate( 'c' ),
 		);
 
 		if ( $is_auth ) {
-			$payload['user'] = array(
+			$active_thm  = wp_get_theme();
+			$plugins_act = get_option( 'active_plugins', array() );
+
+			$payload['wp_version']          = get_bloginfo( 'version' );
+			$payload['php_version']         = PHP_VERSION;
+			$payload['is_multisite']        = is_multisite();
+			$payload['app_passwords']       = AI_Site_Connector_Plugin::app_passwords_available();
+			$payload['active_theme']        = $active_thm ? $active_thm->get( 'Name' ) : '';
+			$payload['active_plugin_count'] = is_array( $plugins_act ) ? count( $plugins_act ) : 0;
+			$payload['user']                = array(
 				'id'    => (int) $user->ID,
 				'login' => $user->user_login,
 				'roles' => array_values( (array) $user->roles ),

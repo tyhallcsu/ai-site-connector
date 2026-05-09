@@ -1,0 +1,10 @@
+# Default owner for everything in the repo.
+*       @tyhallcsu
+
+# Security-sensitive files require explicit review.
+/ai-site-connector.php           @tyhallcsu
+/includes/class-application-passwords.php  @tyhallcsu
+/includes/class-rest-controller.php        @tyhallcsu
+/includes/class-roles.php                  @tyhallcsu
+/SECURITY.md                     @tyhallcsu
+/.github/workflows/              @tyhallcsu

@@ -1,5 +1,27 @@
 (function () {
 	'use strict';
+
+	function syncAdminWarning() {
+		var roleSelect = document.querySelector('[data-asc-role]');
+		var warnRow = document.getElementById('asc-admin-warn-row');
+		var confirm = document.getElementById('ai_admin_confirm');
+		if (!roleSelect || !warnRow) return;
+		var isAdmin = roleSelect.value === 'administrator';
+		warnRow.style.display = isAdmin ? '' : 'none';
+		if (confirm) {
+			if (isAdmin) {
+				confirm.setAttribute('required', 'required');
+			} else {
+				confirm.removeAttribute('required');
+				confirm.value = '';
+			}
+		}
+	}
+	document.addEventListener('change', function (e) {
+		if (e.target && e.target.matches('[data-asc-role]')) syncAdminWarning();
+	});
+	document.addEventListener('DOMContentLoaded', syncAdminWarning);
+
 	document.addEventListener('click', function (e) {
 		var btn = e.target.closest('[data-asc-copy="prev"]');
 		if (!btn) return;

@@ -1,0 +1,162 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  php-lint:
+    name: PHP ${{ matrix.php }} syntax
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.0', '8.1', '8.2', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: none
+      - name: PHP -l on every PHP file
+        run: |
+          set -e
+          status=0
+          while IFS= read -r -d '' f; do
+            php -l "$f" || status=1
+          done < <(find . -name "*.php" -not -path './.git/*' -not -path './vendor/*' -print0)
+          exit $status
+
+  structure:
+    name: Plugin structure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Required files exist
+        run: |
+          set -e
+          for f in \
+            ai-site-connector.php \
+            includes/class-plugin.php \
+            includes/class-roles.php \
+            includes/class-user-manager.php \
+            includes/class-application-passwords.php \
+            includes/class-rest-controller.php \
+            includes/class-audit-log.php \
+            includes/class-admin-page.php \
+            includes/class-wp-cli.php \
+            assets/admin.css \
+            assets/admin.js \
+            readme.txt \
+            README.md \
+            LICENSE \
+            .gitignore ; do
+            test -f "$f" || { echo "missing: $f"; exit 1; }
+          done
+          echo "All required files present."
+      - name: Plugin header is intact
+        run: |
+          grep -q "Plugin Name:[[:space:]]*AI Site Connector" ai-site-connector.php
+          grep -q "Version:[[:space:]]*" ai-site-connector.php
+      - name: No forbidden files committed
+        run: |
+          set -e
+          forbidden=(
+            "node_modules"
+            ".env"
+            "vendor"
+            "*.log"
+            "connection-pack.json"
+            ".DS_Store"
+          )
+          fail=0
+          for pat in "${forbidden[@]}"; do
+            matches=$(git ls-files "$pat" 2>/dev/null || true)
+            if [ -n "$matches" ]; then
+              echo "FORBIDDEN: $pat -> $matches"
+              fail=1
+            fi
+          done
+          exit $fail
+
+  security-grep:
+    name: Dangerous-pattern grep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Forbidden PHP functions
+        run: |
+          set -e
+          patterns=(
+            '\beval\s*\('
+            '\bshell_exec\s*\('
+            '\bexec\s*\('
+            '\bpassthru\s*\('
+            '\bsystem\s*\('
+            '\bproc_open\s*\('
+            '\bpopen\s*\('
+            '\bassert\s*\('
+            '\bcreate_function\s*\('
+            '\bbase64_decode\s*\('
+          )
+          fail=0
+          for p in "${patterns[@]}"; do
+            hits=$(grep -rn --include='*.php' -E "$p" . || true)
+            if [ -n "$hits" ]; then
+              echo "FORBIDDEN PHP function pattern: $p"
+              echo "$hits"
+              fail=1
+            fi
+          done
+          exit $fail
+      - name: Credential / secret patterns
+        run: |
+          set -e
+          fail=0
+
+          forbidden_paths=(
+            ".env"
+            "connection-pack.json"
+          )
+          for p in "${forbidden_paths[@]}"; do
+            if git ls-files | grep -E "(^|/)${p}\$" >/dev/null; then
+              echo "FORBIDDEN file committed: $p"
+              fail=1
+            fi
+          done
+
+          # Globs that should never appear in committed files
+          for glob in '*credentials*' '*_secret*' '*secret_*'; do
+            matches=$(git ls-files "$glob" 2>/dev/null || true)
+            if [ -n "$matches" ]; then
+              echo "FORBIDDEN credential-like file(s): $matches"
+              fail=1
+            fi
+          done
+
+          # Private keys
+          if grep -rn --binary-files=without-match -E -- '-----BEGIN [A-Z ]*PRIVATE KEY-----' . ; then
+            echo "FORBIDDEN: private key material committed"
+            fail=1
+          fi
+
+          # Look for likely real WP Application Password tokens (24+ char strings with digits/letters
+          # in 6 groups of 4 separated by spaces) committed as values, not as documentation.
+          # The known-fake placeholder uses repeated 'xxxx' groups; allow only those.
+          if grep -rn --include='*.json' --include='*.yml' --include='*.yaml' --include='*.md' \
+              -E '"application_password"\s*:\s*"[A-Za-z0-9 ]{20,}"' . \
+              | grep -v 'xxxx xxxx xxxx xxxx xxxx xxxx' \
+              | grep -v 'REPLACE_WITH_GENERATED_APP_PASSWORD' \
+              | grep -v 'DISPLAY_ONCE_ONLY' ; then
+            echo "FORBIDDEN: looks like a real Application Password committed in a doc/example"
+            fail=1
+          fi
+
+          exit $fail

@@ -1,0 +1,39 @@
+{
+    "name": "tyhallcsu/ai-site-connector",
+    "description": "Reusable WordPress plugin for securely connecting AI coding agents to self-hosted WordPress sites using REST API Application Passwords.",
+    "type": "wordpress-plugin",
+    "license": "proprietary",
+    "authors": [
+        { "name": "sharmanhall" }
+    ],
+    "require": {
+        "php": ">=7.4"
+    },
+    "require-dev": {
+        "squizlabs/php_codesniffer": "^3.7",
+        "wp-coding-standards/wpcs": "^3.0",
+        "phpcompatibility/phpcompatibility-wp": "^2.1",
+        "dealerdirect/phpcodesniffer-composer-installer": "^1.0"
+    },
+    "scripts": {
+        "lint": [
+            "find . -name '*.php' -not -path './vendor/*' -not -path './.git/*' -print0 | xargs -0 -n1 -P4 php -l"
+        ],
+        "phpcs": [
+            "phpcs --standard=phpcs.xml.dist"
+        ],
+        "phpcbf": [
+            "phpcbf --standard=phpcs.xml.dist"
+        ],
+        "security-grep": [
+            "@php -r \"$patterns = ['\\\\beval\\\\s*\\\\(', '\\\\bshell_exec\\\\s*\\\\(', '\\\\bexec\\\\s*\\\\(', '\\\\bpassthru\\\\s*\\\\(', '\\\\bsystem\\\\s*\\\\(', '\\\\bproc_open\\\\s*\\\\(', '\\\\bpopen\\\\s*\\\\(', '\\\\bassert\\\\s*\\\\(', '\\\\bcreate_function\\\\s*\\\\(', '\\\\bbase64_decode\\\\s*\\\\('];$fail=0;foreach($patterns as $p){$out=shell_exec('grep -rn --include=*.php -E \\'' . $p . '\\' . || true');if($out){echo $out;$fail=1;}}exit($fail);\""
+        ]
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        },
+        "sort-packages": true
+    },
+    "minimum-stability": "stable"
+}

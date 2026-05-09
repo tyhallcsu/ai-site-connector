@@ -24,7 +24,19 @@ class AI_Site_Connector_Audit_Log {
 	}
 
 	public static function maybe_upgrade() {
-		if ( get_option( self::DB_VERSION_OPTION ) !== self::DB_VERSION ) {
+		global $wpdb;
+		$version_ok = get_option( self::DB_VERSION_OPTION ) === self::DB_VERSION;
+
+		// Self-heal: verify the audit table actually exists, not just that
+		// the version option is set. The option can drift if a previous
+		// dbDelta run failed silently (some MySQL strict-mode configurations
+		// reject schema variants), or if the database was restored from a
+		// backup that predates plugin activation. Without this check, the
+		// audit log silently disappears.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.NoCaching -- One-time install/upgrade check.
+		$table_exists = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', self::table_name() ) );
+
+		if ( ! $version_ok || ! $table_exists ) {
 			self::install_table();
 		}
 	}
@@ -34,6 +46,9 @@ class AI_Site_Connector_Audit_Log {
 		$table           = self::table_name();
 		$charset_collate = $wpdb->get_charset_collate();
 
+		// dbDelta is whitespace-sensitive — keep the format below stable.
+		// `action` is intentionally not a reserved word in MySQL 8.0; quoting
+		// it would actually break dbDelta's column-rename detection.
 		$sql = "CREATE TABLE {$table} (
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -53,7 +68,14 @@ class AI_Site_Connector_Audit_Log {
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql );
 
-		update_option( self::DB_VERSION_OPTION, self::DB_VERSION );
+		// Verify the table actually landed before bumping the version option.
+		// dbDelta returns silently on failure under some MySQL configurations;
+		// gating the version bump on real existence keeps maybe_upgrade() honest.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.NoCaching -- One-time install/upgrade check.
+		$table_exists = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		if ( $table_exists ) {
+			update_option( self::DB_VERSION_OPTION, self::DB_VERSION );
+		}
 	}
 
 	public static function record( $action, $args = array() ) {

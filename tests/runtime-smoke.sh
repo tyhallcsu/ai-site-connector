@@ -60,6 +60,7 @@ require_command mysql
 require_command mysqladmin
 require_command curl
 require_command jq
+require_command rsync
 
 WP_CLI_BIN="$(command -v wp)"
 wp_cli() {
@@ -111,14 +112,34 @@ wp_cli core install \
 	--quiet
 
 log "Activating AI Site Connector."
-ln -s "$ROOT_DIR" "$WP_DIR/wp-content/plugins/ai-site-connector"
+PLUGIN_DIR="$WP_DIR/wp-content/plugins/ai-site-connector"
+mkdir -p "$PLUGIN_DIR"
+rsync -a \
+	--exclude='.git/' \
+	--exclude='vendor/' \
+	--exclude='build/' \
+	--exclude='dist/' \
+	"$ROOT_DIR/" "$PLUGIN_DIR/"
 wp_cli plugin activate ai-site-connector --path="$WP_DIR" --quiet
 wp_cli rewrite structure '/%postname%/' --path="$WP_DIR" --quiet
 wp_cli rewrite flush --hard --path="$WP_DIR" --quiet
 
 log "Checking activation artifacts."
 PREFIX="$(wp_cli db prefix --path="$WP_DIR" --quiet)"
-wp_cli db query "SHOW TABLES LIKE '${PREFIX}ai_site_connector_log';" --path="$WP_DIR" --skip-column-names | grep -q "${PREFIX}ai_site_connector_log"
+wp_cli eval '
+global $wpdb;
+$table = AI_Site_Connector_Audit_Log::table_name();
+$found = $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $table ) );
+if ( $found !== $table ) {
+	fwrite( STDERR, "Missing audit log table: {$table}\n" );
+	exit( 1 );
+}
+$count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$table}` WHERE action = %s", "plugin_activated" ) );
+if ( $count < 1 ) {
+	fwrite( STDERR, "Missing plugin_activated audit event\n" );
+	exit( 1 );
+}
+' --path="$WP_DIR"
 
 log "Checking AI Site Operator capabilities."
 wp_cli eval '

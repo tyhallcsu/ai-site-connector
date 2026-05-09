@@ -19,7 +19,7 @@
 #   - The HTTP server only binds to 127.0.0.1.
 #   - Cleanup runs via trap on every exit path, including SIGINT.
 #
-# Required commands: php, wp (WP-CLI), curl, jq, unzip.
+# Required commands: php, wp (WP-CLI), curl, jq, rsync, unzip.
 # Optional: shred (used if available; falls back to rm -P or rm -f).
 #
 # Usage:
@@ -47,6 +47,7 @@ require php
 require wp
 require curl
 require jq
+require rsync
 require unzip
 
 WP_CLI_BIN="$(command -v wp)"
@@ -131,8 +132,15 @@ wp_cli --path="$WP_DIR" core install \
 	--admin_email=admin@asc.test \
 	--skip-email --quiet
 
-step "symlinking and activating the plugin"
-ln -sfn "$ROOT_DIR" "$WP_DIR/wp-content/plugins/ai-site-connector"
+step "copying and activating the plugin"
+PLUGIN_DIR="$WP_DIR/wp-content/plugins/ai-site-connector"
+mkdir -p "$PLUGIN_DIR"
+rsync -a \
+	--exclude='.git/' \
+	--exclude='vendor/' \
+	--exclude='build/' \
+	--exclude='dist/' \
+	"$ROOT_DIR/" "$PLUGIN_DIR/"
 wp_cli --path="$WP_DIR" plugin activate ai-site-connector --quiet
 
 # ---------------------------------------------------------------- tests
@@ -147,7 +155,7 @@ $must = ["read","edit_posts","edit_pages","upload_files","moderate_comments"];
 foreach ($must as $c) if (!$role->has_cap($c)) { fwrite(STDERR,"missing cap: $c\n"); exit(1); }
 $forbidden = ["manage_options","install_plugins","edit_files","list_users","edit_others_posts","edit_others_pages","delete_posts","delete_published_posts"];
 foreach ($forbidden as $c) if ($role->has_cap($c)) { fwrite(STDERR,"unexpected cap: $c\n"); exit(1); }
-' 2>&1 1>/dev/null | grep -E '(missing cap|unexpected cap)' && fail "operator capability check failed" || true
+' >/dev/null
 
 step "3/12 audit log table created and activation event recorded"
 wp_cli --path="$WP_DIR" eval '
@@ -157,7 +165,7 @@ $exists = $wpdb->get_var("SELECT name FROM sqlite_master WHERE type=\"table\" AN
 if ($exists !== $t) { fwrite(STDERR,"audit table missing\n"); exit(1); }
 $count = (int) $wpdb->get_var("SELECT COUNT(*) FROM $t WHERE action=\"plugin_activated\"");
 if ($count < 1) { fwrite(STDERR,"plugin_activated event missing\n"); exit(1); }
-' 2>&1 1>/dev/null | grep -E '(audit table missing|plugin_activated event missing)' && fail "audit log check failed" || true
+' >/dev/null
 
 # wp-cli 2.12 on PHP 8.5 emits deprecation warnings from its own internal phar
 # during certain command paths. Those warnings interleave with output and break
@@ -210,7 +218,7 @@ foreach ([
 	$n = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $tbl WHERE $col LIKE %s", "%" . $wpdb->esc_like($needle) . "%"));
 	if ($n > 0) { fwrite(STDERR, "leak in $tbl.$col\n"); exit(1); }
 }
-' 2>&1 1>/dev/null | grep -E 'leak in' && fail "Application Password plaintext leaked into a database table" || true
+' >/dev/null
 
 step "9/12 starting php -S http server on 127.0.0.1:${PORT} (with WP REST router)"
 # Router lets /wp-json/* and other front-controller URLs reach index.php even

@@ -121,7 +121,9 @@ class AI_Site_Connector_Admin_Page {
 		if ( is_wp_error( $result ) ) {
 			self::flash( $result->get_error_message(), 'error' );
 		} else {
-			self::flash( sprintf( __( 'AI user "%1$s" (id=%2$d) created.', 'ai-site-connector' ), $username, $result ), 'success' );
+			/* translators: 1: AI username, 2: WordPress user ID. */
+			$message = sprintf( __( 'AI user "%1$s" (id=%2$d) created.', 'ai-site-connector' ), $username, $result );
+			self::flash( $message, 'success' );
 		}
 		self::redirect_back( 'wizard' );
 	}
@@ -193,7 +195,8 @@ class AI_Site_Connector_Admin_Page {
 			self::flash( __( 'REST test failed: ', 'ai-site-connector' ) . $res->get_error_message(), 'error' );
 		} else {
 			$code = $res->get_status();
-			$msg  = sprintf( __( 'REST test (internal dispatch) responded with HTTP %d.', 'ai-site-connector' ), $code );
+			/* translators: %d: HTTP status code. */
+			$msg = sprintf( __( 'REST test (internal dispatch) responded with HTTP %d.', 'ai-site-connector' ), $code );
 			self::flash( $msg, $code < 400 ? 'success' : 'error' );
 		}
 		self::redirect_back( 'overview' );
@@ -223,6 +226,7 @@ class AI_Site_Connector_Admin_Page {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'Insufficient permissions.', 'ai-site-connector' ) );
 		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only tab routing; no state change.
 		$tab   = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'overview';
 		$flash = self::consume_flash();
 		$tabs  = array(

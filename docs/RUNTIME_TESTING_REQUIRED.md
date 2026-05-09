@@ -17,7 +17,7 @@ drop-in. From a source checkout, reproduce them by running:
 scripts/runtime-test-local.sh
 ```
 
-The script provisions WordPress, installs the SQLite drop-in, symlinks the
+The script provisions WordPress, installs the SQLite drop-in, copies the
 plugin, and runs the full suite. It scrubs all captured Application Password
 material on exit (including via `trap` on errors and SIGINT) and tears down
 the throwaway directory unless `ASC_KEEP=1` is set.

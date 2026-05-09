@@ -180,6 +180,10 @@ Do not commit this password to git.
 
 [**docs/COOKBOOK.md**](docs/COOKBOOK.md) has copy-paste curl + Python recipes for the 10 most common AI tasks: capability introspection, list/create/update/publish posts, upload media, set featured image, search, edit pages, moderate comments, and plugin health checks. Each recipe lists the required capability and the common failure modes.
 
+### Bootstrap prompt for AI agents
+
+[**examples/agent-bootstrap-prompt.md**](examples/agent-bootstrap-prompt.md) is a paste-into-Claude/Codex/Cursor system-prompt template that hands the AI agent everything it needs: connection details (with placeholders for the four values the plugin gave you), the recommended first three calls, the capability map, what NOT to try, error reference, and operating-posture rules. Use this when onboarding a new agent to a freshly-installed site.
+
 ---
 
 ## REST endpoints (added by this plugin)

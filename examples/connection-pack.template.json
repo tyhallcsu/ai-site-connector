@@ -1,0 +1,16 @@
+{
+  "$comment": "Template only. Replace placeholders. NEVER commit a real connection pack.",
+  "site_name": "Example WP Site",
+  "site_url": "https://example.com",
+  "rest_api_base": "https://example.com/wp-json/",
+  "auth_method": "basic_auth_application_password",
+  "username": "ai-agent",
+  "application_password": "REPLACE_WITH_GENERATED_APP_PASSWORD",
+  "app_password_uuid": "00000000-0000-0000-0000-000000000000",
+  "app_password_name": "Claude AI Connector - example.com - 1970-01-01",
+  "test_endpoint": "https://example.com/wp-json/wp/v2/users/me",
+  "plugin_health_endpoint": "https://example.com/wp-json/ai-site-connector/v1/health",
+  "site_host": "example.com",
+  "generated_at": "1970-01-01T00:00:00Z",
+  "notes": "Use HTTP Basic Auth: header Authorization: Basic base64(username:application_password). Save in a password manager — this password is shown only once."
+}

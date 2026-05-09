@@ -1,0 +1,96 @@
+<?php
+/**
+ * Main plugin singleton.
+ *
+ * @package AI_Site_Connector
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+class AI_Site_Connector_Plugin {
+
+	private static $instance = null;
+
+	public static function instance() {
+		if ( null === self::$instance ) {
+			self::$instance = new self();
+			self::$instance->boot();
+		}
+		return self::$instance;
+	}
+
+	private function boot() {
+		AI_Site_Connector_Roles::register_hooks();
+		AI_Site_Connector_Audit_Log::register_hooks();
+		AI_Site_Connector_REST_Controller::register_hooks();
+
+		if ( is_admin() ) {
+			AI_Site_Connector_Admin_Page::register_hooks();
+		}
+
+		if ( defined( 'WP_CLI' ) && WP_CLI && class_exists( 'AI_Site_Connector_CLI' ) ) {
+			WP_CLI::add_command( 'ai-connector', 'AI_Site_Connector_CLI' );
+		}
+	}
+
+	public static function activate() {
+		AI_Site_Connector_Roles::ensure_role();
+		AI_Site_Connector_Audit_Log::install_table();
+		AI_Site_Connector_Audit_Log::record(
+			'plugin_activated',
+			array(
+				'message' => sprintf( 'AI Site Connector v%s activated.', AI_SITE_CONNECTOR_VERSION ),
+			)
+		);
+		flush_rewrite_rules();
+	}
+
+	public static function deactivate() {
+		AI_Site_Connector_Audit_Log::record(
+			'plugin_deactivated',
+			array(
+				'message' => 'AI Site Connector deactivated. Logs, users, and application passwords are intentionally preserved.',
+			)
+		);
+		flush_rewrite_rules();
+	}
+
+	public static function is_https() {
+		return is_ssl() || ( defined( 'FORCE_SSL_ADMIN' ) && FORCE_SSL_ADMIN );
+	}
+
+	public static function require_https() {
+		if ( self::is_https() ) {
+			return true;
+		}
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			return true;
+		}
+		if ( defined( 'AI_SITE_CONNECTOR_ALLOW_HTTP' ) && AI_SITE_CONNECTOR_ALLOW_HTTP ) {
+			return true;
+		}
+		return false;
+	}
+
+	public static function app_passwords_available() {
+		return class_exists( 'WP_Application_Passwords' )
+			&& function_exists( 'wp_is_application_passwords_available' )
+			&& wp_is_application_passwords_available();
+	}
+
+	public static function rest_reachable() {
+		$response = wp_remote_get(
+			rest_url( 'wp/v2' ),
+			array(
+				'timeout'   => 5,
+				'sslverify' => false,
+			)
+		);
+		if ( is_wp_error( $response ) ) {
+			return false;
+		}
+		return wp_remote_retrieve_response_code( $response ) < 500;
+	}
+}

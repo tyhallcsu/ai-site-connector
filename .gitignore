@@ -1,0 +1,34 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# PHP / WordPress local artifacts
+*.log
+debug.log
+error_log
+node_modules/
+vendor/
+
+# Environment / secrets — NEVER commit
+.env
+.env.*
+!.env.example
+
+# Real connection packs must never be committed
+connection-pack.json
+*-connection-pack.json
+*.connection-pack.json
+
+# Build output
+build/
+dist/
+*.zip
+
+# Backups
+*.bak
+*.orig

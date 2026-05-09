@@ -1,0 +1,13 @@
+.ai-site-connector-wrap .asc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 16px; }
+.ai-site-connector-wrap .asc-card { background: #fff; border: 1px solid #c3c4c7; border-radius: 4px; padding: 16px 20px; box-shadow: 0 1px 1px rgba(0,0,0,0.04); }
+.ai-site-connector-wrap .asc-card h2, .ai-site-connector-wrap .asc-card h3 { margin-top: 0; }
+.ai-site-connector-wrap .asc-kv { width: 100%; border-collapse: collapse; }
+.ai-site-connector-wrap .asc-kv th { text-align: left; width: 40%; padding: 4px 8px 4px 0; font-weight: 600; vertical-align: top; }
+.ai-site-connector-wrap .asc-kv td { padding: 4px 0; vertical-align: top; }
+.ai-site-connector-wrap .asc-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.ai-site-connector-wrap .asc-badge.asc-ok { background: #e6f4ea; color: #137333; border: 1px solid #b7d8c2; }
+.ai-site-connector-wrap .asc-badge.asc-bad { background: #fce8e6; color: #b3261e; border: 1px solid #f4b9b3; }
+.ai-site-connector-wrap .asc-codeblock { background: #1d2327; color: #f0f0f1; padding: 12px; border-radius: 4px; overflow-x: auto; white-space: pre; font-family: Menlo, Consolas, monospace; font-size: 12px; }
+.ai-site-connector-wrap .asc-pack details { margin: 12px 0; }
+.ai-site-connector-wrap .asc-pack h4 { margin-bottom: 4px; }
+.ai-site-connector-wrap .asc-pack .button { margin-top: 4px; }

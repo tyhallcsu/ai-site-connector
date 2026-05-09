@@ -17,7 +17,7 @@
     },
     "scripts": {
         "lint": [
-            "find . -name '*.php' -not -path './vendor/*' -not -path './.git/*' -print0 | xargs -0 -n1 -P4 php -l"
+            "find . -name '*.php' -not -path './vendor/*' -not -path './.git/*' -not -path './build/*' -not -path './dist/*' -print0 | xargs -0 -n1 -P4 php -l"
         ],
         "phpcs": [
             "phpcs --standard=phpcs.xml.dist"
@@ -26,7 +26,7 @@
             "phpcbf --standard=phpcs.xml.dist"
         ],
         "security-grep": [
-            "@php -r \"$patterns = ['\\\\beval\\\\s*\\\\(', '\\\\bshell_exec\\\\s*\\\\(', '\\\\bexec\\\\s*\\\\(', '\\\\bpassthru\\\\s*\\\\(', '\\\\bsystem\\\\s*\\\\(', '\\\\bproc_open\\\\s*\\\\(', '\\\\bpopen\\\\s*\\\\(', '\\\\bassert\\\\s*\\\\(', '\\\\bcreate_function\\\\s*\\\\(', '\\\\bbase64_decode\\\\s*\\\\('];$fail=0;foreach($patterns as $p){$out=shell_exec('grep -rn --include=*.php -E \\'' . $p . '\\' . || true');if($out){echo $out;$fail=1;}}exit($fail);\""
+            "tests/security-grep.sh"
         ]
     },
     "config": {

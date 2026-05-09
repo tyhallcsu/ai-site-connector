@@ -20,26 +20,59 @@ jobs:
         php: ['7.4', '8.0', '8.1', '8.2', '8.3']
     steps:
       - uses: actions/checkout@v4
+
       - name: Setup PHP ${{ matrix.php }}
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
           coverage: none
           tools: none
+
       - name: PHP -l on every PHP file
         run: |
           set -e
           status=0
           while IFS= read -r -d '' f; do
             php -l "$f" || status=1
-          done < <(find . -name "*.php" -not -path './.git/*' -not -path './vendor/*' -print0)
+          done < <(find . -name "*.php" \
+            -not -path './.git/*' \
+            -not -path './vendor/*' \
+            -not -path './build/*' \
+            -not -path './dist/*' \
+            -print0)
           exit $status
+
+  coding-standards:
+    name: Composer and PHPCS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: composer:v2
+
+      - name: Validate composer metadata
+        run: composer validate --strict --no-interaction
+
+      - name: Install dev dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Run composer lint
+        run: composer lint
+
+      - name: Run WordPress coding standards
+        run: composer phpcs
 
   structure:
     name: Plugin structure
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Required files exist
         run: |
           set -e
@@ -55,6 +88,10 @@ jobs:
             includes/class-wp-cli.php \
             assets/admin.css \
             assets/admin.js \
+            assets/brand/ai-site-connector-mark.svg \
+            assets/brand/ai-site-connector-logo.svg \
+            assets/brand/ai-site-connector-readme-banner.svg \
+            docs/BRAND_ASSETS.md \
             readme.txt \
             README.md \
             LICENSE \
@@ -62,10 +99,15 @@ jobs:
             test -f "$f" || { echo "missing: $f"; exit 1; }
           done
           echo "All required files present."
-      - name: Plugin header is intact
+
+      - name: Plugin header and readme version agree
         run: |
+          set -e
+          version=$(grep -E '^[[:space:]]*\*[[:space:]]*Version:' ai-site-connector.php | head -1 | sed -E 's/.*Version:[[:space:]]*//' | tr -d '[:space:]')
+          test -n "$version"
           grep -q "Plugin Name:[[:space:]]*AI Site Connector" ai-site-connector.php
-          grep -q "Version:[[:space:]]*" ai-site-connector.php
+          grep -q "Stable tag: ${version}" readme.txt
+
       - name: No forbidden files committed
         run: |
           set -e
@@ -87,77 +129,99 @@ jobs:
           done
           exit $fail
 
+  assets:
+    name: JS and SVG assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SVG tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends librsvg2-bin libxml2-utils
+
+      - name: Validate SVG markup
+        run: xmllint --noout assets/brand/*.svg
+
+      - name: Render SVGs
+        run: |
+          set -e
+          mkdir -p /tmp/asc-svg
+          rsvg-convert -w 512 -h 512 assets/brand/ai-site-connector-mark.svg -o /tmp/asc-svg/mark.png
+          rsvg-convert -w 980 assets/brand/ai-site-connector-logo.svg -o /tmp/asc-svg/logo.png
+          rsvg-convert -w 1200 assets/brand/ai-site-connector-readme-banner.svg -o /tmp/asc-svg/banner.png
+          test -s /tmp/asc-svg/mark.png
+          test -s /tmp/asc-svg/logo.png
+          test -s /tmp/asc-svg/banner.png
+
+      - name: Check admin JavaScript syntax
+        run: node --check assets/admin.js
+
   security-grep:
     name: Dangerous-pattern grep
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Forbidden PHP functions
+
+      - name: Forbidden functions and credential patterns
+        run: tests/security-grep.sh
+
+  package-smoke:
+    name: Release ZIP smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install packaging tools
         run: |
-          set -e
-          patterns=(
-            '\beval\s*\('
-            '\bshell_exec\s*\('
-            '\bexec\s*\('
-            '\bpassthru\s*\('
-            '\bsystem\s*\('
-            '\bproc_open\s*\('
-            '\bpopen\s*\('
-            '\bassert\s*\('
-            '\bcreate_function\s*\('
-            '\bbase64_decode\s*\('
-          )
-          fail=0
-          for p in "${patterns[@]}"; do
-            hits=$(grep -rn --include='*.php' -E "$p" . || true)
-            if [ -n "$hits" ]; then
-              echo "FORBIDDEN PHP function pattern: $p"
-              echo "$hits"
-              fail=1
-            fi
-          done
-          exit $fail
-      - name: Credential / secret patterns
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rsync zip unzip
+
+      - name: Build and inspect release ZIP
+        run: tests/package-smoke.sh
+
+  wordpress-runtime:
+    name: WordPress runtime smoke
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: asc_runtime_smoke
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: mysqli, curl, json
+          tools: none
+
+      - name: Install runtime tools
         run: |
-          set -e
-          fail=0
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends default-mysql-client curl jq
+          curl -L https://github.com/wp-cli/builds/raw/gh-pages/phar/wp-cli.phar -o /tmp/wp
+          php /tmp/wp --info
+          chmod +x /tmp/wp
+          sudo mv /tmp/wp /usr/local/bin/wp
 
-          forbidden_paths=(
-            ".env"
-            "connection-pack.json"
-          )
-          for p in "${forbidden_paths[@]}"; do
-            if git ls-files | grep -E "(^|/)${p}\$" >/dev/null; then
-              echo "FORBIDDEN file committed: $p"
-              fail=1
-            fi
-          done
-
-          # Globs that should never appear in committed files
-          for glob in '*credentials*' '*_secret*' '*secret_*'; do
-            matches=$(git ls-files "$glob" 2>/dev/null || true)
-            if [ -n "$matches" ]; then
-              echo "FORBIDDEN credential-like file(s): $matches"
-              fail=1
-            fi
-          done
-
-          # Private keys
-          if grep -rn --binary-files=without-match -E -- '-----BEGIN [A-Z ]*PRIVATE KEY-----' . ; then
-            echo "FORBIDDEN: private key material committed"
-            fail=1
-          fi
-
-          # Look for likely real WP Application Password tokens (24+ char strings with digits/letters
-          # in 6 groups of 4 separated by spaces) committed as values, not as documentation.
-          # The known-fake placeholder uses repeated 'xxxx' groups; allow only those.
-          if grep -rn --include='*.json' --include='*.yml' --include='*.yaml' --include='*.md' \
-              -E '"application_password"\s*:\s*"[A-Za-z0-9 ]{20,}"' . \
-              | grep -v 'xxxx xxxx xxxx xxxx xxxx xxxx' \
-              | grep -v 'REPLACE_WITH_GENERATED_APP_PASSWORD' \
-              | grep -v 'DISPLAY_ONCE_ONLY' ; then
-            echo "FORBIDDEN: looks like a real Application Password committed in a doc/example"
-            fail=1
-          fi
-
-          exit $fail
+      - name: Run WordPress runtime smoke test
+        env:
+          WP_DB_NAME: asc_runtime_smoke
+          WP_DB_USER: root
+          WP_DB_PASSWORD: root
+          WP_DB_HOST: 127.0.0.1
+          WP_VERSION: latest
+          WP_PORT: 8765
+        run: tests/runtime-smoke.sh

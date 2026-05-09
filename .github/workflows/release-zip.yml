@@ -4,9 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Plugin version (e.g. 0.1.0). Defaults to plugin header.'
+        description: 'Plugin version (e.g. 0.1.0). Defaults to plugin header or tag name.'
         required: false
         default: ''
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: read
@@ -17,67 +20,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rsync zip unzip
+
       - name: Resolve version
         id: ver
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
             v="${{ github.event.inputs.version }}"
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            v="${GITHUB_REF_NAME#v}"
           else
             v=$(grep -E '^[[:space:]]*\*[[:space:]]*Version:' ai-site-connector.php \
                 | head -1 | sed -E 's/.*Version:[[:space:]]*//' | tr -d '[:space:]')
           fi
+          test -n "$v"
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
-      - name: Build clean staging dir
-        run: |
-          set -e
-          mkdir -p build/ai-site-connector
-          rsync -a \
-            --exclude='.git/' \
-            --exclude='.github/' \
-            --exclude='.gitignore' \
-            --exclude='.DS_Store' \
-            --exclude='node_modules/' \
-            --exclude='vendor/' \
-            --exclude='build/' \
-            --exclude='dist/' \
-            --exclude='*.zip' \
-            --exclude='*.log' \
-            --exclude='.env' \
-            --exclude='.env.*' \
-            --exclude='connection-pack.json' \
-            --exclude='*-connection-pack.json' \
-            --exclude='*.connection-pack.json' \
-            --exclude='composer.json' \
-            --exclude='composer.lock' \
-            --exclude='phpcs.xml.dist' \
-            --exclude='phpcs.xml' \
-            --exclude='phpunit.xml' \
-            --exclude='phpunit.xml.dist' \
-            --exclude='tests/' \
-            --exclude='TESTING_CHECKLIST.md' \
-            --exclude='assets/brand/*.png' \
-            --exclude='docs/BRAND_ASSETS.md' \
-            ./ build/ai-site-connector/
+      - name: Build release ZIP
+        run: bin/build-release-zip.sh "${{ steps.ver.outputs.version }}"
 
       - name: Verify staging contents
-        run: |
-          set -e
-          ls -la build/ai-site-connector
-          test -f build/ai-site-connector/ai-site-connector.php
-          test -d build/ai-site-connector/includes
-          test -d build/ai-site-connector/assets
-          test -f build/ai-site-connector/readme.txt
-          test -f build/ai-site-connector/README.md
-          test -f build/ai-site-connector/LICENSE
-          # No forbidden files in the staging dir
-          ! find build/ai-site-connector -name '.git*' -o -name '.DS_Store' -o -name 'node_modules' -o -name '.env*' | grep .
-
-      - name: Create ZIP
-        run: |
-          cd build
-          zip -r "ai-site-connector-v${{ steps.ver.outputs.version }}.zip" ai-site-connector
-          ls -la
+        run: tests/package-smoke.sh "${{ steps.ver.outputs.version }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

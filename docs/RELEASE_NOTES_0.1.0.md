@@ -1,6 +1,6 @@
 # AI Site Connector — v0.1.0 Release Notes
 
-**Status:** Initial release. Code complete, static checks green, runtime suite executed against a throwaway WordPress 6.9.4 + PHP 8.5.5 + SQLite install (see [RUNTIME_TESTING_REQUIRED.md](RUNTIME_TESTING_REQUIRED.md) — now contains test results, not just a checklist).
+**Status:** Initial public GitHub release. Code complete, static checks green, CI release gates configured, and the runtime suite executed against a throwaway WordPress 6.9.4 + PHP 8.5.5 + SQLite install (see [RUNTIME_TESTING_REQUIRED.md](RUNTIME_TESTING_REQUIRED.md) — now contains test results, not just a checklist).
 
 ## What works (verified by static analysis only)
 
@@ -20,6 +20,9 @@
 | Test                                    | Status        |
 | --------------------------------------- | ------------- |
 | `php -l` on every PHP file              | Pass          |
+| WordPress Coding Standards / PHP compatibility via PHPCS | Pass |
+| SVG brand assets parse and render       | Pass          |
+| Release ZIP builds and excludes dev-only files | Pass |
 | Dangerous-pattern grep (12 patterns)    | Pass (none)   |
 | Unfiltered superglobal use              | Pass (none)   |
 | Manual code review of all admin actions | Pass          |
@@ -49,6 +52,18 @@
 | Administrator role gate: allows with exact phrase                                  | **PASS**      |
 
 See [RUNTIME_TESTING_REQUIRED.md](RUNTIME_TESTING_REQUIRED.md) for the full test transcript.
+
+## CI release gates
+
+The `CI` workflow now checks:
+
+- PHP syntax on PHP 7.4, 8.0, 8.1, 8.2, and 8.3.
+- Composer metadata, dependency installation, `composer lint`, and WordPress/PHPCompatibility PHPCS.
+- Required plugin files, brand assets, and plugin/readme version consistency.
+- Admin JavaScript syntax and SVG parse/render health.
+- Dangerous PHP function and credential-pattern grep.
+- Release ZIP build contents through `tests/package-smoke.sh`.
+- A WordPress + MySQL runtime smoke test covering activation, role caps, WP-CLI commands, Application Password generation/revocation, REST permissions, audit events, and plaintext password isolation.
 
 ## Bugs found and fixed during runtime testing
 
@@ -126,5 +141,5 @@ Note: deactivating the plugin does **not** revoke existing Application Passwords
 
 ## Versioning
 
-- This is `0.1.0`. Tag `v0.1.0` only after the runtime checklist in [RUNTIME_TESTING_REQUIRED.md](RUNTIME_TESTING_REQUIRED.md) is complete.
+- This is `0.1.0`, the first public GitHub release.
 - Subsequent patch/minor/major versions follow [SemVer](https://semver.org/).

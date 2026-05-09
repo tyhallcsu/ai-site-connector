@@ -71,6 +71,8 @@ WordPress accepts the password with or without the spaces — both `xxxx xxxx xx
 
 Read and write through the standard WordPress REST API under `/wp-json/wp/v2/`, scoped to your role's capabilities.
 
+> See [docs/COOKBOOK.md](COOKBOOK.md) for copy-paste curl + Python recipes covering the 10 most common AI tasks.
+
 | You can usually...                     | Capability needed                    |
 | -------------------------------------- | ------------------------------------ |
 | List/read posts, pages                 | `read`                               |

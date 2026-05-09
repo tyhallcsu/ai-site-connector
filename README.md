@@ -176,6 +176,10 @@ Plugin health endpoint: https://example.com/wp-json/ai-site-connector/v1/health
 Do not commit this password to git.
 ```
 
+### Cookbook
+
+[**docs/COOKBOOK.md**](docs/COOKBOOK.md) has copy-paste curl + Python recipes for the 10 most common AI tasks: capability introspection, list/create/update/publish posts, upload media, set featured image, search, edit pages, moderate comments, and plugin health checks. Each recipe lists the required capability and the common failure modes.
+
 ---
 
 ## REST endpoints (added by this plugin)

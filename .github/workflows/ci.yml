@@ -79,6 +79,7 @@ jobs:
           set -e
           for f in \
             ai-site-connector.php \
+            uninstall.php \
             includes/class-plugin.php \
             includes/class-roles.php \
             includes/class-user-manager.php \

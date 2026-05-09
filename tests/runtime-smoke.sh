@@ -389,4 +389,16 @@ if [ "${count:-0}" -lt 1 ]; then
 	exit 1
 fi
 
+log "Testing uninstall.php opt-in wipe path (destructive — must be last)."
+wp_cli eval '
+update_option( "ai_site_connector_wipe_on_uninstall", 1 );
+if ( ! defined( "WP_UNINSTALL_PLUGIN" ) ) { define( "WP_UNINSTALL_PLUGIN", true ); }
+require_once WP_PLUGIN_DIR . "/ai-site-connector/uninstall.php";
+global $wpdb;
+$table_still = (bool) $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $wpdb->prefix . "ai_site_connector_log" ) );
+$role_still  = (bool) get_role( "ai_site_operator" );
+if ( $table_still ) { fwrite( STDERR, "uninstall.php did not drop the audit table\n" ); exit( 1 ); }
+if ( $role_still )  { fwrite( STDERR, "uninstall.php did not remove the operator role\n" ); exit( 1 ); }
+' --path="$WP_DIR"
+
 echo "WordPress runtime smoke test passed."

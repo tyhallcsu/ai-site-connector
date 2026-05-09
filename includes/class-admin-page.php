@@ -23,6 +23,7 @@ class AI_Site_Connector_Admin_Page {
 		add_action( 'admin_post_ai_site_connector_revoke_password', array( __CLASS__, 'handle_revoke_password' ) );
 		add_action( 'admin_post_ai_site_connector_test_rest', array( __CLASS__, 'handle_test_rest' ) );
 		add_action( 'admin_post_ai_site_connector_prune_log', array( __CLASS__, 'handle_prune_log' ) );
+		add_action( 'admin_post_ai_site_connector_save_uninstall_pref', array( __CLASS__, 'handle_save_uninstall_pref' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_assets' ) );
 	}
 
@@ -183,6 +184,33 @@ class AI_Site_Connector_Admin_Page {
 			self::flash( __( 'Application Password revoked.', 'ai-site-connector' ), 'success' );
 		}
 		self::redirect_back( 'credentials' );
+	}
+
+	public static function handle_save_uninstall_pref() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Insufficient permissions.', 'ai-site-connector' ) );
+		}
+		check_admin_referer( self::NONCE_ACTION, self::NONCE_FIELD );
+
+		$wipe = ! empty( $_POST['ai_wipe_on_uninstall'] );
+		update_option( 'ai_site_connector_wipe_on_uninstall', $wipe ? 1 : 0 );
+
+		AI_Site_Connector_Audit_Log::record(
+			'uninstall_preference_changed',
+			array(
+				'message' => $wipe
+					? 'Operator opted IN: uninstall will drop the audit log table, remove the operator role, and delete plugin options.'
+					: 'Operator opted OUT: uninstall will preserve all plugin data (default).',
+			)
+		);
+
+		self::flash(
+			$wipe
+				? __( 'Saved: uninstall will wipe plugin data (audit table + role + options). AI user and Application Passwords are still preserved.', 'ai-site-connector' )
+				: __( 'Saved: uninstall will preserve all plugin data (default).', 'ai-site-connector' ),
+			'success'
+		);
+		self::redirect_back( 'audit' );
 	}
 
 	public static function handle_prune_log() {
@@ -579,6 +607,35 @@ Do not commit this password to git.</pre>
 						<?php esc_html_e( 'Prune now', 'ai-site-connector' ); ?>
 					</button>
 				</p>
+			</form>
+		</div>
+		<div class="asc-card">
+			<h2><?php esc_html_e( 'Plugin removal', 'ai-site-connector' ); ?></h2>
+			<?php
+			$wipe_on_uninstall = (bool) get_option( 'ai_site_connector_wipe_on_uninstall', false );
+			$constant_force    = defined( 'AI_SITE_CONNECTOR_WIPE_ON_UNINSTALL' ) && AI_SITE_CONNECTOR_WIPE_ON_UNINSTALL;
+			?>
+			<p class="description">
+				<?php esc_html_e( 'By default, deleting this plugin preserves the audit log table, the AI Site Operator role, the dedicated AI user, and any Application Passwords. Tick the box below if you want a clean wipe of the data this plugin owns when the plugin is deleted.', 'ai-site-connector' ); ?>
+			</p>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<input type="hidden" name="action" value="ai_site_connector_save_uninstall_pref" />
+				<p>
+					<label>
+						<input type="checkbox" name="ai_wipe_on_uninstall" value="1" <?php checked( $wipe_on_uninstall || $constant_force ); ?> <?php disabled( $constant_force ); ?> />
+						<?php esc_html_e( 'On uninstall, drop the audit log table, remove the AI Site Operator role, and delete plugin options.', 'ai-site-connector' ); ?>
+					</label>
+				</p>
+				<p class="description">
+					<?php esc_html_e( 'Even when ticked, the AI user and any Application Passwords are NOT deleted automatically. Remove those separately via the Users screen or `wp user delete` if you want them gone.', 'ai-site-connector' ); ?>
+					<?php if ( $constant_force ) : ?>
+						<br><strong><?php esc_html_e( 'Locked ON by the AI_SITE_CONNECTOR_WIPE_ON_UNINSTALL constant in wp-config.php.', 'ai-site-connector' ); ?></strong>
+					<?php endif; ?>
+				</p>
+				<?php if ( ! $constant_force ) : ?>
+					<p><button type="submit" class="button button-secondary"><?php esc_html_e( 'Save uninstall preference', 'ai-site-connector' ); ?></button></p>
+				<?php endif; ?>
 			</form>
 		</div>
 		<div class="asc-card">

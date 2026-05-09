@@ -25,6 +25,7 @@ forbid_path() {
 }
 
 require_file 'ai-site-connector/ai-site-connector.php'
+require_file 'ai-site-connector/uninstall.php'
 require_file 'ai-site-connector/includes/class-plugin.php'
 require_file 'ai-site-connector/includes/class-roles.php'
 require_file 'ai-site-connector/includes/class-user-manager.php'

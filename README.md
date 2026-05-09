@@ -298,6 +298,40 @@ See [docs/BRAND_ASSETS.md](docs/BRAND_ASSETS.md) for file notes and PNG export c
 
 ---
 
+## Removal / rollback
+
+Standard WordPress plugin removal:
+
+```bash
+wp plugin deactivate ai-site-connector
+wp plugin delete ai-site-connector
+```
+
+By default deletion **preserves** the audit log table, the AI Site Operator role, the dedicated AI user, and any Application Passwords. That's intentional — content the AI created may still be authored by that user, and credentials should be managed independently of plugin lifecycle.
+
+If you want a clean wipe of the data this plugin owns when it is deleted, opt in via either:
+
+1. **Tools → AI Site Connector → Audit → Plugin removal** — tick "On uninstall, drop the audit log table…" and save.
+2. **wp-config.php constant** — useful for managed installs where you don't want admins clicking through:
+   ```php
+   define( 'AI_SITE_CONNECTOR_WIPE_ON_UNINSTALL', true );
+   ```
+   The constant LOCKS the option ON; the admin checkbox becomes read-only.
+
+When opted in, `wp plugin delete ai-site-connector` will:
+
+- DROP the `{prefix}ai_site_connector_log` table.
+- Remove the `ai_site_operator` role.
+- Delete the `ai_site_connector_db_version`, `ai_site_connector_log_retention_days`, and `ai_site_connector_wipe_on_uninstall` options.
+- Unschedule the daily prune cron.
+
+It will **NOT** delete:
+
+- The dedicated AI user — they may own posts, media, or comments. Remove with `wp user delete ai-agent --reassign=1` if you want them gone.
+- Application Passwords — managed by WordPress core. Revoke individually with `wp user application-password delete <user> <uuid>` or by deleting the user.
+
+---
+
 ## License
 
 MIT © 2026 sharmanhall — see [LICENSE](LICENSE).

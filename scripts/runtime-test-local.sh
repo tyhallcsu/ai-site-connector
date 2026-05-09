@@ -323,9 +323,30 @@ case "$PRUNE_OUT" in
 	*) fail "retention pruner did not work as expected: ${PRUNE_OUT}" ;;
 esac
 
-step "14/14 revoke and verify original App Pwd is now 401"
+step "14/15 revoke and verify original App Pwd is now 401"
 wp_q ai-connector revoke-password --username=ai-agent --uuid="$APP_UUID" >/dev/null
 [ "$(http_code -u "ai-agent:${APP_PASSWORD}" "${URL}/wp-json/wp/v2/users/me")" = "401" ] \
 	|| fail "revoked App Pwd unexpectedly still works"
 
-green "All 14 runtime tests passed."
+step "15/15 uninstall.php opt-in wipe path (this is destructive — last step)"
+# Set the opt-in option, then run uninstall.php inline. WP normally requires
+# uninstall.php to be loaded via plugin deletion (which removes the plugin),
+# but the file's only entry guard is WP_UNINSTALL_PLUGIN — defining it here
+# and require'ing the file simulates the same code path without removing
+# the plugin from disk.
+UNINSTALL_OUT="$(wp_cli eval '
+update_option( "ai_site_connector_wipe_on_uninstall", 1 );
+if ( ! defined( "WP_UNINSTALL_PLUGIN" ) ) { define( "WP_UNINSTALL_PLUGIN", true ); }
+require_once WP_PLUGIN_DIR . "/ai-site-connector/uninstall.php";
+global $wpdb;
+$table = $wpdb->prefix . "ai_site_connector_log";
+$still_exists = (bool) $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $table ) );
+$role_still_exists = (bool) get_role( "ai_site_operator" );
+echo "table_exists=" . ( $still_exists ? "1" : "0" ) . " role_exists=" . ( $role_still_exists ? "1" : "0" );
+' --path="$WP_DIR" 2>/dev/null || true)"
+case "$UNINSTALL_OUT" in
+	*"table_exists=0 role_exists=0"*) green "  uninstall.php wiped the audit table and role as expected" ;;
+	*) fail "uninstall.php opt-in path did not wipe state: ${UNINSTALL_OUT}" ;;
+esac
+
+green "All 15 runtime tests passed."

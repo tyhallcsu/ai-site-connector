@@ -22,6 +22,7 @@ class AI_Site_Connector_Admin_Page {
 		add_action( 'admin_post_ai_site_connector_generate_password', array( __CLASS__, 'handle_generate_password' ) );
 		add_action( 'admin_post_ai_site_connector_revoke_password', array( __CLASS__, 'handle_revoke_password' ) );
 		add_action( 'admin_post_ai_site_connector_test_rest', array( __CLASS__, 'handle_test_rest' ) );
+		add_action( 'admin_post_ai_site_connector_prune_log', array( __CLASS__, 'handle_prune_log' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_assets' ) );
 	}
 
@@ -182,6 +183,28 @@ class AI_Site_Connector_Admin_Page {
 			self::flash( __( 'Application Password revoked.', 'ai-site-connector' ), 'success' );
 		}
 		self::redirect_back( 'credentials' );
+	}
+
+	public static function handle_prune_log() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Insufficient permissions.', 'ai-site-connector' ) );
+		}
+		check_admin_referer( self::NONCE_ACTION, self::NONCE_FIELD );
+
+		$deleted = AI_Site_Connector_Audit_Log::prune();
+		if ( false === $deleted ) {
+			self::flash( __( 'Audit log prune failed. See server error log for details.', 'ai-site-connector' ), 'error' );
+		} else {
+			self::flash(
+				sprintf(
+					/* translators: %d: number of rows deleted */
+					_n( 'Pruned %d audit log row.', 'Pruned %d audit log rows.', (int) $deleted, 'ai-site-connector' ),
+					(int) $deleted
+				),
+				'success'
+			);
+		}
+		self::redirect_back( 'audit' );
 	}
 
 	public static function handle_test_rest() {
@@ -515,8 +538,49 @@ Do not commit this password to git.</pre>
 	}
 
 	private static function render_audit() {
-		$rows = AI_Site_Connector_Audit_Log::recent( 100 );
+		$rows           = AI_Site_Connector_Audit_Log::recent( 100 );
+		$retention_days = AI_Site_Connector_Audit_Log::retention_days();
+		$next_run       = wp_next_scheduled( AI_Site_Connector_Audit_Log::CRON_HOOK );
 		?>
+		<div class="asc-card">
+			<h2><?php esc_html_e( 'Retention', 'ai-site-connector' ); ?></h2>
+			<p>
+				<?php
+				echo esc_html(
+					sprintf(
+						/* translators: 1: retention window in days, 2: minimum number of rows always preserved */
+						__( 'Audit log entries older than %1$d days are auto-pruned daily, except the most recent %2$d rows are always kept for debugging.', 'ai-site-connector' ),
+						(int) $retention_days,
+						(int) AI_Site_Connector_Audit_Log::MIN_KEEP_ROWS
+					)
+				);
+				?>
+			</p>
+			<p class="description">
+				<?php esc_html_e( 'Override programmatically with the ai_site_connector_log_retention_days filter, or disable pruning with ai_site_connector_log_skip_prune.', 'ai-site-connector' ); ?>
+				<?php if ( $next_run ) : ?>
+					<br>
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: %s: human-readable time-from-now until next prune */
+							__( 'Next scheduled prune: %s.', 'ai-site-connector' ),
+							human_time_diff( time(), (int) $next_run ) . ' (' . gmdate( 'Y-m-d H:i', (int) $next_run ) . ' UTC)'
+						)
+					);
+					?>
+				<?php endif; ?>
+			</p>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<input type="hidden" name="action" value="ai_site_connector_prune_log" />
+				<p>
+					<button type="submit" class="button button-secondary" onclick="return confirm('<?php echo esc_js( __( 'Prune audit log entries older than the retention window now? Recent rows are preserved.', 'ai-site-connector' ) ); ?>');">
+						<?php esc_html_e( 'Prune now', 'ai-site-connector' ); ?>
+					</button>
+				</p>
+			</form>
+		</div>
 		<div class="asc-card">
 			<h2><?php esc_html_e( 'Recent audit events', 'ai-site-connector' ); ?></h2>
 			<table class="widefat striped">

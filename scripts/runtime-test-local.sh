@@ -298,9 +298,34 @@ if printf '%s' "$SELF_TEST_OUT" | grep -Ei -q '"application_password"\s*:'; then
 	fail "self-test JSON unexpectedly contains an application_password field"
 fi
 
-step "13/13 revoke and verify original App Pwd is now 401"
+step "13/14 audit-log retention pruner (insert old rows, prune, verify floor)"
+# Insert old rows FIRST, then enough recent fillers so the most-recent-100 floor
+# pivot is well past the old rows. Floor preservation is by ID (= chronological
+# in production), so old rows must precede the filler block by enough margin.
+PRUNE_OUT="$(wp_cli eval '
+global $wpdb;
+$table = AI_Site_Connector_Audit_Log::table_name();
+$old   = gmdate( "Y-m-d H:i:s", time() - ( 400 * DAY_IN_SECONDS ) );
+for ( $i = 0; $i < 5; $i++ ) {
+	$wpdb->insert( $table, array( "created_at" => $old, "action" => "test_old_row", "message" => "fake #" . $i ), array( "%s", "%s", "%s" ) );
+}
+// Add enough recent fillers that the floor (100th most recent) is past all old rows.
+for ( $i = 0; $i < AI_Site_Connector_Audit_Log::MIN_KEEP_ROWS + 5; $i++ ) {
+	AI_Site_Connector_Audit_Log::record( "test_recent_row", array( "message" => "filler #" . $i ) );
+}
+$deleted = AI_Site_Connector_Audit_Log::prune();
+$old_remaining = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$table}` WHERE action = %s", "test_old_row" ) );
+$pruned_event  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$table}` WHERE action = %s", "audit_log_pruned" ) );
+echo "old_remaining={$old_remaining} pruned_event={$pruned_event} deleted={$deleted}";
+' --path="$WP_DIR" 2>/dev/null)"
+case "$PRUNE_OUT" in
+	*"old_remaining=0"*"pruned_event="[1-9]*) : ;;
+	*) fail "retention pruner did not work as expected: ${PRUNE_OUT}" ;;
+esac
+
+step "14/14 revoke and verify original App Pwd is now 401"
 wp_q ai-connector revoke-password --username=ai-agent --uuid="$APP_UUID" >/dev/null
 [ "$(http_code -u "ai-agent:${APP_PASSWORD}" "${URL}/wp-json/wp/v2/users/me")" = "401" ] \
 	|| fail "revoked App Pwd unexpectedly still works"
 
-green "All 13 runtime tests passed."
+green "All 14 runtime tests passed."

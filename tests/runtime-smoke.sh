@@ -339,6 +339,42 @@ for action in plugin_activated ai_user_created application_password_created heal
 	fi
 done
 
+log "Testing audit log retention pruner."
+# Insert 5 old rows, then enough recent fillers so the floor (most-recent-100
+# rows by ID) is well past the old rows — otherwise rows that happen to be
+# among the 100 newest by ID would be protected regardless of created_at.
+wp_cli eval '
+global $wpdb;
+$table = AI_Site_Connector_Audit_Log::table_name();
+$old   = gmdate( "Y-m-d H:i:s", time() - ( 400 * DAY_IN_SECONDS ) );
+for ( $i = 0; $i < 5; $i++ ) {
+	$wpdb->insert(
+		$table,
+		array(
+			"created_at" => $old,
+			"action"     => "test_old_row",
+			"message"    => "fake row #" . $i,
+		),
+		array( "%s", "%s", "%s" )
+	);
+}
+// Add enough recent fillers that the floor pivot is past all old rows.
+for ( $i = 0; $i < AI_Site_Connector_Audit_Log::MIN_KEEP_ROWS + 5; $i++ ) {
+	AI_Site_Connector_Audit_Log::record( "test_recent_row", array( "message" => "filler #" . $i ) );
+}
+$deleted = AI_Site_Connector_Audit_Log::prune();
+$old_remaining = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$table}` WHERE action = %s", "test_old_row" ) );
+if ( $old_remaining !== 0 ) {
+	fwrite( STDERR, "Expected all 5 fake-old rows pruned, {$old_remaining} remain.\n" );
+	exit( 1 );
+}
+$pruned_event = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$table}` WHERE action = %s", "audit_log_pruned" ) );
+if ( $pruned_event < 1 ) {
+	fwrite( STDERR, "Expected at least one audit_log_pruned event, found 0.\n" );
+	exit( 1 );
+}
+' --path="$WP_DIR"
+
 log "Revoking Application Password."
 wp_cli ai-connector revoke-password --username="$AI_USER" --uuid="$APP_UUID" --path="$WP_DIR" >/dev/null
 status="$(curl -sS -o /dev/null -w '%{http_code}' --user "$AI_USER:$APP_PASSWORD" "$WP_URL/wp-json/wp/v2/users/me")"

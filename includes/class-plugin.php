@@ -53,6 +53,7 @@ class AI_Site_Connector_Plugin {
 	public static function activate() {
 		AI_Site_Connector_Roles::ensure_role();
 		AI_Site_Connector_Audit_Log::install_table();
+		AI_Site_Connector_Audit_Log::maybe_schedule_cron();
 		AI_Site_Connector_Audit_Log::record(
 			'plugin_activated',
 			array(
@@ -63,6 +64,7 @@ class AI_Site_Connector_Plugin {
 	}
 
 	public static function deactivate() {
+		AI_Site_Connector_Audit_Log::unschedule_cron();
 		AI_Site_Connector_Audit_Log::record(
 			'plugin_deactivated',
 			array(

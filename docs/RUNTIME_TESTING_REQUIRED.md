@@ -1,138 +1,155 @@
-# Runtime Testing — Results
+# Runtime Testing — Coverage and Open Items
 
-**Status:** _Verified against a throwaway WordPress install on 2026-05-08._
+This document is the source of truth for what has been *actually tested* versus
+what *requires real-hosting verification*. It is intentionally honest: the
+plugin's static checks and CI matrix are green, but no amount of CI testing
+proves your specific hosting stack passes the `Authorization` header through
+its WAF and reverse proxies. That part is on you and your host.
 
-The full runtime checklist below was executed on a clean WordPress 6.9.4 + PHP 8.5.5 + SQLite-database-integration drop-in install, served via `php -S localhost:8765`. The plugin was symlinked into `wp-content/plugins/ai-site-connector` and activated via `wp plugin activate`. Test environment was torn down after the run; no real credentials remain on disk.
+---
 
-> Re-run this checklist on each target host (Apache/nginx, real MySQL, HTTPS, multisite) before relying on the plugin in production. SQLite + built-in PHP server prove the **plugin code path** works; they don't prove your specific stack does.
+## 1. Verified locally (developer machine)
 
-## Test environment
+These ran against a throwaway WordPress install on `php -S` with the SQLite
+drop-in. From a source checkout, reproduce them by running:
 
-| Component | Version |
+```bash
+scripts/runtime-test-local.sh
+```
+
+The script provisions WordPress, installs the SQLite drop-in, symlinks the
+plugin, and runs the full suite. It scrubs all captured Application Password
+material on exit (including via `trap` on errors and SIGINT) and tears down
+the throwaway directory unless `ASC_KEEP=1` is set.
+
+| # | Test | Status |
+|---|---|---|
+| L1 | Plugin activates with no fatal errors | ✅ |
+| L2 | `ai_site_operator` role exists with least-privilege caps (read/edit_posts/edit_pages/upload_files/moderate_comments TRUE; manage_options/install_plugins/edit_files/list_users/edit_others_*/delete_* FALSE) | ✅ |
+| L3 | `{prefix}ai_site_connector_log` table exists; `plugin_activated` event recorded | ✅ |
+| L4 | `wp ai-connector status` and `wp ai-connector health` produce expected output | ✅ |
+| L5 | `wp help ai-connector` shows ONLY hyphenated subcommands (no `create_user` / `generate_password` / `revoke_password` underscore duplicates) | ✅ |
+| L6 | `wp ai-connector create-user --username=ai-agent --role=ai_site_operator` creates user | ✅ |
+| L7 | `wp ai-connector generate-password --username=ai-agent --format=json` returns a connection pack | ✅ |
+| L8 | Plaintext Application Password NOT present in `wp_options`, `wp_usermeta`, or `{prefix}ai_site_connector_log` | ✅ |
+| L9 | `/wp-json/ai-site-connector/v1/health` unauthenticated returns minimal payload — NO `wp_version` / `php_version` / `active_theme` / `active_plugin_count` / `is_multisite` / `user` keys | ✅ |
+| L10 | Same endpoint authenticated returns rich payload including `wp_version`, `php_version`, `active_theme`, `active_plugin_count`, `is_multisite`, `user.{id,login,roles}` | ✅ |
+| L11 | `/wp-json/wp/v2/users/me` with App Password → 200 | ✅ |
+| L12 | `/site-info`, `/posts`, `/pages` with operator → 200; `/plugins`, `/themes` with operator → 403; unauth `/site-info` → 401 | ✅ |
+| L13 | `wp ai-connector revoke-password --username=ai-agent --uuid=<uuid>` succeeds; same App Pwd then returns 401 | ✅ |
+| L14 | Administrator role typed-confirmation gate (server-side): refuses without exact phrase, allows with `I UNDERSTAND THIS GRANTS FULL SITE ACCESS` | ✅ |
+| L15 | Audit log records all 6 distinct event types (activated, user_created, pwd_created, pwd_revoked, health_accessed_authenticated, admin_refused) | ✅ |
+
+The local test environment uses:
+
+| Component | Value |
 |---|---|
-| WordPress core | 6.9.4 |
-| PHP | 8.5.5 (built-in dev server) |
+| WordPress core | latest (`wp core download`) |
 | Database | SQLite via `sqlite-database-integration` drop-in |
-| Web server | `php -S localhost:8765` |
-| `WP_ENVIRONMENT_TYPE` | `local` (required by WP core for App Passwords on HTTP) |
+| HTTP server | `php -S 127.0.0.1:8765` |
+| `WP_ENVIRONMENT_TYPE` | `local` (required so WP core enables Application Passwords on plain HTTP) |
 | `WP_DEBUG` | true |
-| WP-CLI | 2.12.0 |
+| `AI_SITE_CONNECTOR_ALLOW_HTTP` | true |
 
-## Test results
+**What this proves:** the plugin's PHP code paths, REST handlers, capability
+gates, audit log writes, App Password lifecycle, and CLI command surface are
+all functionally correct under WordPress.
 
-### Activation & structure
+**What this does NOT prove:** that any specific production host passes the
+`Authorization` header through its proxy / WAF / security plugin to PHP.
+SQLite is not MySQL. `php -S` is not Apache or nginx.
 
-| # | Test | Result |
-|---|---|---|
-| 1 | `wp plugin activate ai-site-connector` — no fatal errors | ✅ PASS |
-| 2 | `ai_site_operator` role exists | ✅ PASS |
-| 3 | `wp_ai_site_connector_log` table created | ✅ PASS |
-| 4 | `plugin_activated` event recorded in audit log | ✅ PASS |
+---
 
-### Default operator capabilities (least-privilege check)
+## 2. Verified in CI (GitHub Actions)
 
-| Capability | Expected | Actual |
-|---|---|---|
-| `read` | TRUE | ✅ TRUE |
-| `edit_posts` | TRUE | ✅ TRUE |
-| `edit_pages` | TRUE | ✅ TRUE |
-| `upload_files` | TRUE | ✅ TRUE |
-| `moderate_comments` | TRUE | ✅ TRUE |
-| `list_users` | FALSE | ✅ FALSE |
-| `edit_others_posts` | FALSE | ✅ FALSE |
-| `edit_others_pages` | FALSE | ✅ FALSE |
-| `manage_options` | FALSE | ✅ FALSE |
-| `install_plugins` | FALSE | ✅ FALSE |
-| `edit_files` | FALSE | ✅ FALSE |
-| `delete_posts` | FALSE | ✅ FALSE |
-| `delete_published_posts` | FALSE | ✅ FALSE |
+The `CI` workflow (`.github/workflows/ci.yml`) runs on every push and PR.
+Status badges are in the README.
 
-### WP-CLI commands
+| Check | Detail |
+|---|---|
+| `php -l` syntax matrix | PHP 7.4, 8.0, 8.1, 8.2, 8.3 |
+| Composer metadata + WordPressCS + PHPCompatibility | `composer validate --strict`, `composer lint`, `composer phpcs` |
+| Plugin structure | required files exist, plugin header `Version:` matches `readme.txt` `Stable tag:` |
+| No forbidden files committed | `.env`, `node_modules/`, `vendor/`, `*.log`, `connection-pack.json`, `.DS_Store` |
+| Asset validation | SVGs parse with `xmllint`, render via `rsvg-convert`; `node --check` on admin JS |
+| Dangerous-pattern grep | `eval`, `shell_exec`, `exec`, `passthru`, `system`, `proc_open`, `popen`, `assert(`, `create_function`, `base64_decode` |
+| Credential / secret scan | `.env`, `connection-pack.json`, `*credentials*`, `*_secret*`, private keys, plausibly-real Application Password strings in committed JSON / YAML / Markdown |
+| Release ZIP smoke | `tests/package-smoke.sh` builds the ZIP and verifies contents/exclusions |
+| WordPress + MySQL runtime smoke | `tests/runtime-smoke.sh` provisions WP on a real MySQL service and runs the same suite as the local script |
 
-| # | Command | Result |
-|---|---|---|
-| 5 | `wp ai-connector status` returns diagnostic table | ✅ PASS |
-| 6 | `wp ai-connector health` returns valid JSON | ✅ PASS |
-| 7 | `wp ai-connector create-user --username=ai-agent --role=ai_site_operator` creates user (id=2) | ✅ PASS |
-| 8 | `wp ai-connector generate-password --username=ai-agent --name="..." --format=json` returns connection pack | ✅ PASS |
-| 9 | `wp ai-connector revoke-password --username=ai-agent --uuid=<uuid>` removes credential | ✅ PASS |
+**What this proves:** every push goes through static, structural, and
+WordPress-runtime validation against MySQL before merging.
 
-### Application Password plaintext isolation
+---
 
-| # | Test | Result |
-|---|---|---|
-| 10 | Plaintext NOT present in `wp_options` (LIKE %password%) | ✅ PASS |
-| 11 | Plaintext NOT present in `wp_usermeta` | ✅ PASS |
-| 12 | Plaintext NOT present in `wp_ai_site_connector_log` | ✅ PASS |
-| 13 | `WP_Application_Passwords::get_user_application_passwords()` returns metadata only (uuid, name, app_id, created, last_used; password field is hashed by core) | ✅ PASS |
-| 14 | `application_password_created` and `application_password_revoked` events recorded with UUID but no plaintext | ✅ PASS |
+## 3. Still requires REAL-HOSTING verification
 
-### REST endpoints — `/wp-json/ai-site-connector/v1/*`
+These cannot be proven in CI or by a local SQLite run. Run them once on each
+target host before relying on the plugin in production.
 
-| # | Endpoint | Auth | Expected | Actual |
-|---|---|---|---|---|
-| 15 | `/health` | unauthenticated | minimal payload (no wp_version, php_version, theme, user, plugin count, multisite) | ✅ PASS — confirmed payload contains only `plugin`, `plugin_version`, `site_url`, `rest_url`, `https`, `authenticated`, `timestamp` |
-| 16 | `/health` | App Password | rich payload (incl. wp_version, php_version, active_theme, user) | ✅ PASS |
-| 17 | `/site-info` | unauth | 401 | ✅ PASS |
-| 18 | `/site-info` | operator (`edit_posts`) | 200 | ✅ PASS |
-| 19 | `/plugins` | unauth | 401 | ✅ PASS |
-| 20 | `/plugins` | operator (no `manage_options`) | 401 / 403 | ✅ PASS (403) |
-| 21 | `/themes` | operator | 401 / 403 | ✅ PASS (403) |
-| 22 | `/posts` | operator (`edit_posts`) | 200 | ✅ PASS |
-| 23 | `/pages` | operator (`edit_pages`) | 200 | ✅ PASS |
+The plugin ZIP includes a small host diagnostic helper for the most important
+production checks:
 
-### WordPress core REST auth via Application Password
-
-| # | Test | Result |
-|---|---|---|
-| 24 | `curl -u ai-agent:<APP_PWD> /wp-json/wp/v2/users/me` returns HTTP 200 + AI agent's data | ✅ PASS |
-| 25 | After `revoke-password`, the same call returns HTTP 401 | ✅ PASS |
-
-### Administrator role typed-confirmation gate
-
-| # | Test | Result |
-|---|---|---|
-| 26 | Submitting `ai_role=administrator` with WRONG `ai_admin_confirm` → user creation refused | ✅ PASS |
-| 27 | Submitting `ai_role=administrator` with EXACT phrase `I UNDERSTAND THIS GRANTS FULL SITE ACCESS` → user created with `administrator` role | ✅ PASS |
-
-### Audit log final state
-
-```
-application_password_revoked  | uuid=88097999-... revoked for user id 2
-health_accessed_authenticated | by ai-agent (id=2)
-application_password_created  | "Claude Test 2" generated for ai-agent (uuid=88097999-...)
-application_password_created  | "Claude Test"   generated for ai-agent (uuid=eb3b033e-...)
-ai_user_created               | "ai-agent" (id=2) created with role "ai_site_operator"
-plugin_activated              | AI Site Connector v0.1.0 activated.
+```bash
+scripts/diagnose-hosting-auth.sh https://your-site.example 'ai-agent' 'xxxx xxxx xxxx xxxx xxxx xxxx'
 ```
 
-All 6 distinct event types fired during the test run.
+It will emit PASS/FAIL with remediation hints for the most common hosting
+problems. The Application Password is never echoed in full — only the last
+four characters appear in output.
 
-## Test artifacts cleaned up
-
-- `php -S` server killed.
-- `/tmp/asc-pwd` and `/tmp/asc-uuid` (which briefly held real Application Password material during the test) shredded with `shred -u` / `rm -f`.
-- `/tmp/asc-test-wp/` is a throwaway WP install — delete with `rm -rf /tmp/asc-test-wp`.
-- No real credentials committed to git.
-
-## Bugs found during runtime testing
-
-| # | Bug | Fix |
+| # | Test | Why it matters |
 |---|---|---|
-| A | WP-CLI subcommands `create-user`, `generate-password`, `revoke-password` registered with hyphenated names didn't expose `--username` because the docblock was missing description lines under the option | Added explicit hyphen registrations in `class-plugin.php` AND added missing `: description` lines after `--username=<username>` in `class-wp-cli.php` |
+| H1 | `Authorization` header reaches PHP through Apache `mod_rewrite` / nginx / Cloudflare / hosting WAF | Many shared hosts and "WordPress-optimized" stacks strip this header. Symptom: 401 with correct credentials. Fix: `.htaccess` rewrite rule (see README troubleshooting) or a host-specific snippet. |
+| H2 | Production MySQL / MariaDB version and configuration | CI runs the runtime smoke suite against MySQL. Still verify the target host's actual database engine, SQL mode, permissions, and backups before relying on it. |
+| H3 | HTTPS-mandatory mode (no `WP_DEBUG`, no `AI_SITE_CONNECTOR_ALLOW_HTTP`) | The local script bypasses this gate to make `php -S` testing feasible. Production must mint passwords without the override. |
+| H4 | Reverse-proxy `X-Forwarded-Proto` | If TLS terminates at Cloudflare / a load balancer, WordPress may think the connection is HTTP. The diagnostic prints this as `https=false` even when curling https://. Fix: set `FORCE_SSL_ADMIN` or trust the proxy header. |
+| H5 | Multisite (network and per-site) | The plugin activates per-site cleanly in static review; not exercised under multisite. |
+| H6 | WordPress versions other than the latest | Plugin states `Requires at least: 5.6`. Version-spread testing not run. |
+| H7 | PHP versions in production runtime | CI covers 7.4 – 8.3 with `php -l` only. Local runtime ran on 8.5 specifically. |
+| H8 | Behavior under common security plugins (Wordfence, iThemes Security, WP Cerber) | These can disable the REST API or block Basic Auth. The diagnostic surfaces 401/403 patterns that indicate this. |
+| H9 | Mod_security / WAF false positives on REST POST bodies | The diagnostic sends one benign POST to detect this. A 403 from POST while GET works is the smoking gun. |
+| H10 | Browser-side admin wizard JS — Administrator typed-confirmation row toggle | Server-side gate is verified (test L14). The JS that hides/shows the confirm field is documented for manual test below. |
 
-## Tests still NOT performed (require a different stack)
+### Manual browser test for the Administrator confirmation gate
 
-The following remain TODO when the plugin is deployed to a real production stack:
+The server-side gate is fully covered by automated tests. The client-side
+toggle that hides/shows the confirm field is one tiny piece of UI that is
+better verified by hand than by spinning up a headless browser.
 
-- [ ] Apache `mod_rewrite` URL rewriting + `Authorization` header pass-through on actual hosting (Cloudflare / cPanel / WP Engine / Kinsta)
-- [ ] Real MySQL / MariaDB (this run used SQLite drop-in)
-- [ ] HTTPS-mandatory mode (this run used `WP_ENVIRONMENT_TYPE=local` to bypass the SSL gate)
-- [ ] Multisite (network and per-site activation)
-- [ ] WordPress versions other than 6.9.x — particularly the 5.6 minimum supported
-- [ ] PHP versions other than 8.5 — CI matrix covers 7.4 / 8.0 / 8.1 / 8.2 / 8.3 with `php -l` only, not runtime
-- [ ] Browser-side test of the admin wizard JS (typed-confirmation row toggle); only the server-side gate has been runtime-tested
-- [ ] Stress test: many concurrent password mints / revocations
-- [ ] Behavior under common security plugins (Wordfence, iThemes Security, WP Cerber) which sometimes block REST or Basic Auth
+1. Activate the plugin on a real site.
+2. Go to **Tools → AI Site Connector → Setup Wizard**.
+3. With the role dropdown set to **AI Site Operator**, confirm:
+   - The "Confirm Administrator" row is hidden.
+4. Change the role dropdown to **Administrator**, confirm:
+   - The "Confirm Administrator" row appears with a red warning notice.
+   - The confirm field becomes `required` (HTML5 form validation will block submit if empty).
+   - Submitting without the exact phrase shows the server-side error.
+5. Type the exact phrase `I UNDERSTAND THIS GRANTS FULL SITE ACCESS` and submit.
+6. The user is created with `administrator` role; the audit log shows `ai_user_created`.
+7. Change the role back to **AI Site Operator**:
+   - The confirm field is cleared and `required` is removed (no stale validation error).
+8. Submit a different username with operator role — succeeds, no admin gate fires.
 
-When you deploy to a real site, run a representative subset and update this document.
+If any of those steps deviate, file an issue with screenshots.
+
+---
+
+## Re-running this checklist
+
+After deploying to a new host:
+
+```bash
+# From a source checkout, before push (idempotent throwaway WordPress + SQLite):
+scripts/runtime-test-local.sh
+
+# Against the real target host:
+scripts/diagnose-hosting-auth.sh https://your-site.example ai-agent 'xxxx ...'
+
+# CI runs automatically on push.
+```
+
+Update this file when you've completed any of the H-series checks for a given
+host so future operators don't re-discover the same issues. Don't claim a row
+green unless you ran the test on a real host that day.

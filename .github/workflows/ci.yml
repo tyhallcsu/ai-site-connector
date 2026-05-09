@@ -54,6 +54,7 @@ jobs:
           php-version: '8.3'
           coverage: none
           tools: composer:v2
+          ini-values: memory_limit=512M
 
       - name: Validate composer metadata
         run: composer validate --strict --no-interaction
@@ -206,6 +207,7 @@ jobs:
           coverage: none
           extensions: mysqli, curl, json
           tools: none
+          ini-values: memory_limit=512M
 
       - name: Install runtime tools
         run: |
@@ -224,4 +226,5 @@ jobs:
           WP_DB_HOST: 127.0.0.1
           WP_VERSION: latest
           WP_PORT: 8765
+          WP_CLI_MEMORY_LIMIT: 512M
         run: tests/runtime-smoke.sh

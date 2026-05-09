@@ -1,8 +1,8 @@
 # AI Site Connector — v0.1.0 Release Notes
 
-**Status:** Initial public GitHub release. Code complete, static checks green, CI release gates configured, and the runtime suite executed against a throwaway WordPress 6.9.4 + PHP 8.5.5 + SQLite install (see [RUNTIME_TESTING_REQUIRED.md](RUNTIME_TESTING_REQUIRED.md) — now contains test results, not just a checklist).
+**Status:** Initial public GitHub release. Code complete, CI release gates configured, runtime smoke coverage added for WordPress + MySQL in GitHub Actions, and the local throwaway WordPress + SQLite harness documented in [RUNTIME_TESTING_REQUIRED.md](RUNTIME_TESTING_REQUIRED.md).
 
-## What works (verified by static analysis only)
+## Static and security review coverage
 
 - Plugin file structure and bootstrap (no PHP parse errors across 9 files).
 - No use of `eval`, `shell_exec`, `exec`, `passthru`, `system`, `popen`, `proc_open`, `base64_decode`, `assert(`, `create_function`, `file_put_contents`, `fopen`, `unlink`.
@@ -20,7 +20,7 @@
 | Test                                    | Status        |
 | --------------------------------------- | ------------- |
 | `php -l` on every PHP file              | Pass          |
-| WordPress Coding Standards / PHP compatibility via PHPCS | Pass |
+| WordPress security/i18n checks and PHP compatibility via PHPCS | Pass |
 | SVG brand assets parse and render       | Pass          |
 | Release ZIP builds and excludes dev-only files | Pass |
 | Dangerous-pattern grep (12 patterns)    | Pass (none)   |
@@ -30,11 +30,11 @@
 | Confirm no plaintext password storage   | Pass          |
 | Confirm permission_callback on /health, /site-info, /plugins, /themes, /pages, /posts | Pass |
 
-## Runtime tests executed (throwaway WP 6.9.4 + PHP 8.5.5 + SQLite)
+## Runtime tests executed
 
 | Test                                                                               | Result        |
 | ---------------------------------------------------------------------------------- | ------------- |
-| Plugin activation                                                                  | **PASS**      |
+| Plugin activation                                                                  | **PASS** in local SQLite harness; covered by CI MySQL harness |
 | `ai_site_operator` role + table created                                            | **PASS**      |
 | Default capabilities = least-privilege (13 caps verified)                          | **PASS**      |
 | `wp ai-connector status / health`                                                  | **PASS**      |
@@ -51,14 +51,14 @@
 | Administrator role gate: refuses without exact phrase                              | **PASS**      |
 | Administrator role gate: allows with exact phrase                                  | **PASS**      |
 
-See [RUNTIME_TESTING_REQUIRED.md](RUNTIME_TESTING_REQUIRED.md) for the full test transcript.
+See [RUNTIME_TESTING_REQUIRED.md](RUNTIME_TESTING_REQUIRED.md) for the full coverage matrix and production-host checks.
 
 ## CI release gates
 
 The `CI` workflow now checks:
 
 - PHP syntax on PHP 7.4, 8.0, 8.1, 8.2, and 8.3.
-- Composer metadata, dependency installation, `composer lint`, and WordPress/PHPCompatibility PHPCS.
+- Composer metadata, dependency installation, `composer lint`, and PHPCS for WordPress security/i18n plus PHP compatibility.
 - Required plugin files, brand assets, and plugin/readme version consistency.
 - Admin JavaScript syntax and SVG parse/render health.
 - Dangerous PHP function and credential-pattern grep.
@@ -74,11 +74,11 @@ The `CI` workflow now checks:
 | Test | Status |
 |------|--------|
 | Apache `mod_rewrite` + `Authorization` header pass-through on real hosting | Not run |
-| Real MySQL / MariaDB | Not run (SQLite drop-in used) |
+| Target host's exact MySQL / MariaDB version and configuration | Not run |
 | HTTPS-mandatory mode | Not run (`WP_ENVIRONMENT_TYPE=local` used) |
 | Multisite | Not run |
 | WordPress versions other than 6.9.x | Not run |
-| PHP versions other than 8.5 (CI covers 7.4 – 8.3 with `php -l` only) | Not run for runtime |
+| PHP runtime versions other than the CI runtime PHP version | Not run for runtime |
 | Browser-side JS test of admin wizard typed-confirmation row toggle | Not run (server-side check verified) |
 | Behavior under Wordfence / iThemes Security / WP Cerber | Not run |
 

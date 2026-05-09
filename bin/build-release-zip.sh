@@ -35,6 +35,7 @@ rsync -a \
 	--exclude='build/' \
 	--exclude='dist/' \
 	--exclude='bin/' \
+	--exclude='scripts/runtime-test-local.sh' \
 	--exclude='tests/' \
 	--exclude='*.zip' \
 	--exclude='*.log' \

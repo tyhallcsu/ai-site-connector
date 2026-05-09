@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WP_VERSION="${WP_VERSION:-latest}"
@@ -20,6 +20,21 @@ else
 fi
 
 SERVER_PID=""
+log() {
+	printf '[runtime-smoke] %s\n' "$*"
+}
+
+on_error() {
+	local line="$1"
+	local command="$2"
+	echo "Runtime smoke failed at line ${line}: ${command}" >&2
+	if [ -f /tmp/asc-runtime-server.log ]; then
+		echo "--- php -S log ---" >&2
+		cat /tmp/asc-runtime-server.log >&2 || true
+		echo "--- end php -S log ---" >&2
+	fi
+}
+
 cleanup() {
 	if [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
 		kill "$SERVER_PID"
@@ -30,6 +45,7 @@ cleanup() {
 	fi
 }
 trap cleanup EXIT
+trap 'on_error "$LINENO" "$BASH_COMMAND"' ERR
 
 require_command() {
 	if ! command -v "$1" >/dev/null 2>&1; then
@@ -45,6 +61,11 @@ require_command mysqladmin
 require_command curl
 require_command jq
 
+WP_CLI_BIN="$(command -v wp)"
+wp_cli() {
+	php -d "memory_limit=${WP_CLI_MEMORY_LIMIT:-512M}" "$WP_CLI_BIN" "$@"
+}
+
 mysql_args=(-h "$WP_DB_HOST" -u "$WP_DB_USER")
 if [ -n "$WP_DB_PASSWORD" ]; then
 	mysql_args+=("-p${WP_DB_PASSWORD}")
@@ -58,10 +79,13 @@ for _ in $(seq 1 30); do
 done
 
 mysqladmin "${mysql_args[@]}" ping --silent >/dev/null
+log "Preparing MySQL database ${WP_DB_NAME}."
 mysql "${mysql_args[@]}" -e "DROP DATABASE IF EXISTS \`${WP_DB_NAME}\`; CREATE DATABASE \`${WP_DB_NAME}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
-wp core download --path="$WP_DIR" --version="$WP_VERSION" --quiet
-wp config create \
+log "Downloading WordPress ${WP_VERSION}."
+wp_cli core download --path="$WP_DIR" --version="$WP_VERSION" --quiet
+log "Creating wp-config.php."
+wp_cli config create \
 	--path="$WP_DIR" \
 	--dbname="$WP_DB_NAME" \
 	--dbuser="$WP_DB_USER" \
@@ -75,7 +99,8 @@ define( 'WP_ENVIRONMENT_TYPE', 'local' );
 define( 'AI_SITE_CONNECTOR_ALLOW_HTTP', true );
 PHP
 
-wp core install \
+log "Installing WordPress at ${WP_URL}."
+wp_cli core install \
 	--path="$WP_DIR" \
 	--url="$WP_URL" \
 	--title="AI Site Connector Runtime Smoke" \
@@ -85,15 +110,18 @@ wp core install \
 	--skip-email \
 	--quiet
 
+log "Activating AI Site Connector."
 ln -s "$ROOT_DIR" "$WP_DIR/wp-content/plugins/ai-site-connector"
-wp plugin activate ai-site-connector --path="$WP_DIR" --quiet
-wp rewrite structure '/%postname%/' --path="$WP_DIR" --quiet
-wp rewrite flush --hard --path="$WP_DIR" --quiet
+wp_cli plugin activate ai-site-connector --path="$WP_DIR" --quiet
+wp_cli rewrite structure '/%postname%/' --path="$WP_DIR" --quiet
+wp_cli rewrite flush --hard --path="$WP_DIR" --quiet
 
-PREFIX="$(wp db prefix --path="$WP_DIR" --quiet)"
-wp db query "SHOW TABLES LIKE '${PREFIX}ai_site_connector_log';" --path="$WP_DIR" --skip-column-names | grep -q "${PREFIX}ai_site_connector_log"
+log "Checking activation artifacts."
+PREFIX="$(wp_cli db prefix --path="$WP_DIR" --quiet)"
+wp_cli db query "SHOW TABLES LIKE '${PREFIX}ai_site_connector_log';" --path="$WP_DIR" --skip-column-names | grep -q "${PREFIX}ai_site_connector_log"
 
-wp eval '
+log "Checking AI Site Operator capabilities."
+wp_cli eval '
 $role = get_role( "ai_site_operator" );
 if ( ! $role ) {
 	fwrite( STDERR, "Missing ai_site_operator role\n" );
@@ -115,18 +143,21 @@ foreach ( $must_not_have as $cap ) {
 }
 ' --path="$WP_DIR"
 
-wp ai-connector status --path="$WP_DIR" | grep -q 'plugin_version'
-wp ai-connector health --path="$WP_DIR" | jq -e '.plugin == "ai-site-connector" and .authenticated == false' >/dev/null
+log "Checking WP-CLI commands."
+wp_cli ai-connector status --path="$WP_DIR" | grep -q 'plugin_version'
+wp_cli ai-connector health --path="$WP_DIR" | jq -e '.plugin == "ai-site-connector" and .authenticated == false' >/dev/null
 
+log "Creating managed AI user."
 AI_USER="ai-agent"
-wp ai-connector create-user --username="$AI_USER" --role=ai_site_operator --path="$WP_DIR" >/dev/null
-if wp ai-connector create-user --username="$AI_USER" --role=ai_site_operator --path="$WP_DIR" >/tmp/asc-duplicate-user.out 2>&1; then
+wp_cli ai-connector create-user --username="$AI_USER" --role=ai_site_operator --path="$WP_DIR" >/dev/null
+if wp_cli ai-connector create-user --username="$AI_USER" --role=ai_site_operator --path="$WP_DIR" >/tmp/asc-duplicate-user.out 2>&1; then
 	echo "Duplicate AI user creation unexpectedly succeeded." >&2
 	exit 1
 fi
 
+log "Generating Application Password connection pack."
 PACK="$(
-	wp ai-connector generate-password \
+	wp_cli ai-connector generate-password \
 		--username="$AI_USER" \
 		--name='CI Runtime Smoke' \
 		--format=json \
@@ -140,6 +171,7 @@ if [ -z "$APP_PASSWORD" ] || [ "$APP_PASSWORD" = "null" ] || [ -z "$APP_UUID" ] 
 	exit 1
 fi
 
+log "Starting local WordPress HTTP server."
 ROUTER="$WP_DIR/router.php"
 cat > "$ROUTER" <<'PHP'
 <?php
@@ -153,6 +185,7 @@ PHP
 php -S "127.0.0.1:${WP_PORT}" "$ROUTER" -t "$WP_DIR" >/tmp/asc-runtime-server.log 2>&1 &
 SERVER_PID="$!"
 
+log "Waiting for REST API."
 for _ in $(seq 1 30); do
 	if curl -fsS "$WP_URL/wp-json/ai-site-connector/v1/health" >/dev/null 2>&1; then
 		break
@@ -160,24 +193,29 @@ for _ in $(seq 1 30); do
 	sleep 1
 done
 
+log "Checking public health endpoint."
 HEALTH_PUBLIC="$(curl -fsS "$WP_URL/wp-json/ai-site-connector/v1/health")"
 printf '%s' "$HEALTH_PUBLIC" | jq -e '.plugin == "ai-site-connector" and .authenticated == false and (has("wp_version") | not)' >/dev/null
 
+log "Checking REST permission boundaries."
 status="$(curl -sS -o /dev/null -w '%{http_code}' "$WP_URL/wp-json/ai-site-connector/v1/site-info")"
 if [ "$status" != "401" ]; then
 	echo "Expected unauthenticated /site-info to return 401, got $status." >&2
 	exit 1
 fi
 
+log "Checking Application Password authentication."
 status="$(curl -sS -o /dev/null -w '%{http_code}' --user "$AI_USER:$APP_PASSWORD" "$WP_URL/wp-json/wp/v2/users/me")"
 if [ "$status" != "200" ]; then
 	echo "Expected Application Password auth to wp/v2/users/me to return 200, got $status." >&2
 	exit 1
 fi
 
+log "Checking authenticated health payload."
 HEALTH_AUTH="$(curl -fsS --user "$AI_USER:$APP_PASSWORD" "$WP_URL/wp-json/ai-site-connector/v1/health")"
 printf '%s' "$HEALTH_AUTH" | jq -e '.authenticated == true and .user.login == "ai-agent" and has("wp_version")' >/dev/null
 
+log "Checking allowed operator REST routes."
 for route in site-info posts pages; do
 	status="$(curl -sS -o /dev/null -w '%{http_code}' --user "$AI_USER:$APP_PASSWORD" "$WP_URL/wp-json/ai-site-connector/v1/$route")"
 	if [ "$status" != "200" ]; then
@@ -186,6 +224,7 @@ for route in site-info posts pages; do
 	fi
 done
 
+log "Checking denied operator REST routes."
 for route in plugins themes; do
 	status="$(curl -sS -o /dev/null -w '%{http_code}' --user "$AI_USER:$APP_PASSWORD" "$WP_URL/wp-json/ai-site-connector/v1/$route")"
 	if [ "$status" != "403" ]; then
@@ -194,7 +233,8 @@ for route in plugins themes; do
 	fi
 done
 
-ASC_APP_PASSWORD="$APP_PASSWORD" wp eval '
+log "Checking plaintext password isolation."
+ASC_APP_PASSWORD="$APP_PASSWORD" wp_cli eval '
 global $wpdb;
 $needle = getenv( "ASC_APP_PASSWORD" );
 $checks = array(
@@ -213,22 +253,24 @@ foreach ( $checks as $check ) {
 }
 ' --path="$WP_DIR"
 
+log "Checking audit events."
 for action in plugin_activated ai_user_created application_password_created health_accessed_authenticated; do
-	count="$(wp db query "SELECT COUNT(*) FROM ${PREFIX}ai_site_connector_log WHERE action = '${action}';" --path="$WP_DIR" --skip-column-names)"
+	count="$(wp_cli db query "SELECT COUNT(*) FROM ${PREFIX}ai_site_connector_log WHERE action = '${action}';" --path="$WP_DIR" --skip-column-names)"
 	if [ "${count:-0}" -lt 1 ]; then
 		echo "Expected audit event not found: $action" >&2
 		exit 1
 	fi
 done
 
-wp ai-connector revoke-password --username="$AI_USER" --uuid="$APP_UUID" --path="$WP_DIR" >/dev/null
+log "Revoking Application Password."
+wp_cli ai-connector revoke-password --username="$AI_USER" --uuid="$APP_UUID" --path="$WP_DIR" >/dev/null
 status="$(curl -sS -o /dev/null -w '%{http_code}' --user "$AI_USER:$APP_PASSWORD" "$WP_URL/wp-json/wp/v2/users/me")"
 if [ "$status" != "401" ]; then
 	echo "Expected revoked Application Password to return 401, got $status." >&2
 	exit 1
 fi
 
-count="$(wp db query "SELECT COUNT(*) FROM ${PREFIX}ai_site_connector_log WHERE action = 'application_password_revoked';" --path="$WP_DIR" --skip-column-names)"
+count="$(wp_cli db query "SELECT COUNT(*) FROM ${PREFIX}ai_site_connector_log WHERE action = 'application_password_revoked';" --path="$WP_DIR" --skip-column-names)"
 if [ "${count:-0}" -lt 1 ]; then
 	echo "Expected application_password_revoked audit event not found." >&2
 	exit 1

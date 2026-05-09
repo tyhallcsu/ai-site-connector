@@ -32,6 +32,20 @@ A WordPress plugin that lets Claude, Codex, and other AI coding agents authentic
 7. Maintains an **audit log** of plugin events (user creation, password generation, revocation, health access).
 8. Ships **WP-CLI commands** under `wp ai-connector …`.
 
+## When NOT to use this plugin
+
+This plugin is best for **routine, scoped, auditable AI maintenance** — content edits, media uploads, comment moderation, role-bounded automation that you want to be able to revoke with one click. It is intentionally not the right tool for everything.
+
+Use SSH / SFTP / WP-CLI directly when you need:
+
+- **File editing** — theme, plugin, or `wp-config.php` changes. The REST API cannot touch files; that limit is by design and this plugin does not bypass it.
+- **Recovering a broken site** — if WordPress is white-screening or fataling, REST is broken too. SSH is the only thing that still works.
+- **Bulk database operations** — `wp db query "UPDATE ..."` will outpace 10,000 REST calls. WP-CLI runs in-process; REST has per-call HTTP overhead.
+- **Server-level work** — PHP version, opcache, cron, error logs, host config. None of that is REST-reachable.
+- **Performance-critical batch jobs** — for the same per-call-overhead reason as above.
+
+Pick the right tool per task. If your AI agent genuinely needs the items above, give it scoped SSH access (with all the trust that implies) and keep this plugin for everything else.
+
 ## Why WordPress.com is not required
 
 WordPress core has supported [Application Passwords](https://make.wordpress.org/core/2020/11/05/application-passwords-integration-guide/) since 5.6. They are first-class HTTP Basic Auth credentials that authenticate requests to `wp-json/wp/v2/*` and any third-party REST routes. WordPress.com / Jetpack / OAuth flows are unrelated — this plugin uses only what is already in your self-hosted WordPress install.

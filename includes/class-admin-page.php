@@ -162,10 +162,14 @@ class AI_Site_Connector_Admin_Page {
 
 		// Optional extras: scopes (checkbox tree), IP allowlist (textarea),
 		// expiry (datetime-local input). Parsed before mint so we can refuse
-		// past-expiry values without creating an unusable credential.
-		$scopes_raw     = isset( $_POST['ai_scopes'] ) ? wp_unslash( $_POST['ai_scopes'] ) : array();
-		$ip_raw         = isset( $_POST['ai_ip_allowlist'] ) ? (string) wp_unslash( $_POST['ai_ip_allowlist'] ) : '';
-		$expires_raw    = isset( $_POST['ai_expires_at'] ) ? trim( (string) wp_unslash( $_POST['ai_expires_at'] ) ) : '';
+		// past-expiry values without creating an unusable credential. Sanitization
+		// happens inside the parse_* helpers — each accepts an unsanitized array
+		// or string and emits a strictly-shaped output.
+		// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- See parse_* helpers below.
+		$scopes_raw  = isset( $_POST['ai_scopes'] ) ? wp_unslash( $_POST['ai_scopes'] ) : array();
+		$ip_raw      = isset( $_POST['ai_ip_allowlist'] ) ? (string) wp_unslash( $_POST['ai_ip_allowlist'] ) : '';
+		$expires_raw = isset( $_POST['ai_expires_at'] ) ? trim( (string) wp_unslash( $_POST['ai_expires_at'] ) ) : '';
+		// phpcs:enable
 		$scopes_parsed  = self::parse_scopes_input( is_array( $scopes_raw ) ? $scopes_raw : array() );
 		$ip_parsed      = self::parse_ip_allowlist_input( $ip_raw );
 		$expires_parsed = self::parse_expires_input( $expires_raw );

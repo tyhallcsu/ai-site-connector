@@ -320,10 +320,11 @@ class AI_Site_Connector_Permissions {
 	 * defined and true (operator opt-in for reverse-proxy setups).
 	 */
 	private static function resolve_client_ip() {
-		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : '';
+		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
 		if ( defined( 'WP_TRUSTED_PROXIES' ) && WP_TRUSTED_PROXIES
 			&& ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
-			$first = trim( strtok( (string) $_SERVER['HTTP_X_FORWARDED_FOR'], ',' ) );
+			$xff   = sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) );
+			$first = trim( strtok( $xff, ',' ) );
 			if ( '' !== $first ) {
 				$ip = $first;
 			}

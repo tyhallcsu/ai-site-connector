@@ -72,6 +72,27 @@ You can also install via WP-CLI:
 wp plugin activate ai-site-connector
 ```
 
+## Updating
+
+Once installed, the plugin self-updates from its GitHub releases — no manual re-upload required.
+
+* **Dashboard → Updates** and the **Plugins** screen will show a new version automatically when a release is published at <https://github.com/tyhallcsu/ai-site-connector/releases>.
+* **Tools → AI Site Connector → Updates card**: click *Check for updates now* to bypass the 6-hour cache, or *Update now* to install in place.
+* **WP-CLI**: `wp plugin update ai-site-connector` works the same way as it does for WP.org plugins.
+* **Auto-updates**: enable on the Plugins screen ("Enable auto-updates") to let WordPress install new releases unattended.
+
+Optional `wp-config.php` constants:
+
+```php
+// Opt into pre-release tags (e.g. v0.2.0-beta.1). Default: stable only.
+define( 'AI_SITE_CONNECTOR_UPDATE_PRERELEASE', true );
+
+// Kill switch — no update hooks fire, no GitHub calls. Useful for managed hosts.
+define( 'AI_SITE_CONNECTOR_UPDATE_DISABLE', true );
+```
+
+The updater queries `api.github.com` at most every 6 hours (anonymous, no token required) and caches failures for 30 minutes to stay under GitHub's rate limit. Every check, install, and failure is recorded in the plugin's audit log.
+
 ## Create an AI user
 
 1. Open **Tools → AI Site Connector → Setup Wizard**.

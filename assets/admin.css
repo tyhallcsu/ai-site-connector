@@ -11,6 +11,9 @@
 .ai-site-connector-wrap .asc-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
 .ai-site-connector-wrap .asc-badge.asc-ok { background: #e6f4ea; color: #137333; border: 1px solid #b7d8c2; }
 .ai-site-connector-wrap .asc-badge.asc-bad { background: #fce8e6; color: #b3261e; border: 1px solid #f4b9b3; }
+.ai-site-connector-wrap .asc-badge.asc-warn { background: #fef7e0; color: #8a6d00; border: 1px solid #f1d775; }
+.ai-site-connector-wrap .asc-updates-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.ai-site-connector-wrap .asc-updates-actions form { margin: 0; }
 .ai-site-connector-wrap .asc-codeblock { background: #1d2327; color: #f0f0f1; padding: 12px; border-radius: 4px; overflow-x: auto; white-space: pre; font-family: Menlo, Consolas, monospace; font-size: 12px; }
 .ai-site-connector-wrap .asc-pack details { margin: 12px 0; }
 .ai-site-connector-wrap .asc-pack h4 { margin-bottom: 4px; }

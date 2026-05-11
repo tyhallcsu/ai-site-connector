@@ -390,6 +390,109 @@ class AI_Site_Connector_Admin_Page {
 					<li><?php esc_html_e( 'Revoke the password from this page when access is no longer needed.', 'ai-site-connector' ); ?></li>
 				</ol>
 			</div>
+
+			<?php self::render_updates_card(); ?>
+		</div>
+		<?php
+	}
+
+	private static function render_updates_card() {
+		$remote      = AI_Site_Connector_Updater::cached_release();
+		$error       = AI_Site_Connector_Updater::cached_error();
+		$disabled    = AI_Site_Connector_Updater::is_disabled();
+		$prerelease  = AI_Site_Connector_Updater::include_prerelease();
+		$can_update  = current_user_can( 'update_plugins' );
+		$available   = AI_Site_Connector_Updater::update_available();
+		?>
+		<div class="asc-card">
+			<h3><?php esc_html_e( 'Updates', 'ai-site-connector' ); ?></h3>
+			<table class="asc-kv">
+				<tr>
+					<th><?php esc_html_e( 'Installed version', 'ai-site-connector' ); ?></th>
+					<td><code><?php echo esc_html( AI_SITE_CONNECTOR_VERSION ); ?></code></td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Status', 'ai-site-connector' ); ?></th>
+					<td>
+						<?php
+						if ( $disabled ) {
+							echo '<span class="asc-badge asc-warn">' . esc_html__( 'Disabled by constant', 'ai-site-connector' ) . '</span>';
+						} elseif ( $available && $remote ) {
+							echo '<span class="asc-badge asc-warn">' . sprintf(
+								/* translators: %s: new version. */
+								esc_html__( 'Update available: %s', 'ai-site-connector' ),
+								esc_html( $remote['version'] )
+							) . '</span>';
+						} elseif ( $remote ) {
+							echo '<span class="asc-badge asc-ok">' . esc_html__( 'Up to date', 'ai-site-connector' ) . '</span>';
+						} elseif ( $error ) {
+							echo '<span class="asc-badge asc-bad">' . sprintf(
+								/* translators: %s: error code. */
+								esc_html__( 'Check failed (%s)', 'ai-site-connector' ),
+								esc_html( (string) $error['error'] )
+							) . '</span>';
+						} else {
+							echo '<span class="asc-badge">' . esc_html__( 'Not checked yet', 'ai-site-connector' ) . '</span>';
+						}
+						?>
+					</td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Source', 'ai-site-connector' ); ?></th>
+					<td>
+						<a href="<?php echo esc_url( 'https://github.com/tyhallcsu/ai-site-connector/releases' ); ?>" target="_blank" rel="noopener">github.com/tyhallcsu/ai-site-connector</a>
+						<?php if ( $prerelease ) : ?>
+							<br /><span class="asc-badge asc-warn"><?php esc_html_e( 'Pre-release channel', 'ai-site-connector' ); ?></span>
+						<?php endif; ?>
+					</td>
+				</tr>
+				<?php if ( $remote && ! empty( $remote['published_at'] ) ) : ?>
+				<tr>
+					<th><?php esc_html_e( 'Latest release', 'ai-site-connector' ); ?></th>
+					<td>
+						<?php
+						$published = strtotime( $remote['published_at'] );
+						if ( $published ) {
+							echo esc_html( gmdate( 'Y-m-d', $published ) );
+						}
+						?>
+						<?php if ( ! empty( $remote['html_url'] ) ) : ?>
+							 — <a href="<?php echo esc_url( $remote['html_url'] ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'release notes', 'ai-site-connector' ); ?></a>
+						<?php endif; ?>
+					</td>
+				</tr>
+				<?php endif; ?>
+			</table>
+
+			<?php if ( ! $disabled && $can_update ) : ?>
+				<div class="asc-updates-actions">
+					<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+						<?php wp_nonce_field( 'ai_site_connector_check_updates' ); ?>
+						<input type="hidden" name="action" value="ai_site_connector_check_updates" />
+						<button type="submit" class="button button-secondary"><?php esc_html_e( 'Check for updates now', 'ai-site-connector' ); ?></button>
+					</form>
+					<?php if ( $available ) : ?>
+						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+							<?php wp_nonce_field( 'ai_site_connector_run_update' ); ?>
+							<input type="hidden" name="action" value="ai_site_connector_run_update" />
+							<button type="submit" class="button button-primary"><?php
+								/* translators: %s: new version. */
+								echo esc_html( sprintf( __( 'Update now to %s', 'ai-site-connector' ), $remote['version'] ) );
+							?></button>
+						</form>
+					<?php endif; ?>
+				</div>
+			<?php elseif ( $disabled ) : ?>
+				<p class="description"><?php
+					printf(
+						/* translators: %s: constant name. */
+						esc_html__( 'Self-update is disabled by the %s constant in wp-config.php.', 'ai-site-connector' ),
+						'<code>AI_SITE_CONNECTOR_UPDATE_DISABLE</code>'
+					);
+				?></p>
+			<?php else : ?>
+				<p class="description"><?php esc_html_e( 'You do not have the update_plugins capability — only super admins / admins can update plugins.', 'ai-site-connector' ); ?></p>
+			<?php endif; ?>
 		</div>
 		<?php
 	}

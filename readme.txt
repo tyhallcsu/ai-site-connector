@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 0.2.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,5 +37,10 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.2.0 =
+* Native self-updater. The plugin now appears on Dashboard → Updates and the Plugins screen when a new release is published at github.com/tyhallcsu/ai-site-connector/releases, with a "View details" modal, "Check for updates now" and "Update now" controls on the Tools → AI Site Connector page, and audit-log entries for every check/install/failure.
+* Optional `AI_SITE_CONNECTOR_UPDATE_PRERELEASE` constant to opt into pre-release tags; `AI_SITE_CONNECTOR_UPDATE_DISABLE` kill switch for managed hosts.
+* `.github/workflows/release-zip.yml` now publishes a GitHub Release with the built zip attached on tag push, so the self-updater has a stable public download URL.
+
 = 0.1.0 =
 * Initial release.

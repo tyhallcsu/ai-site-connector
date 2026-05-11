@@ -28,7 +28,7 @@ A WordPress plugin that lets Claude, Codex, and other AI coding agents authentic
 3. Provides a **wizard** to create a dedicated AI/service user (default username `ai-agent`) — or pick an existing user.
 4. Generates **Application Passwords** using WordPress core (`WP_Application_Passwords`), shown **once**, never stored in plaintext.
 5. Produces a copy-paste **connection pack** containing site URL, REST base, username, and password, plus curl / Python / JavaScript / Claude Code examples.
-6. Exposes a small set of **REST endpoints** under `/wp-json/ai-site-connector/v1/` for safe, read-only diagnostics.
+6. Exposes a narrow, permission-gated **REST surface** under `/wp-json/ai-site-connector/v1/` — diagnostics, exports, an MCP transport, and a handful of explicitly-opted-in write paths (cache purge, media sideload, credential rotation).
 7. Maintains an **audit log** of plugin events (user creation, password generation, revocation, health access).
 8. Ships **WP-CLI commands** under `wp ai-connector …`.
 
@@ -215,19 +215,48 @@ Do not commit this password to git.
 
 ## REST endpoints (added by this plugin)
 
-All endpoints under `/wp-json/ai-site-connector/v1/`.
+All endpoints under `/wp-json/ai-site-connector/v1/`. Every write path requires both the underlying WordPress capability AND an explicit permission slug granted on **Tools → AI Site Connector → Permissions** — operators choose which agent abilities to unlock per site. There is no file editor, no SQL exec, and no plugin installer; for those, use SSH / WP-CLI.
 
-| Endpoint     | Auth                                       | Returns                                                      |
-| ------------ | ------------------------------------------ | ------------------------------------------------------------ |
-| `/health`           | Public (minimal payload; richer if authenticated) | Plugin version, site URL, REST URL, HTTPS, timestamp. Authenticated callers also see WP/PHP versions, theme, plugin count, multisite flag, and current user. |
-| `/me/capabilities`  | Any authenticated user                     | Calling user's `user_id`, `login`, `roles`, `capabilities` map, `operator_role_active`. Never reveals another user's permissions. Extend the cap list via the `ai_site_connector_introspection_caps` filter. |
-| `/site-info`        | Authenticated, `edit_posts`                | Site name, URL, language, theme, multisite flag              |
-| `/plugins`   | Authenticated, `manage_options`            | List of installed plugins (read-only)                        |
-| `/themes`    | Authenticated, `manage_options`            | List of installed themes (read-only)                         |
-| `/pages`     | Authenticated, `edit_pages`                | First 200 pages (id/title/slug/status)                       |
-| `/posts`     | Authenticated, `edit_posts`                | Up to 50 most recent posts                                   |
+### Read & introspection
 
-There are intentionally **no write endpoints, no file editor, no SQL exec, no plugin installer**. Use the standard WordPress REST API (`/wp-json/wp/v2/*`) for content writes.
+| Endpoint                       | Auth                                       | Returns |
+| ------------------------------ | ------------------------------------------ | ------- |
+| `GET /health`                  | Public (minimal payload; richer if authenticated) | Plugin version, site URL, REST URL, HTTPS, timestamp. Authenticated callers also see WP/PHP versions, theme, plugin count, multisite flag, and current user. |
+| `GET /me/capabilities`         | Any authenticated user                     | Calling user's `user_id`, `login`, `roles`, `capabilities` map, `operator_role_active`. Never reveals another user's permissions. Extend the cap list via the `ai_site_connector_introspection_caps` filter. |
+| `GET /site-info`               | Authenticated, `edit_posts`                | Site name, URL, language, theme, multisite flag |
+| `GET /plugins`                 | Authenticated, `manage_options`            | List of installed plugins (read-only) |
+| `GET /themes`                  | Authenticated, `manage_options`            | List of installed themes (read-only) |
+| `GET /pages`                   | Authenticated, `edit_pages`                | First 200 pages (id/title/slug/status) |
+| `GET /posts`                   | Authenticated, `edit_posts`                | Up to 50 most recent posts |
+| `GET /tools`                   | Any authenticated user                     | MCP tool catalog: name, method, route, permission slug, per-tool allow state for the calling user, last successful MCP request timestamp. |
+| `GET /diagnostics/site-report` | Authenticated, `manage_options`            | Capability report: WP/PHP versions, theme, active plugins, page-builder / SEO / cache plugin detection, REST routes, current-user caps, env limits, cron health, uploads writability. |
+
+### Exports (read-only snapshots for repo sync)
+
+| Endpoint                          | Auth                              | Returns |
+| --------------------------------- | --------------------------------- | ------- |
+| `GET /export/media-manifest`      | Authenticated, `edit_posts`       | Attachment manifest with id/url/filename/title/alt/caption/description/attached_to/mime/size/sha256/modified_gmt. |
+| `GET /export/recent-changes`      | Authenticated, `edit_posts`       | Posts + pages newer than `since`, with content hash for diffing. |
+| `GET /export/page/<id>`           | Authenticated, `edit_posts`       | Single post/page body with featured-image reference. |
+| `GET /export/site-manifest`       | Authenticated, `manage_options`   | Counts + recent + detected plugins in one call. |
+
+### Write (permission-slug gated; off by default for non-read tools)
+
+| Endpoint                              | Auth                                                            | Effect |
+| ------------------------------------- | --------------------------------------------------------------- | ------ |
+| `POST /cache/purge`                   | Authenticated, `manage_options` + `purge_cache` permission       | Flushes WP object cache, WP Rocket, LiteSpeed, W3TC, Elementor, Cloudflare (when configured). Returns `{success, purged[], skipped[], warnings[]}`. |
+| `POST /media/sideload`                | Authenticated, `upload_files` + `upload_media` permission        | URL-sideload only (no base64, no multipart). Validates mime via `wp_handle_sideload`, blocks internal/loopback/link-local hosts (v0.9.0+). Sets title/alt/caption/description, optional featured image and Yoast/Rank Math social-image meta. |
+| `POST /credentials/rotate-password`   | Authenticated, `manage_options`                                  | Mints a new Application Password preserving scopes/IP/expiry, revokes the old one, atomic — rolls back on failure. |
+
+### MCP, discovery, and connection-pack download
+
+| Endpoint                                  | Auth                                              | Returns |
+| ----------------------------------------- | ------------------------------------------------- | ------- |
+| `POST /mcp`                               | Authenticated; per-tool permission gates apply   | JSON-RPC 2.0 MCP transport (`initialize`, `tools/list`, `tools/call`, `ping`). Disable with `define( 'AI_SITE_CONNECTOR_MCP_DISABLE', true )`. See [`examples/mcp-server/`](examples/mcp-server/) for the bundled stdio adapter. |
+| `GET /openapi.json`                       | Public                                            | OpenAPI 3 spec for every route, generated live from the REST registry. 1-hour cache, busted on plugin version change. |
+| `GET /connection-pack/<token>`            | One-time signed token (the token IS the secret)   | Single-use connection-pack JSON download (5-minute TTL, returns 410 after the first read). |
+
+A separate public discovery file is served at `/.well-known/ai-site-connector.json` — see [docs/DISCOVERY.md](docs/DISCOVERY.md). The OpenAPI spec is the source of truth for shapes.
 
 ---
 

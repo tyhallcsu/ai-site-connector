@@ -1004,14 +1004,36 @@ class AI_Site_Connector_Admin_Page {
 				?>
 				<h3><?php echo esc_html( $u->user_login ); ?> <span class="description">(id=<?php echo (int) $u->ID; ?>)</span></h3>
 				<table class="widefat striped">
-					<thead><tr><th><?php esc_html_e( 'Name', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'UUID', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Created', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Last used', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Action', 'ai-site-connector' ); ?></th></tr></thead>
+					<thead><tr><th><?php esc_html_e( 'Name', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'UUID', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Created', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Last used', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Usage (7d)', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Action', 'ai-site-connector' ); ?></th></tr></thead>
 					<tbody>
 					<?php foreach ( $pwds as $p ) : ?>
+						<?php $usage = class_exists( 'AI_Site_Connector_Usage_Tracker' ) && ! empty( $p['uuid'] )
+							? AI_Site_Connector_Usage_Tracker::rollup_for( (int) $u->ID, (string) $p['uuid'], 7 )
+							: null; ?>
 						<tr>
 							<td><?php echo esc_html( isset( $p['name'] ) ? $p['name'] : '' ); ?></td>
 							<td><code><?php echo esc_html( isset( $p['uuid'] ) ? $p['uuid'] : '' ); ?></code></td>
 							<td><?php echo esc_html( isset( $p['created'] ) ? gmdate( 'Y-m-d H:i:s', (int) $p['created'] ) : '' ); ?></td>
 							<td><?php echo esc_html( ! empty( $p['last_used'] ) ? gmdate( 'Y-m-d H:i:s', (int) $p['last_used'] ) : '—' ); ?></td>
+							<td>
+								<?php if ( $usage && $usage['requests'] > 0 ) : ?>
+									<strong><?php echo esc_html( (string) $usage['requests'] ); ?></strong> req<?php
+										if ( $usage['errors'] > 0 ) {
+											echo ' / ' . esc_html( (string) $usage['errors'] ) . ' err';
+										}
+										if ( ! empty( $usage['sampled'] ) ) {
+											echo ' <span class="description">(sampled @ ' . esc_html( number_format( $usage['rate'] * 100, 0 ) ) . '%)</span>';
+										}
+									?>
+									<?php if ( ! empty( $usage['by_route'] ) ) :
+										$top_routes = array_slice( array_keys( $usage['by_route'] ), 0, 3 );
+										?>
+										<br><span class="description"><?php echo esc_html( implode( ', ', $top_routes ) ); ?></span>
+									<?php endif; ?>
+								<?php else : ?>
+									<span class="description">—</span>
+								<?php endif; ?>
+							</td>
 							<td>
 								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline; margin-right: 6px;">
 									<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>

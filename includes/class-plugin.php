@@ -25,6 +25,7 @@ class AI_Site_Connector_Plugin {
 		AI_Site_Connector_Roles::register_hooks();
 		AI_Site_Connector_App_Password_Meta::register_hooks();
 		AI_Site_Connector_App_Password_Resolver::register_hooks();
+		AI_Site_Connector_Usage_Tracker::register_hooks();
 		AI_Site_Connector_Audit_Log::register_hooks();
 		AI_Site_Connector_Audit_Digest::register_hooks();
 		AI_Site_Connector_Permissions::register_hooks();

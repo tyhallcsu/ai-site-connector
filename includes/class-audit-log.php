@@ -310,6 +310,32 @@ class AI_Site_Connector_Audit_Log {
 			),
 			array( '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
 		);
+		$row_id = (int) $wpdb->insert_id;
+		if ( $row_id > 0 ) {
+			/**
+			 * Fires after a row is inserted into the audit log. Used by the
+			 * webhook forwarder to schedule non-blocking delivery. Listeners
+			 * MUST NOT do synchronous network I/O here.
+			 *
+			 * @param int    $row_id  The inserted row id.
+			 * @param string $action  Action slug.
+			 */
+			do_action( 'ai_site_connector_audit_recorded', $row_id, sanitize_key( $action ) );
+		}
+	}
+
+	/**
+	 * Fetch a single audit row by id.
+	 */
+	public static function get_row( $id ) {
+		global $wpdb;
+		$id    = (int) $id;
+		if ( $id <= 0 ) {
+			return null;
+		}
+		$table = self::table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.DirectQuery
+		return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ) );
 	}
 
 	public static function recent( $limit = 50, $filters = array() ) {

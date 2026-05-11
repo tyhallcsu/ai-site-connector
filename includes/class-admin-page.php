@@ -1146,6 +1146,63 @@ class AI_Site_Connector_Admin_Page {
 		<?php
 	}
 
+	private static function render_audit_webhook_card() {
+		if ( ! class_exists( 'AI_Site_Connector_Audit_Webhook' ) ) {
+			return;
+		}
+		$url    = AI_Site_Connector_Audit_Webhook::configured_url();
+		$secret = AI_Site_Connector_Audit_Webhook::configured_secret();
+		$format = AI_Site_Connector_Audit_Webhook::configured_format();
+		$events = AI_Site_Connector_Audit_Webhook::configured_filter();
+		$defaults = AI_Site_Connector_Audit_Webhook::default_filter_list();
+		?>
+		<div class="asc-card">
+			<h2><?php esc_html_e( 'Webhook forwarder', 'ai-site-connector' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'POST every selected audit event to an HTTPS endpoint (Slack / Discord / Datadog / generic JSON). Delivery is non-blocking — a broken receiver never delays REST traffic. HMAC-SHA256 signature in the X-AISC-Signature header when a secret is set.', 'ai-site-connector' ); ?></p>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<input type="hidden" name="action" value="ai_site_connector_save_webhook" />
+				<table class="asc-kv">
+					<tr><th><label for="webhook_url"><?php esc_html_e( 'Webhook URL', 'ai-site-connector' ); ?></label></th>
+						<td><input type="url" id="webhook_url" name="webhook_url" class="regular-text" value="<?php echo esc_attr( $url ); ?>" placeholder="https://hooks.slack.com/services/..." /></td></tr>
+					<tr><th><label for="webhook_secret"><?php esc_html_e( 'Shared secret (optional)', 'ai-site-connector' ); ?></label></th>
+						<td><input type="text" id="webhook_secret" name="webhook_secret" class="regular-text" value="<?php echo esc_attr( $secret ); ?>" /></td></tr>
+					<tr><th><label for="webhook_format"><?php esc_html_e( 'Format', 'ai-site-connector' ); ?></label></th>
+						<td>
+							<select id="webhook_format" name="webhook_format">
+								<?php foreach ( array( 'auto', 'generic', 'slack', 'discord', 'datadog' ) as $f ) : ?>
+									<option value="<?php echo esc_attr( $f ); ?>" <?php selected( $format, $f ); ?>><?php echo esc_html( $f ); ?></option>
+								<?php endforeach; ?>
+							</select>
+							<p class="description"><?php esc_html_e( '"auto" picks based on URL host.', 'ai-site-connector' ); ?></p>
+						</td></tr>
+					<tr><th><?php esc_html_e( 'Events to forward', 'ai-site-connector' ); ?></th>
+						<td>
+							<fieldset>
+								<?php foreach ( $defaults as $evt ) : ?>
+									<label style="display:block">
+										<input type="checkbox" name="webhook_events[]" value="<?php echo esc_attr( $evt ); ?>" <?php checked( in_array( $evt, $events, true ) ); ?> />
+										<code><?php echo esc_html( $evt ); ?></code>
+									</label>
+								<?php endforeach; ?>
+							</fieldset>
+						</td></tr>
+				</table>
+				<p>
+					<button type="submit" class="button button-primary"><?php esc_html_e( 'Save webhook settings', 'ai-site-connector' ); ?></button>
+				</p>
+			</form>
+			<?php if ( '' !== $url ) : ?>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+					<input type="hidden" name="action" value="ai_site_connector_test_webhook" />
+					<p><button type="submit" class="button button-secondary"><?php esc_html_e( 'Send test event', 'ai-site-connector' ); ?></button></p>
+				</form>
+			<?php endif; ?>
+		</div>
+		<?php
+	}
+
 	private static function render_audit_digest_card() {
 		$cadence    = AI_Site_Connector_Audit_Digest::cadence();
 		$recipients = (string) get_option( AI_Site_Connector_Audit_Digest::RECIPIENTS_OPTION, '' );
@@ -1347,6 +1404,7 @@ class AI_Site_Connector_Admin_Page {
 		$next_run       = wp_next_scheduled( AI_Site_Connector_Audit_Log::CRON_HOOK );
 		$tools          = AI_Site_Connector_Audit_Log::distinct_tools();
 		self::render_audit_digest_card();
+		self::render_audit_webhook_card();
 		?>
 		<div class="asc-card">
 			<h2><?php esc_html_e( 'Retention', 'ai-site-connector' ); ?></h2>

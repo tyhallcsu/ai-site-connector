@@ -387,6 +387,7 @@ class AI_Site_Connector_Updater {
 
 		require_once ABSPATH . 'wp-admin/includes/file.php';
 		require_once ABSPATH . 'wp-admin/includes/misc.php';
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 
 		// Force a fresh update transient so Plugin_Upgrader sees our zip URL.
@@ -396,6 +397,13 @@ class AI_Site_Connector_Updater {
 		$from_version = AI_SITE_CONNECTOR_VERSION;
 		$to_version   = $remote['version'];
 		$source       = ! empty( $remote['asset_name'] ) ? 'release_asset' : 'zipball';
+
+		// Remember whether the plugin was active before the upgrade.
+		// Plugin_Upgrader::upgrade() deactivates via upgrader_pre_install but
+		// never re-activates — fixing that gap is the whole point of this
+		// handler (see issue #44). If the plugin wasn't active to begin with,
+		// we leave it deactivated.
+		$was_active = is_plugin_active( AI_SITE_CONNECTOR_BASENAME );
 
 		AI_Site_Connector_Audit_Log::record(
 			'update_started',
@@ -463,6 +471,44 @@ class AI_Site_Connector_Updater {
 					),
 				)
 			);
+
+			// Re-activate post-swap (fixes #44). Plugin_Upgrader::upgrade()
+			// deactivates via upgrader_pre_install but never re-activates on
+			// the single-plugin code path — only the bulk-upgrade path does.
+			// If the plugin wasn't active before the upgrade we leave it as-is.
+			$reactivation_failed = false;
+			if ( $was_active && ! is_plugin_active( AI_SITE_CONNECTOR_BASENAME ) ) {
+				// activate_plugin( $plugin, $redirect, $network_wide, $silent )
+				// Silent=false so the plugin's activation hook runs (re-registers
+				// crons + roles + onboarding option).
+				$activate = activate_plugin( AI_SITE_CONNECTOR_BASENAME, '', is_network_admin(), false );
+				if ( is_wp_error( $activate ) ) {
+					$reactivation_failed = true;
+					AI_Site_Connector_Audit_Log::record(
+						'update_reactivation_failed',
+						array(
+							'message' => sprintf(
+								/* translators: %s: error message. */
+								__( 'Re-activation after self-update to %1$s failed: %2$s', 'ai-site-connector' ),
+								$to_version,
+								$activate->get_error_message()
+							),
+						)
+					);
+				} else {
+					AI_Site_Connector_Audit_Log::record(
+						'update_reactivated',
+						array(
+							'message' => sprintf(
+								/* translators: %s: new version. */
+								__( 'Plugin re-activated after self-update to %s.', 'ai-site-connector' ),
+								$to_version
+							),
+						)
+					);
+				}
+			}
+
 			self::flash(
 				sprintf(
 					/* translators: 1: from version, 2: to version. */
@@ -470,10 +516,19 @@ class AI_Site_Connector_Updater {
 					$from_version,
 					$to_version
 				),
-				'success'
+				$reactivation_failed ? 'error' : 'success'
 			);
 			// Clear our own cached release so the card refreshes.
 			delete_site_transient( self::TRANSIENT_KEY );
+
+			// If re-activation failed, the plugin's admin page isn't
+			// registered — redirecting there would 403. Bounce to the core
+			// Plugins screen instead so the operator sees the activation
+			// error inline and can recover.
+			if ( $reactivation_failed ) {
+				wp_safe_redirect( admin_url( 'plugins.php?plugin_status=inactive&s=ai-site-connector' ) );
+				exit;
+			}
 		}
 
 		self::redirect_back();

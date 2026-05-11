@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.8.0
+Stable tag: 0.8.1
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,11 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.8.1 =
+* Fix (closes #44): clicking the in-plugin "Update now" button no longer leaves the plugin deactivated after the file swap. `Plugin_Upgrader::upgrade()` deactivates the plugin via `upgrader_pre_install` but never re-activates on the single-plugin code path — only the bulk-upgrade path does that. `handle_run_update` now captures the pre-upgrade active state and explicitly calls `activate_plugin()` after a successful swap. If re-activation fails (e.g. the new code has a fatal), the redirect now bounces to the core Plugins screen so the operator sees the error inline instead of getting a 403 on the plugin's admin page (which the deactivated plugin no longer registers).
+* New audit events: `update_reactivated` on the recovery path; `update_reactivation_failed` when activate_plugin returns a WP_Error.
+* Affects every release that shipped the self-updater (v0.2.0 through v0.8.0). The native Dashboard → Updates / Plugins-screen "Update" buttons and `wp plugin update ai-site-connector` were never affected — only the in-plugin "Update now" path.
+
 = 0.8.0 =
 * Discovery + quality release.
 * OpenAPI 3 spec at `GET /wp-json/ai-site-connector/v1/openapi.json` (closes #17). Generated from the live REST registry — new routes appear automatically. 1-hour cache, busted on plugin version change. Public read-only.

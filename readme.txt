@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.8.1
+Stable tag: 0.9.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,21 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.9.0 =
+* Audit-approved batch release closing 12 issues from the v0.8.1 post-release audit.
+* Security: SSRF guard (`AI_Site_Connector_Url_Guard`) applied to `POST /media/sideload` and audit-log webhook delivery (closes #56, #57). Internal/loopback/link-local/metadata hosts (169.254.169.254 etc.) are refused at both save time (admin notice) and send time (DNS-rebinding defense). Operators can opt-in per host via the `ai_site_connector_url_guard_allow_host` filter.
+* Security: Webhook HMAC secret + Cloudflare API token + Cloudflare zone ID can now be supplied via `wp-config.php` constants (`AI_SITE_CONNECTOR_WEBHOOK_SECRET`, `AI_SITE_CONNECTOR_CLOUDFLARE_TOKEN`, `AI_SITE_CONNECTOR_CLOUDFLARE_ZONE_ID`) which take precedence over the wp_options. Keeps secrets out of database backups and reduces SQLi blast radius (closes #58).
+* Fix: CI on `main` has been red since v0.7.0 due to two PHPCS errors (`$_POST['ai_site_connector_perms']` not sanitized and an unordered `sprintf` placeholder in the export-result renderer). Both fixed; translators comments added. CI badge is green again (closes #46).
+* Docs: README's REST endpoints table now enumerates all 19 routes grouped by purpose (read / exports / write / MCP+discovery) and drops the stale "no write endpoints" claim that v0.4.0+ contradicted (closes #47).
+* Docs: `CHANGELOG.md` backfilled with entries for 0.5.0 → 0.8.1 (closes #48). Release workflow now fails fast when `CHANGELOG.md` is missing an entry for the resolved version (part of closes #53).
+* Docs: New `docs/DISCOVERY.md` documents the `/.well-known/ai-site-connector.json` payload, every field, the `spec_version` contract, and the kill switch (closes #50). README links to it and to `examples/mcp-server/`.
+* Release: `examples/mcp-server/package.json` is bumped in lockstep with the plugin; CI now asserts the two versions match before tagging (closes #49, part of closes #53).
+* CI: PHP 8.4 added to the lint matrix; README badge updated. 8.5 held until shivammathur/setup-php ships a stable image (closes #51).
+* CI: New `wordpress-version-compat` parallel job runs `tests/runtime-smoke.sh` against WP 5.6 and WP 6.5, in addition to `latest`. `continue-on-error: true` so amber rows surface without blocking releases (closes #52).
+* CI: Release workflow gains a CHANGELOG-presence guard, an MCP example version-sync guard, and runtime-smoke now validates the discovery JSON shape (closes #53).
+* Tests: New PHPUnit coverage — discovery payload shape pinning (catches accidental spec_version drift), Permissions catalog defaults + `require_permission()` deny/allow paths, and the `Url_Guard::is_blocked_ip()` blocklist (closes #54, partial).
+* Internal: `class-discovery.php` `maybe_serve()` is refactored to call a new pure `build_payload()` method, making the payload shape unit-testable. No HTTP behavior change.
+
 = 0.8.1 =
 * Fix (closes #44): clicking the in-plugin "Update now" button no longer leaves the plugin deactivated after the file swap. `Plugin_Upgrader::upgrade()` deactivates the plugin via `upgrader_pre_install` but never re-activates on the single-plugin code path — only the bulk-upgrade path does that. `handle_run_update` now captures the pre-upgrade active state and explicitly calls `activate_plugin()` after a successful swap. If re-activation fails (e.g. the new code has a fatal), the redirect now bounces to the core Plugins screen so the operator sees the error inline instead of getting a 403 on the plugin's admin page (which the deactivated plugin no longer registers).
 * New audit events: `update_reactivated` on the recovery path; `update_reactivation_failed` when activate_plugin returns a WP_Error.

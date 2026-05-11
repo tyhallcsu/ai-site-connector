@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', __DIR__ . '/' );
 }
 if ( ! defined( 'AI_SITE_CONNECTOR_VERSION' ) ) {
-	define( 'AI_SITE_CONNECTOR_VERSION', '0.8.0' );
+	define( 'AI_SITE_CONNECTOR_VERSION', '0.9.0' );
 }
 if ( ! defined( 'AI_SITE_CONNECTOR_REST_NAMESPACE' ) ) {
 	define( 'AI_SITE_CONNECTOR_REST_NAMESPACE', 'ai-site-connector/v1' );

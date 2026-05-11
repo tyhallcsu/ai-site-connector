@@ -4,6 +4,89 @@ All notable changes to AI Site Connector are documented here. The format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-05-11
+
+Audit-approved batch release. Closes 12 issues opened during the v0.8.1
+post-release audit (issues #46–#58). Highlights: two SSRF guards, a
+constant-first secret-storage path, CI back on green, and substantial
+documentation work.
+
+### Added
+
+- `includes/class-url-guard.php` — shared SSRF guard with
+  `check_outbound_safe($url, $context)` and a pure `is_blocked_ip($ip)`
+  helper. Uses PHP's `FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE`
+  plus an explicit `169.254.*` belt-and-suspenders check; resolves every A
+  + AAAA record before deciding. New filter
+  `ai_site_connector_url_guard_allow_host` for operators with legitimate
+  internal endpoints.
+- Three wp-config constants for secret storage, all constant-first with
+  the existing wp_option as fallback: `AI_SITE_CONNECTOR_WEBHOOK_SECRET`,
+  `AI_SITE_CONNECTOR_CLOUDFLARE_TOKEN`, `AI_SITE_CONNECTOR_CLOUDFLARE_ZONE_ID`.
+  New helper `AI_Site_Connector_Audit_Webhook::secret_source()` returns
+  `'constant' | 'option' | 'none'`.
+- New `docs/DISCOVERY.md` documents the
+  `/.well-known/ai-site-connector.json` payload, every field, the
+  `spec_version` contract, the kill switch, and how to consume it.
+- README gains a "MCP — Claude Desktop / Cursor (stdio bridge)" section
+  linking to `examples/mcp-server/README.md`, and a "Discovery" section
+  linking to `docs/DISCOVERY.md`.
+- PHP 8.4 in the CI lint matrix (8.5 deferred until `shivammathur/setup-php`
+  ships a stable image).
+- New `wordpress-version-compat` CI job runs `tests/runtime-smoke.sh`
+  against WP 5.6 and WP 6.5 in addition to `latest`. Marked
+  `continue-on-error: true` initially.
+- Release workflow now guards: CHANGELOG entry presence for the resolved
+  version, and MCP example version matching the plugin version.
+- Runtime smoke now validates the discovery JSON shape (every documented
+  field present, correct types).
+- PHPUnit coverage: `test-class-discovery.php` pins the public payload
+  shape; `test-class-permissions.php` covers catalog defaults +
+  `require_permission()` deny/allow paths; `test-class-url-guard.php`
+  covers the SSRF blocklist.
+
+### Changed
+
+- `POST /media/sideload` and the audit-log webhook delivery now run every
+  outbound URL through `AI_Site_Connector_Url_Guard::check_outbound_safe()`.
+  At save time the admin gets an inline error; at send time the failure is
+  recorded on the audit log. Previously the only validation was a
+  scheme-only check.
+- `class-discovery.php` `maybe_serve()` is refactored to call a new pure
+  `build_payload()` method — no HTTP behavior change, but the payload
+  shape is now unit-testable.
+- README REST endpoints section enumerates all 19 routes grouped by
+  purpose; the misleading "no write endpoints" claim (and matching line
+  in `class-rest-controller.php`'s file header) is replaced with a
+  "permission-slug gated write surface" framing that matches what the
+  plugin has actually shipped since v0.4.0.
+
+### Fixed
+
+- CI on `main` is green again. `WordPress.Security.ValidatedSanitizedInput.InputNotSanitized`
+  on `$_POST['ai_site_connector_perms']` in `class-permissions.php` —
+  values are now `array_map( 'rest_sanitize_boolean', wp_unslash( ... ) )`'d.
+  `WordPress.WP.I18n.UnorderedPlaceholdersText` on the export-result
+  renderer — placeholders reordered and translators comments added.
+- `examples/mcp-server/package.json` was at `0.8.0` while the plugin had
+  shipped `0.8.1`. Bumped to match, and the release workflow now refuses
+  to publish a tag when the two diverge.
+
+### Security
+
+- Two SSRF holes (media sideload, webhook delivery) closed by the URL
+  guard — both could have been used by an authenticated caller to probe
+  cloud metadata endpoints or internal services.
+- Two plaintext-in-options secrets (webhook HMAC, Cloudflare token) now
+  have a constant-first read path; encryption at rest remains a possible
+  future improvement.
+
+### Documentation
+
+- `CHANGELOG.md` backfilled with entries for v0.5.0 → v0.8.1 (which had
+  drifted off the file while shipping through `readme.txt`).
+- Plugin header documents the new wp-config constants.
+
 ## [0.8.1] - 2026-05-11
 
 ### Fixed

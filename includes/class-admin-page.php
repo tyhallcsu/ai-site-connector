@@ -149,11 +149,15 @@ class AI_Site_Connector_Admin_Page {
 			self::redirect_back( 'credentials' );
 		}
 
+		$pack      = self::build_connection_pack( $user_id, $res );
+		$preflight = self::run_preflight_check( $pack );
+
 		self::flash(
 			__( 'Application Password generated. Copy it now — it will not be shown again.', 'ai-site-connector' ),
 			'success',
 			array(
-				'connection_pack' => self::build_connection_pack( $user_id, $res ),
+				'connection_pack' => $pack,
+				'preflight'       => $preflight,
 			)
 		);
 
@@ -165,7 +169,103 @@ class AI_Site_Connector_Admin_Page {
 			)
 		);
 
+		if ( is_array( $preflight ) ) {
+			AI_Site_Connector_Audit_Log::record(
+				'pass' === $preflight['status'] ? 'pre_flight_passed' : 'pre_flight_failed',
+				array(
+					'target_user_id' => (int) $user_id,
+					'message'        => sprintf(
+						/* translators: 1: status, 2: HTTP code, 3: detail. */
+						__( 'Pre-flight %1$s (code %2$s): %3$s', 'ai-site-connector' ),
+						$preflight['status'],
+						(string) $preflight['code'],
+						$preflight['hint']
+					),
+				)
+			);
+		}
+
 		self::redirect_back( 'credentials' );
+	}
+
+	/**
+	 * Run a server-side authentication probe with freshly-minted credentials.
+	 *
+	 * Hits /wp/v2/users/me using the new Application Password and reports
+	 * whether the host accepted it. Catches "host strips Authorization
+	 * header", "REST disabled", "WAF blocks Basic Auth" before the operator
+	 * pastes the pack into an AI tool.
+	 *
+	 * @param array $pack Connection pack just generated.
+	 * @return array|null {status:'pass'|'fail'|'skipped', code:int|string, hint:string}
+	 */
+	private static function run_preflight_check( array $pack ) {
+		/**
+		 * Filter to skip the pre-flight loopback check. Useful for hosts
+		 * where the WP install cannot make HTTP requests to itself.
+		 *
+		 * @param bool  $skip Default false.
+		 * @param array $pack Connection pack.
+		 */
+		if ( apply_filters( 'ai_site_connector_skip_preflight', false, $pack ) ) {
+			return array(
+				'status' => 'skipped',
+				'code'   => 'filter',
+				'hint'   => __( 'Pre-flight check skipped by ai_site_connector_skip_preflight filter.', 'ai-site-connector' ),
+			);
+		}
+
+		$user = isset( $pack['username'] ) ? (string) $pack['username'] : '';
+		$pass = isset( $pack['application_password'] ) ? (string) $pack['application_password'] : '';
+		if ( '' === $user || '' === $pass ) {
+			return null;
+		}
+
+		$response = wp_remote_get(
+			rest_url( 'wp/v2/users/me' ),
+			array(
+				'timeout'   => 10,
+				'sslverify' => false,
+				'headers'   => array(
+					'Authorization' => 'Basic ' . base64_encode( $user . ':' . $pass ),
+				),
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return array(
+				'status' => 'fail',
+				'code'   => $response->get_error_code(),
+				'hint'   => sprintf(
+					/* translators: %s: WP error message. */
+					__( 'Could not reach REST API: %s', 'ai-site-connector' ),
+					$response->get_error_message()
+				),
+			);
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		if ( 200 === $code ) {
+			return array(
+				'status' => 'pass',
+				'code'   => 200,
+				'hint'   => __( 'REST API accepts the new Application Password.', 'ai-site-connector' ),
+			);
+		}
+
+		$hints = array(
+			401 => __( 'The most common cause is your host stripping the Authorization header (some shared hosts and security plugins do this). See SECURITY.md and scripts/diagnose-hosting-auth.sh for fixes.', 'ai-site-connector' ),
+			403 => __( 'The user may lack the required REST capability, or a security plugin / WAF is blocking REST access.', 'ai-site-connector' ),
+			404 => __( 'The REST API may be disabled, or pretty permalinks are off. Settings → Permalinks → save without changes.', 'ai-site-connector' ),
+			500 => __( 'WordPress returned a server error. Check the PHP error log.', 'ai-site-connector' ),
+		);
+		$hint = isset( $hints[ $code ] ) ? $hints[ $code ] : __( 'Unexpected response. Review the server log and security plugin settings.', 'ai-site-connector' );
+
+		return array(
+			'status' => 'fail',
+			'code'   => $code,
+			'hint'   => $hint,
+		);
 	}
 
 	public static function handle_revoke_password() {
@@ -308,6 +408,9 @@ class AI_Site_Connector_Admin_Page {
 			<?php if ( $flash ) : ?>
 				<div class="notice notice-<?php echo esc_attr( 'success' === $flash['type'] ? 'success' : 'error' ); ?>">
 					<p><?php echo esc_html( $flash['msg'] ); ?></p>
+					<?php if ( ! empty( $flash['extra']['preflight'] ) ) : ?>
+						<?php self::render_preflight_result( $flash['extra']['preflight'] ); ?>
+					<?php endif; ?>
 					<?php if ( ! empty( $flash['extra']['connection_pack'] ) ) : ?>
 						<?php self::render_connection_pack( $flash['extra']['connection_pack'] ); ?>
 					<?php endif; ?>
@@ -611,6 +714,31 @@ class AI_Site_Connector_Admin_Page {
 				<p><?php esc_html_e( 'No Application Passwords found for any visible user yet.', 'ai-site-connector' ); ?></p>
 			<?php endif; ?>
 		</div>
+		<?php
+	}
+
+	private static function render_preflight_result( $preflight ) {
+		if ( ! is_array( $preflight ) || empty( $preflight['status'] ) ) {
+			return;
+		}
+		$status = $preflight['status'];
+		$code   = isset( $preflight['code'] ) ? $preflight['code'] : '';
+		$hint   = isset( $preflight['hint'] ) ? $preflight['hint'] : '';
+		$badge_class = 'pass' === $status ? 'asc-ok' : ( 'skipped' === $status ? 'asc-warn' : 'asc-bad' );
+		$badge_label = 'pass' === $status
+			? __( 'Pre-flight ✓ verified', 'ai-site-connector' )
+			: ( 'skipped' === $status
+				? __( 'Pre-flight skipped', 'ai-site-connector' )
+				: sprintf(
+					/* translators: %s: HTTP status code or error code. */
+					__( 'Pre-flight ✗ failed (%s)', 'ai-site-connector' ),
+					(string) $code
+				) );
+		?>
+		<p class="asc-preflight">
+			<span class="asc-badge <?php echo esc_attr( $badge_class ); ?>"><?php echo esc_html( $badge_label ); ?></span>
+			<span class="asc-preflight-hint"><?php echo esc_html( $hint ); ?></span>
+		</p>
 		<?php
 	}
 

@@ -15,6 +15,8 @@
 .ai-site-connector-wrap .asc-updates-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .ai-site-connector-wrap .asc-updates-actions form { margin: 0; }
 .ai-site-connector-wrap .asc-codeblock { background: #1d2327; color: #f0f0f1; padding: 12px; border-radius: 4px; overflow-x: auto; white-space: pre; font-family: Menlo, Consolas, monospace; font-size: 12px; }
+.ai-site-connector-wrap .asc-preflight { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0 12px; }
+.ai-site-connector-wrap .asc-preflight-hint { color: #50575e; font-size: 13px; }
 .ai-site-connector-wrap .asc-pack details { margin: 12px 0; }
 .ai-site-connector-wrap .asc-pack h4 { margin-bottom: 4px; }
 .ai-site-connector-wrap .asc-pack .button { margin-top: 4px; }

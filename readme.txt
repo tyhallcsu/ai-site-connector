@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.7.0
+Stable tag: 0.8.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,13 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.8.0 =
+* Discovery + quality release.
+* OpenAPI 3 spec at `GET /wp-json/ai-site-connector/v1/openapi.json` (closes #17). Generated from the live REST registry — new routes appear automatically. 1-hour cache, busted on plugin version change. Public read-only.
+* `/.well-known/ai-site-connector.json` discovery file (closes #18). Tiny public JSON that AI tools can fetch to auto-detect the plugin's REST namespace, MCP endpoint, OpenAPI URL, and supported auth methods. New `AI_SITE_CONNECTOR_DISCOVERY_DISABLE` kill switch.
+* Bundled stdio MCP server source in `examples/mcp-server/` (closes #16). Node 18+ Server that speaks MCP over stdio (Claude Desktop / Cursor's preferred transport) and forwards every tools/call to the plugin's HTTP MCP endpoint. Ships source-only — `npm install` locally then point your AI tool's config at `node /path/to/index.mjs`.
+* PHPUnit unit-test suite (closes #3). wp-mock based — runs in CI in under 5 seconds with no MySQL. Covers caps map (class-roles), Application Password wrapper contract (class-application-passwords), and per-password meta matcher helpers (CIDR + route scope). New CI job runs `composer test` on every PR.
+
 = 0.7.0 =
 * Observability release — visibility into audit events and per-credential usage.
 * Audit log: date range + free-text search + 50-rows-per-page pagination, on top of the action/tool/status filters + CSV export that shipped in v0.4.0 (closes #20).

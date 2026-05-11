@@ -42,8 +42,8 @@ class AI_Site_Connector_Connection_Formats {
 		$server_name = self::sanitize_server_name( $site_host );
 
 		return array(
-			self::claude_desktop_mcp( $server_name, $site_url, $user, $pass ),
-			self::cursor_mcp( $server_name, $site_url, $user, $pass ),
+			self::claude_desktop_mcp( $server_name, $rest_base, $user, $pass ),
+			self::cursor_mcp( $server_name, $rest_base, $user, $pass ),
 			self::n8n_instructions( $site_url, $user, $pass ),
 			self::curl_snippet( $rest_base, $user, $pass ),
 			self::python_snippet( $rest_base, $user, $pass ),
@@ -54,11 +54,17 @@ class AI_Site_Connector_Connection_Formats {
 	}
 
 	/* ---------------------------------------------------------------------
-	 * MCP — Claude Desktop & Cursor share the same JSON shape, different paths.
+	 * MCP — Claude Desktop & Cursor share the same JSON shape.
+	 *
+	 * The snippet drives `npx -y mcp-remote <url> --header Authorization:Basic <b64>`,
+	 * which proxies the plugin's HTTP MCP endpoint over stdio. No local install,
+	 * no path placeholder, no env vars — paste and restart. The bundled stdio
+	 * bridge in examples/mcp-server/ is still available for air-gapped use; see
+	 * examples/mcp-server/README.md.
 	 * ------------------------------------------------------------------ */
 
-	private static function claude_desktop_mcp( $server_name, $site_url, $user, $pass ) {
-		$config = self::mcp_config_shape( $server_name, $site_url, $user, $pass );
+	private static function claude_desktop_mcp( $server_name, $rest_base, $user, $pass ) {
+		$config = self::mcp_config_shape( $server_name, $rest_base, $user, $pass );
 		$code   = wp_json_encode( $config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
 
 		return array(
@@ -66,15 +72,15 @@ class AI_Site_Connector_Connection_Formats {
 			'label'    => __( 'Claude Desktop (MCP)', 'ai-site-connector' ),
 			'language' => 'json',
 			'hint'     => __(
-				'Paste into Claude Desktop\'s MCP config, then restart the app: macOS = ~/Library/Application Support/Claude/claude_desktop_config.json, Windows = %APPDATA%\\Claude\\claude_desktop_config.json. The "command" runs an MCP server that reads these env vars — replace the placeholder with the path to your WordPress MCP bridge (see modelcontextprotocol.io for community implementations).',
+				'Paste into Claude Desktop\'s MCP config and restart the app — no other setup. The snippet uses npm\'s mcp-remote package to proxy this site\'s HTTP MCP endpoint (/wp-json/ai-site-connector/v1/mcp), so there\'s no path to fill in and no npm install step. Requires Node 18+ on the machine running Claude Desktop. Config path: macOS = ~/Library/Application Support/Claude/claude_desktop_config.json, Windows = %APPDATA%\\Claude\\claude_desktop_config.json.',
 				'ai-site-connector'
 			),
 			'code'     => $code,
 		);
 	}
 
-	private static function cursor_mcp( $server_name, $site_url, $user, $pass ) {
-		$config = self::mcp_config_shape( $server_name, $site_url, $user, $pass );
+	private static function cursor_mcp( $server_name, $rest_base, $user, $pass ) {
+		$config = self::mcp_config_shape( $server_name, $rest_base, $user, $pass );
 		$code   = wp_json_encode( $config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
 
 		return array(
@@ -82,25 +88,27 @@ class AI_Site_Connector_Connection_Formats {
 			'label'    => __( 'Cursor / VS Code (MCP)', 'ai-site-connector' ),
 			'language' => 'json',
 			'hint'     => __(
-				'Save to .cursor/mcp.json in your project root, or to ~/.cursor/mcp.json for a global Cursor config. VS Code with the Continue or MCP extensions accepts the same shape. Same env-var contract as Claude Desktop — point the "command" at your WordPress MCP bridge.',
+				'Save to .cursor/mcp.json in your project root, or to ~/.cursor/mcp.json for a global Cursor config (VS Code with Continue or MCP extensions accepts the same shape). The snippet uses npm\'s mcp-remote package to proxy this site\'s HTTP MCP endpoint — no path placeholder, no npm install. Requires Node 18+.',
 				'ai-site-connector'
 			),
 			'code'     => $code,
 		);
 	}
 
-	private static function mcp_config_shape( $server_name, $site_url, $user, $pass ) {
+	private static function mcp_config_shape( $server_name, $rest_base, $user, $pass ) {
+		$mcp_url    = rtrim( (string) $rest_base, '/' ) . '/mcp';
+		$basic_auth = 'Basic ' . base64_encode( $user . ':' . $pass );
+
 		return array(
 			'mcpServers' => array(
 				$server_name => array(
-					'command' => 'node',
+					'command' => 'npx',
 					'args'    => array(
-						'/absolute/path/to/your-wordpress-mcp-server/index.js',
-					),
-					'env'     => array(
-						'WORDPRESS_SITE_URL'             => $site_url,
-						'WORDPRESS_USERNAME'             => $user,
-						'WORDPRESS_APPLICATION_PASSWORD' => $pass,
+						'-y',
+						'mcp-remote',
+						$mcp_url,
+						'--header',
+						'Authorization:' . $basic_auth,
 					),
 				),
 			),

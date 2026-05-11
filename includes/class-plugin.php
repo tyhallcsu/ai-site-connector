@@ -27,6 +27,7 @@ class AI_Site_Connector_Plugin {
 		AI_Site_Connector_Audit_Digest::register_hooks();
 		AI_Site_Connector_REST_Controller::register_hooks();
 		AI_Site_Connector_Updater::register_hooks();
+		AI_Site_Connector_Backup_Manager::register_hooks();
 
 		if ( is_admin() ) {
 			AI_Site_Connector_Admin_Page::register_hooks();

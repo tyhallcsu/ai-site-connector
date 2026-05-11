@@ -46,6 +46,7 @@ require_once AI_SITE_CONNECTOR_DIR . 'includes/class-rest-controller.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-connection-formats.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-admin-page.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-updater.php';
+require_once AI_SITE_CONNECTOR_DIR . 'includes/class-backup-manager.php';
 
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	require_once AI_SITE_CONNECTOR_DIR . 'includes/class-wp-cli.php';

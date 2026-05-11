@@ -585,6 +585,36 @@ class AI_Site_Connector_Admin_Page {
 						</form>
 					<?php endif; ?>
 				</div>
+				<?php $backups = AI_Site_Connector_Backup_Manager::available_backups(); ?>
+				<?php if ( ! empty( $backups ) ) : ?>
+					<details class="asc-rollback">
+						<summary><?php
+							printf(
+								/* translators: %d: number of backups. */
+								esc_html( _n( '%d backup available for rollback', '%d backups available for rollback', count( $backups ), 'ai-site-connector' ) ),
+								(int) count( $backups )
+							);
+						?></summary>
+						<p class="description"><?php esc_html_e( 'A snapshot of the previous plugin folder is kept after each update. Click below to swap a backup back in. The plugin is deactivated and reactivated automatically.', 'ai-site-connector' ); ?></p>
+						<?php foreach ( $backups as $bk ) : ?>
+							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="asc-rollback-row" onsubmit="return confirm('<?php
+								/* translators: %s: version. */
+								echo esc_js( sprintf( __( 'Rollback to v%s now? The plugin will be deactivated and reactivated.', 'ai-site-connector' ), $bk['version'] ) );
+							?>');">
+								<?php wp_nonce_field( 'ai_site_connector_rollback' ); ?>
+								<input type="hidden" name="action" value="ai_site_connector_rollback" />
+								<input type="hidden" name="to_version" value="<?php echo esc_attr( $bk['version'] ); ?>" />
+								<button type="submit" class="button button-secondary"><?php
+									/* translators: 1: version, 2: relative time. */
+									echo esc_html( sprintf( __( 'Rollback to v%1$s (saved %2$s ago)', 'ai-site-connector' ),
+										$bk['version'],
+										human_time_diff( $bk['modified'], time() )
+									) );
+								?></button>
+							</form>
+						<?php endforeach; ?>
+					</details>
+				<?php endif; ?>
 			<?php elseif ( $disabled ) : ?>
 				<p class="description"><?php
 					printf(

@@ -6,7 +6,7 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [0.9.1] - 2026-05-11
 
-Compatibility patch. No functional changes.
+Compatibility + connection-pack UX patch. Closes #55 and #62.
 
 ### Changed
 
@@ -17,11 +17,31 @@ Compatibility patch. No functional changes.
 - `wordpress-version-compat` CI matrix gains `6.8` and `6.9` rows (still
   `continue-on-error: true`). Named-version smoke now spans 5.6 → 6.9,
   complementing the unnamed `latest` row.
+- **Connection-pack: Claude Desktop / Cursor MCP tabs now use `mcp-remote`**
+  instead of pointing at a local stdio bridge with an
+  `/absolute/path/to/your-wordpress-mcp-server/index.js` placeholder
+  (closes #62). The generated `claude_desktop_config.json` /
+  `.cursor/mcp.json` snippet now drives
+  `npx -y mcp-remote <site>/wp-json/ai-site-connector/v1/mcp --header
+  Authorization:Basic <b64(user:app-password)>`, with the Basic Auth header
+  pre-baked at generation time. Paste the snippet, restart Claude Desktop /
+  Cursor, done — no path edit, no `npm install`, no env-var wire-up. Node
+  18+ requirement on the operator's machine is unchanged.
+- `examples/mcp-server/README.md` and the top-level `README.md` reframe the
+  bundled local stdio bridge as the **advanced fallback** for air-gapped,
+  debugging, and hand-modified workflows. The bridge source still ships
+  unchanged — it just isn't the recommended path anymore.
 
 ### Notes
 
-- No source / class / REST behavior changes. The release exists to push the
-  updated `Tested up to` claim through the self-updater to installed sites.
+- No source / class / REST behavior changes. The plugin's HTTP MCP endpoint
+  at `POST /wp-json/ai-site-connector/v1/mcp` (`AI_Site_Connector_MCP_Server`,
+  JSON-RPC 2.0, protocol version `2025-06-18`) is unchanged — the new
+  snippet just stops asking the operator to also run a local Node bridge
+  on top of it.
+- No new auth surface. The Basic Auth credential was already plaintext in
+  the previous `env` block in the same `claude_desktop_config.json` file,
+  so the at-rest threat model is identical.
 - `examples/mcp-server/package.json` bumped to 0.9.1 in lockstep with the
   plugin to satisfy the version-sync guard added in v0.9.0.
 

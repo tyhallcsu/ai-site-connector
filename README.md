@@ -112,7 +112,7 @@ wp ai-connector create-user --username=ai-agent --role=ai_site_operator
 2. Pick the AI user.
 3. Click **Generate Connection Pack**.
 4. Pick the tab for the tool you're wiring up — each one gives you a ready-to-paste snippet:
-   * **Claude Desktop (MCP)** — `claude_desktop_config.json` block with your site URL, username, and Application Password baked in as env vars.
+   * **Claude Desktop (MCP)** — `claude_desktop_config.json` block driving `npx -y mcp-remote` against this site's HTTP MCP endpoint, with the Basic Auth header pre-baked. No path placeholder, no `npm install`.
    * **Cursor / VS Code (MCP)** — same shape for `.cursor/mcp.json` (or any IDE that speaks MCP).
    * **n8n / Make.com / Zapier** — plain-text Basic Auth credential instructions for the three most common no-code automation platforms.
    * **curl / Python (requests) / Node.js (fetch)** — quick sanity-check snippets.
@@ -211,16 +211,11 @@ Do not commit this password to git.
 
 [**examples/agent-bootstrap-prompt.md**](examples/agent-bootstrap-prompt.md) is a paste-into-Claude/Codex/Cursor system-prompt template that hands the AI agent everything it needs: connection details (with placeholders for the four values the plugin gave you), the recommended first three calls, the capability map, what NOT to try, error reference, and operating-posture rules. Use this when onboarding a new agent to a freshly-installed site.
 
-### MCP — Claude Desktop / Cursor (stdio bridge)
+### MCP — Claude Desktop / Cursor
 
-If you use Claude Desktop or Cursor and want a one-binary local install, the plugin ships a Node 18+ stdio MCP bridge at [**examples/mcp-server/**](examples/mcp-server/). It speaks MCP over stdio (the transport these tools use locally) and forwards every `tools/call` to the plugin's HTTP MCP endpoint via Basic Auth.
+The simplest path: open **Tools → AI Site Connector → Credentials**, generate an Application Password, then copy the **Claude Desktop (MCP)** or **Cursor / VS Code (MCP)** tab into your tool's MCP config. The snippet uses the community [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) package to proxy the plugin's HTTP MCP endpoint — **paste, restart, done**. No path placeholder, no `npm install`, no env vars. Requires Node 18+ on the machine running Claude Desktop / Cursor.
 
-```bash
-cd examples/mcp-server
-npm install
-```
-
-Then point your AI tool at `node /abs/path/to/examples/mcp-server/index.mjs` with `WORDPRESS_SITE_URL`, `WORDPRESS_USERNAME`, and `WORDPRESS_APPLICATION_PASSWORD` in `env`. The full Claude Desktop / Cursor config blocks live in [examples/mcp-server/README.md](examples/mcp-server/README.md).
+For air-gapped / debugging / hand-modified workflows the plugin also ships a Node 18+ stdio MCP bridge at [**examples/mcp-server/**](examples/mcp-server/) — the same job as `mcp-remote` but with the source in-tree so you can clone, modify, and run it locally. See [examples/mcp-server/README.md](examples/mcp-server/README.md).
 
 ### Discovery — `/.well-known/ai-site-connector.json`
 

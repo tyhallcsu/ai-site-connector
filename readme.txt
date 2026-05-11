@@ -38,9 +38,10 @@ Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter
 
 == Changelog ==
 = 0.9.1 =
-* Compatibility patch — no functional changes.
+* Compatibility + connection-pack UX patch. Closes #55 and #62.
 * `Tested up to:` raised from 6.5 to 6.9 after the green `wordpress-runtime` CI job (which exercises `WP_VERSION=latest` = 6.9.x) confirmed v0.9.0 boots and passes smoke against current WordPress stable (closes #55).
 * CI: `wordpress-version-compat` matrix gains 6.8 and 6.9 rows (continue-on-error preserved). The plugin's compat coverage now spans 5.6 → 6.9 by name, plus `latest`.
+* MCP: Claude Desktop / Cursor connection-pack tabs now drive `npx -y mcp-remote` against this site's HTTP MCP endpoint with the Basic Auth header pre-baked (closes #62). The old `/absolute/path/to/your-wordpress-mcp-server/index.js` placeholder is gone — paste, restart, done. No `npm install`, no env-var wire-up. The bundled local stdio bridge in `examples/mcp-server/` stays as the advanced fallback for air-gapped sites.
 
 = 0.9.0 =
 * Audit-approved batch release closing 12 issues from the v0.8.1 post-release audit.

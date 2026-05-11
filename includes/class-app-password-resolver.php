@@ -6,13 +6,14 @@
  * (#19) to attribute a request to a specific Application Password (not
  * just to a user — one user can have N passwords with N different scopes).
  *
- * Primary path: WordPress fires `application_password_did_authenticate`
- * (WP 5.7+) right after a successful App Password auth, passing the
- * matched password item including its UUID. We stash it in a static.
+ * Hooks `application_password_did_authenticate` (WP 5.7+, released
+ * March 2021), which fires right after a successful App Password auth
+ * and passes the matched password item including its UUID. We stash it
+ * in a static for the rest of the request.
  *
- * Fallback path: parse the `Authorization: Basic` header manually and
- * match against the user's stored App Password hashes via wp_check_password.
- * Cheap when there are few passwords; expensive if a user has dozens.
+ * Pre-5.7 installs return null from current_uuid() — the per-password
+ * features (scopes / IP allowlist / expiry) degrade to "no restriction"
+ * on those installs, which matches the existing behavior pre-α anyway.
  *
  * @package AI_Site_Connector
  */
@@ -54,52 +55,10 @@ class AI_Site_Connector_App_Password_Resolver {
 		if ( self::$cache['resolved'] ) {
 			return self::$cache['uuid'];
 		}
-		// Mark resolved up front so a fallback failure doesn't loop on retries.
+		// Mark resolved up front so any future calls in this request don't
+		// re-enter through the auth hook handler.
 		self::$cache['resolved'] = true;
-
-		// Need a logged-in user (App Password auth produces one).
-		$user_id = get_current_user_id();
-		if ( ! $user_id || ! class_exists( 'WP_Application_Passwords' ) ) {
-			return null;
-		}
-
-		// Parse Authorization header. PHP-FPM commonly drops it; cover both
-		// the canonical and the fallback environment variables WordPress
-		// itself reads in WP_Application_Passwords.
-		$auth = '';
-		if ( ! empty( $_SERVER['HTTP_AUTHORIZATION'] ) ) {
-			$auth = (string) $_SERVER['HTTP_AUTHORIZATION'];
-		} elseif ( ! empty( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
-			$auth = (string) $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
-		}
-		$auth = trim( $auth );
-		if ( 0 !== stripos( $auth, 'Basic ' ) ) {
-			return null;
-		}
-		$decoded = base64_decode( substr( $auth, 6 ), true );
-		if ( false === $decoded || false === strpos( $decoded, ':' ) ) {
-			return null;
-		}
-		list( , $password ) = explode( ':', $decoded, 2 );
-		$password           = preg_replace( '/[^A-Za-z0-9]/', '', $password ); // WP strips spaces before hashing.
-		if ( '' === $password ) {
-			return null;
-		}
-
-		$items = WP_Application_Passwords::get_user_application_passwords( $user_id );
-		if ( ! is_array( $items ) ) {
-			return null;
-		}
-		foreach ( $items as $item ) {
-			if ( empty( $item['password'] ) || empty( $item['uuid'] ) ) {
-				continue;
-			}
-			if ( wp_check_password( $password, $item['password'], $user_id ) ) {
-				self::$cache['uuid'] = (string) $item['uuid'];
-				return self::$cache['uuid'];
-			}
-		}
-		return null;
+		return self::$cache['uuid']; // null unless capture_uuid() populated it.
 	}
 
 	/**

@@ -39,6 +39,30 @@ jobs:
           test -n "$v"
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
+      - name: CHANGELOG entry exists for resolved version
+        run: |
+          set -e
+          v="${{ steps.ver.outputs.version }}"
+          if ! grep -qE "^##[[:space:]]*\[${v//./\\.}\]" CHANGELOG.md; then
+            echo "CHANGELOG.md is missing an entry for v$v."
+            echo 'Add a Keep-a-Changelog section like:'
+            echo "  ## [$v] - YYYY-MM-DD"
+            exit 1
+          fi
+          echo "CHANGELOG.md entry for v$v found."
+
+      - name: MCP example version matches plugin version
+        run: |
+          set -e
+          v="${{ steps.ver.outputs.version }}"
+          mcp_v=$(node -p "require('./examples/mcp-server/package.json').version")
+          if [ "$mcp_v" != "$v" ]; then
+            echo "examples/mcp-server/package.json version ($mcp_v) does not match plugin version ($v)."
+            echo 'Bump examples/mcp-server/package.json before tagging.'
+            exit 1
+          fi
+          echo "MCP example version matches plugin version ($v)."
+
       - name: Build release ZIP
         run: bin/build-release-zip.sh "${{ steps.ver.outputs.version }}"
 

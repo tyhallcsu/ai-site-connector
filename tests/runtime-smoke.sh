@@ -238,6 +238,20 @@ log "Checking public health endpoint."
 HEALTH_PUBLIC="$(curl -fsS "$WP_URL/wp-json/ai-site-connector/v1/health")"
 printf '%s' "$HEALTH_PUBLIC" | jq -e '.plugin == "ai-site-connector" and .authenticated == false and (has("wp_version") | not)' >/dev/null
 
+log "Checking /.well-known/ai-site-connector.json discovery payload."
+DISCOVERY_JSON="$(curl -fsS "$WP_URL/.well-known/ai-site-connector.json")"
+printf '%s' "$DISCOVERY_JSON" | jq -e '
+	.spec_version == "1"
+	and .plugin == "ai-site-connector"
+	and (.version | type == "string")
+	and (.rest_namespace == "ai-site-connector/v1")
+	and (.rest_base | type == "string")
+	and (.openapi_url | type == "string")
+	and (.tools_catalog_url | type == "string")
+	and (.mcp.http | type == "string")
+	and (.auth_methods | index("basic_auth_application_password"))
+' >/dev/null
+
 log "Checking REST permission boundaries."
 status="$(curl -sS -o /dev/null -w '%{http_code}' "$WP_URL/wp-json/ai-site-connector/v1/site-info")"
 if [ "$status" != "401" ]; then

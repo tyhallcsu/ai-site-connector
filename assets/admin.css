@@ -11,10 +11,61 @@
 .ai-site-connector-wrap .asc-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
 .ai-site-connector-wrap .asc-badge.asc-ok { background: #e6f4ea; color: #137333; border: 1px solid #b7d8c2; }
 .ai-site-connector-wrap .asc-badge.asc-bad { background: #fce8e6; color: #b3261e; border: 1px solid #f4b9b3; }
+.ai-site-connector-wrap .asc-badge.asc-warn { background: #fef7e0; color: #8a6d00; border: 1px solid #f1d775; }
+.ai-site-connector-wrap .asc-updates-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.ai-site-connector-wrap .asc-updates-actions form { margin: 0; }
+.ai-site-connector-wrap .asc-rollback { margin-top: 16px; padding-top: 12px; border-top: 1px dashed #c3c4c7; }
+.ai-site-connector-wrap .asc-rollback summary { cursor: pointer; font-weight: 500; color: #2c3338; }
+.ai-site-connector-wrap .asc-rollback-row { display: inline-block; margin: 6px 8px 0 0; }
+.ai-site-connector-wrap .asc-explorer-table { margin: 12px 0; }
+.ai-site-connector-wrap .asc-explorer-table code { font-size: 12px; }
+.ai-site-connector-wrap .asc-try-it-result { margin-top: 16px; }
+.ai-site-connector-wrap .asc-onboarding-steps { list-style: none; padding: 0; margin: 12px 0; counter-reset: asc-step; }
+.ai-site-connector-wrap .asc-onboarding-step { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid #eee; }
+.ai-site-connector-wrap .asc-onboarding-step:last-child { border-bottom: none; }
+.ai-site-connector-wrap .asc-onboarding-marker { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; font-weight: 700; flex: 0 0 28px; }
+.ai-site-connector-wrap .asc-step-done .asc-onboarding-marker { background: #e6f4ea; color: #137333; }
+.ai-site-connector-wrap .asc-step-todo .asc-onboarding-marker { background: #fef7e0; color: #8a6d00; }
+.ai-site-connector-wrap .asc-onboarding-step > div { flex: 1; }
+.ai-site-connector-wrap .asc-onboarding-step .description { margin: 4px 0 8px; }
 .ai-site-connector-wrap .asc-codeblock { background: #1d2327; color: #f0f0f1; padding: 12px; border-radius: 4px; overflow-x: auto; white-space: pre; font-family: Menlo, Consolas, monospace; font-size: 12px; }
+.ai-site-connector-wrap .asc-preflight { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0 12px; }
+.ai-site-connector-wrap .asc-preflight-hint { color: #50575e; font-size: 13px; }
 .ai-site-connector-wrap .asc-pack details { margin: 12px 0; }
 .ai-site-connector-wrap .asc-pack h4 { margin-bottom: 4px; }
 .ai-site-connector-wrap .asc-pack .button { margin-top: 4px; }
+
+/* Format picker — tabbed UI for the connection pack (CSS-only via radio :checked). */
+.ai-site-connector-wrap .asc-format-picker .asc-fmt-radio { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
+.ai-site-connector-wrap .asc-fmt-tabs { display: flex; flex-wrap: wrap; gap: 2px; margin: 12px 0 0; border-bottom: 1px solid #c3c4c7; padding-bottom: 0; }
+.ai-site-connector-wrap .asc-fmt-tab { display: inline-block; padding: 8px 14px; background: #f0f0f1; border: 1px solid #c3c4c7; border-bottom: none; border-radius: 4px 4px 0 0; cursor: pointer; font-weight: 500; color: #2c3338; user-select: none; position: relative; bottom: -1px; }
+.ai-site-connector-wrap .asc-fmt-tab:hover { background: #e4e6ea; }
+.ai-site-connector-wrap .asc-fmt-radio:focus-visible + .asc-fmt-tab, .ai-site-connector-wrap .asc-fmt-tab:focus { outline: 2px solid #2271b1; outline-offset: 2px; }
+.ai-site-connector-wrap .asc-fmt-panels { border: 1px solid #c3c4c7; border-top: none; padding: 14px 16px; background: #fff; border-radius: 0 4px 4px 4px; }
+.ai-site-connector-wrap .asc-fmt-panel { display: none; }
+.ai-site-connector-wrap .asc-fmt-panel .description { margin: 0 0 10px; }
+.ai-site-connector-wrap .asc-fmt-panel .asc-codeblock { margin: 0 0 8px; }
+
+/* Active tab + visible panel — enumerated because CSS can't dynamically match. */
+.ai-site-connector-wrap .asc-fmt-radio-claude_desktop_mcp:checked ~ .asc-fmt-tabs .asc-fmt-tab-claude_desktop_mcp,
+.ai-site-connector-wrap .asc-fmt-radio-cursor_mcp:checked ~ .asc-fmt-tabs .asc-fmt-tab-cursor_mcp,
+.ai-site-connector-wrap .asc-fmt-radio-n8n_makecom_zapier:checked ~ .asc-fmt-tabs .asc-fmt-tab-n8n_makecom_zapier,
+.ai-site-connector-wrap .asc-fmt-radio-curl:checked ~ .asc-fmt-tabs .asc-fmt-tab-curl,
+.ai-site-connector-wrap .asc-fmt-radio-python:checked ~ .asc-fmt-tabs .asc-fmt-tab-python,
+.ai-site-connector-wrap .asc-fmt-radio-node:checked ~ .asc-fmt-tabs .asc-fmt-tab-node,
+.ai-site-connector-wrap .asc-fmt-radio-json_pack:checked ~ .asc-fmt-tabs .asc-fmt-tab-json_pack,
+.ai-site-connector-wrap .asc-fmt-radio-agent_instructions:checked ~ .asc-fmt-tabs .asc-fmt-tab-agent_instructions
+	{ background: #fff; border-color: #c3c4c7; color: #1d2327; }
+
+.ai-site-connector-wrap .asc-fmt-radio-claude_desktop_mcp:checked ~ .asc-fmt-panels .asc-fmt-panel-claude_desktop_mcp,
+.ai-site-connector-wrap .asc-fmt-radio-cursor_mcp:checked ~ .asc-fmt-panels .asc-fmt-panel-cursor_mcp,
+.ai-site-connector-wrap .asc-fmt-radio-n8n_makecom_zapier:checked ~ .asc-fmt-panels .asc-fmt-panel-n8n_makecom_zapier,
+.ai-site-connector-wrap .asc-fmt-radio-curl:checked ~ .asc-fmt-panels .asc-fmt-panel-curl,
+.ai-site-connector-wrap .asc-fmt-radio-python:checked ~ .asc-fmt-panels .asc-fmt-panel-python,
+.ai-site-connector-wrap .asc-fmt-radio-node:checked ~ .asc-fmt-panels .asc-fmt-panel-node,
+.ai-site-connector-wrap .asc-fmt-radio-json_pack:checked ~ .asc-fmt-panels .asc-fmt-panel-json_pack,
+.ai-site-connector-wrap .asc-fmt-radio-agent_instructions:checked ~ .asc-fmt-panels .asc-fmt-panel-agent_instructions
+	{ display: block; }
 @media (max-width: 600px) {
 	.ai-site-connector-wrap .asc-page-header { align-items: flex-start; }
 	.ai-site-connector-wrap .asc-page-logo { width: 52px; height: 52px; flex-basis: 52px; border-radius: 12px; }

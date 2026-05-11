@@ -165,11 +165,15 @@ class AI_Site_Connector_Admin_Page {
 			self::redirect_back( 'credentials' );
 		}
 
+		$pack      = self::build_connection_pack( $user_id, $res );
+		$preflight = self::run_preflight_check( $pack );
+
 		self::flash(
 			__( 'Application Password generated. Copy it now — it will not be shown again.', 'ai-site-connector' ),
 			'success',
 			array(
-				'connection_pack' => self::build_connection_pack( $user_id, $res ),
+				'connection_pack' => $pack,
+				'preflight'       => $preflight,
 			)
 		);
 
@@ -181,7 +185,103 @@ class AI_Site_Connector_Admin_Page {
 			)
 		);
 
+		if ( is_array( $preflight ) ) {
+			AI_Site_Connector_Audit_Log::record(
+				'pass' === $preflight['status'] ? 'pre_flight_passed' : 'pre_flight_failed',
+				array(
+					'target_user_id' => (int) $user_id,
+					'message'        => sprintf(
+						/* translators: 1: status, 2: HTTP code, 3: detail. */
+						__( 'Pre-flight %1$s (code %2$s): %3$s', 'ai-site-connector' ),
+						$preflight['status'],
+						(string) $preflight['code'],
+						$preflight['hint']
+					),
+				)
+			);
+		}
+
 		self::redirect_back( 'credentials' );
+	}
+
+	/**
+	 * Run a server-side authentication probe with freshly-minted credentials.
+	 *
+	 * Hits /wp/v2/users/me using the new Application Password and reports
+	 * whether the host accepted it. Catches "host strips Authorization
+	 * header", "REST disabled", "WAF blocks Basic Auth" before the operator
+	 * pastes the pack into an AI tool.
+	 *
+	 * @param array $pack Connection pack just generated.
+	 * @return array|null {status:'pass'|'fail'|'skipped', code:int|string, hint:string}
+	 */
+	private static function run_preflight_check( array $pack ) {
+		/**
+		 * Filter to skip the pre-flight loopback check. Useful for hosts
+		 * where the WP install cannot make HTTP requests to itself.
+		 *
+		 * @param bool  $skip Default false.
+		 * @param array $pack Connection pack.
+		 */
+		if ( apply_filters( 'ai_site_connector_skip_preflight', false, $pack ) ) {
+			return array(
+				'status' => 'skipped',
+				'code'   => 'filter',
+				'hint'   => __( 'Pre-flight check skipped by ai_site_connector_skip_preflight filter.', 'ai-site-connector' ),
+			);
+		}
+
+		$user = isset( $pack['username'] ) ? (string) $pack['username'] : '';
+		$pass = isset( $pack['application_password'] ) ? (string) $pack['application_password'] : '';
+		if ( '' === $user || '' === $pass ) {
+			return null;
+		}
+
+		$response = wp_remote_get(
+			rest_url( 'wp/v2/users/me' ),
+			array(
+				'timeout'   => 10,
+				'sslverify' => false,
+				'headers'   => array(
+					'Authorization' => 'Basic ' . base64_encode( $user . ':' . $pass ),
+				),
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return array(
+				'status' => 'fail',
+				'code'   => $response->get_error_code(),
+				'hint'   => sprintf(
+					/* translators: %s: WP error message. */
+					__( 'Could not reach REST API: %s', 'ai-site-connector' ),
+					$response->get_error_message()
+				),
+			);
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		if ( 200 === $code ) {
+			return array(
+				'status' => 'pass',
+				'code'   => 200,
+				'hint'   => __( 'REST API accepts the new Application Password.', 'ai-site-connector' ),
+			);
+		}
+
+		$hints = array(
+			401 => __( 'The most common cause is your host stripping the Authorization header (some shared hosts and security plugins do this). See SECURITY.md and scripts/diagnose-hosting-auth.sh for fixes.', 'ai-site-connector' ),
+			403 => __( 'The user may lack the required REST capability, or a security plugin / WAF is blocking REST access.', 'ai-site-connector' ),
+			404 => __( 'The REST API may be disabled, or pretty permalinks are off. Settings → Permalinks → save without changes.', 'ai-site-connector' ),
+			500 => __( 'WordPress returned a server error. Check the PHP error log.', 'ai-site-connector' ),
+		);
+		$hint = isset( $hints[ $code ] ) ? $hints[ $code ] : __( 'Unexpected response. Review the server log and security plugin settings.', 'ai-site-connector' );
+
+		return array(
+			'status' => 'fail',
+			'code'   => $code,
+			'hint'   => $hint,
+		);
 	}
 
 	public static function handle_revoke_password() {
@@ -304,17 +404,21 @@ class AI_Site_Connector_Admin_Page {
 		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'overview';
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 		$flash = self::consume_flash();
-		$tabs  = array(
-			'overview'    => __( 'Overview', 'ai-site-connector' ),
-			'connection'  => __( 'Connection Test', 'ai-site-connector' ),
-			'wizard'      => __( 'Setup Wizard', 'ai-site-connector' ),
-			'credentials' => __( 'Credentials', 'ai-site-connector' ),
-			'permissions' => __( 'Permissions', 'ai-site-connector' ),
-			'audit'       => __( 'Audit Log', 'ai-site-connector' ),
-			'diagnostics' => __( 'Diagnostics', 'ai-site-connector' ),
-			'export'      => __( 'Export', 'ai-site-connector' ),
-			'docs'        => __( 'Docs', 'ai-site-connector' ),
-		);
+		$tabs  = array();
+		// Onboarding tab is only present until the operator dismisses it.
+		if ( class_exists( 'AI_Site_Connector_Onboarding' ) && ! AI_Site_Connector_Onboarding::is_completed() ) {
+			$tabs['onboarding'] = __( 'Get Started', 'ai-site-connector' );
+		}
+		$tabs['overview']    = __( 'Overview', 'ai-site-connector' );
+		$tabs['connection']  = __( 'Connection Test', 'ai-site-connector' );
+		$tabs['wizard']      = __( 'Setup Wizard', 'ai-site-connector' );
+		$tabs['credentials'] = __( 'Credentials', 'ai-site-connector' );
+		$tabs['permissions'] = __( 'Permissions', 'ai-site-connector' );
+		$tabs['audit']       = __( 'Audit Log', 'ai-site-connector' );
+		$tabs['api']         = __( 'API Explorer', 'ai-site-connector' );
+		$tabs['diagnostics'] = __( 'Diagnostics', 'ai-site-connector' );
+		$tabs['export']      = __( 'Export', 'ai-site-connector' );
+		$tabs['docs']        = __( 'Docs', 'ai-site-connector' );
 		?>
 		<div class="wrap ai-site-connector-wrap">
 			<div class="asc-page-header">
@@ -328,6 +432,9 @@ class AI_Site_Connector_Admin_Page {
 			<?php if ( $flash ) : ?>
 				<div class="notice notice-<?php echo esc_attr( 'success' === $flash['type'] ? 'success' : 'error' ); ?>">
 					<p><?php echo esc_html( $flash['msg'] ); ?></p>
+					<?php if ( ! empty( $flash['extra']['preflight'] ) ) : ?>
+						<?php self::render_preflight_result( $flash['extra']['preflight'] ); ?>
+					<?php endif; ?>
 					<?php if ( ! empty( $flash['extra']['connection_pack'] ) ) : ?>
 						<?php self::render_connection_pack( $flash['extra']['connection_pack'] ); ?>
 					<?php endif; ?>
@@ -348,6 +455,13 @@ class AI_Site_Connector_Admin_Page {
 
 			<?php
 			switch ( $tab ) {
+				case 'onboarding':
+					if ( class_exists( 'AI_Site_Connector_Onboarding' ) ) {
+						AI_Site_Connector_Onboarding::render_view();
+					} else {
+						self::render_overview();
+					}
+					break;
 				case 'connection':
 					self::render_connection_test();
 					break;
@@ -362,6 +476,9 @@ class AI_Site_Connector_Admin_Page {
 					break;
 				case 'audit':
 					self::render_audit();
+					break;
+				case 'api':
+					self::render_api_explorer();
 					break;
 				case 'diagnostics':
 					self::render_diagnostics();
@@ -428,6 +545,139 @@ class AI_Site_Connector_Admin_Page {
 					<li><?php esc_html_e( 'Revoke the password from this page when access is no longer needed.', 'ai-site-connector' ); ?></li>
 				</ol>
 			</div>
+
+			<?php self::render_updates_card(); ?>
+		</div>
+		<?php
+	}
+
+	private static function render_updates_card() {
+		$remote      = AI_Site_Connector_Updater::cached_release();
+		$error       = AI_Site_Connector_Updater::cached_error();
+		$disabled    = AI_Site_Connector_Updater::is_disabled();
+		$prerelease  = AI_Site_Connector_Updater::include_prerelease();
+		$can_update  = current_user_can( 'update_plugins' );
+		$available   = AI_Site_Connector_Updater::update_available();
+		?>
+		<div class="asc-card">
+			<h3><?php esc_html_e( 'Updates', 'ai-site-connector' ); ?></h3>
+			<table class="asc-kv">
+				<tr>
+					<th><?php esc_html_e( 'Installed version', 'ai-site-connector' ); ?></th>
+					<td><code><?php echo esc_html( AI_SITE_CONNECTOR_VERSION ); ?></code></td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Status', 'ai-site-connector' ); ?></th>
+					<td>
+						<?php
+						if ( $disabled ) {
+							echo '<span class="asc-badge asc-warn">' . esc_html__( 'Disabled by constant', 'ai-site-connector' ) . '</span>';
+						} elseif ( $available && $remote ) {
+							echo '<span class="asc-badge asc-warn">' . sprintf(
+								/* translators: %s: new version. */
+								esc_html__( 'Update available: %s', 'ai-site-connector' ),
+								esc_html( $remote['version'] )
+							) . '</span>';
+						} elseif ( $remote ) {
+							echo '<span class="asc-badge asc-ok">' . esc_html__( 'Up to date', 'ai-site-connector' ) . '</span>';
+						} elseif ( $error ) {
+							echo '<span class="asc-badge asc-bad">' . sprintf(
+								/* translators: %s: error code. */
+								esc_html__( 'Check failed (%s)', 'ai-site-connector' ),
+								esc_html( (string) $error['error'] )
+							) . '</span>';
+						} else {
+							echo '<span class="asc-badge">' . esc_html__( 'Not checked yet', 'ai-site-connector' ) . '</span>';
+						}
+						?>
+					</td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Source', 'ai-site-connector' ); ?></th>
+					<td>
+						<a href="<?php echo esc_url( 'https://github.com/tyhallcsu/ai-site-connector/releases' ); ?>" target="_blank" rel="noopener">github.com/tyhallcsu/ai-site-connector</a>
+						<?php if ( $prerelease ) : ?>
+							<br /><span class="asc-badge asc-warn"><?php esc_html_e( 'Pre-release channel', 'ai-site-connector' ); ?></span>
+						<?php endif; ?>
+					</td>
+				</tr>
+				<?php if ( $remote && ! empty( $remote['published_at'] ) ) : ?>
+				<tr>
+					<th><?php esc_html_e( 'Latest release', 'ai-site-connector' ); ?></th>
+					<td>
+						<?php
+						$published = strtotime( $remote['published_at'] );
+						if ( $published ) {
+							echo esc_html( gmdate( 'Y-m-d', $published ) );
+						}
+						?>
+						<?php if ( ! empty( $remote['html_url'] ) ) : ?>
+							 — <a href="<?php echo esc_url( $remote['html_url'] ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'release notes', 'ai-site-connector' ); ?></a>
+						<?php endif; ?>
+					</td>
+				</tr>
+				<?php endif; ?>
+			</table>
+
+			<?php if ( ! $disabled && $can_update ) : ?>
+				<div class="asc-updates-actions">
+					<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+						<?php wp_nonce_field( 'ai_site_connector_check_updates' ); ?>
+						<input type="hidden" name="action" value="ai_site_connector_check_updates" />
+						<button type="submit" class="button button-secondary"><?php esc_html_e( 'Check for updates now', 'ai-site-connector' ); ?></button>
+					</form>
+					<?php if ( $available ) : ?>
+						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+							<?php wp_nonce_field( 'ai_site_connector_run_update' ); ?>
+							<input type="hidden" name="action" value="ai_site_connector_run_update" />
+							<button type="submit" class="button button-primary"><?php
+								/* translators: %s: new version. */
+								echo esc_html( sprintf( __( 'Update now to %s', 'ai-site-connector' ), $remote['version'] ) );
+							?></button>
+						</form>
+					<?php endif; ?>
+				</div>
+				<?php $backups = AI_Site_Connector_Backup_Manager::available_backups(); ?>
+				<?php if ( ! empty( $backups ) ) : ?>
+					<details class="asc-rollback">
+						<summary><?php
+							printf(
+								/* translators: %d: number of backups. */
+								esc_html( _n( '%d backup available for rollback', '%d backups available for rollback', count( $backups ), 'ai-site-connector' ) ),
+								(int) count( $backups )
+							);
+						?></summary>
+						<p class="description"><?php esc_html_e( 'A snapshot of the previous plugin folder is kept after each update. Click below to swap a backup back in. The plugin is deactivated and reactivated automatically.', 'ai-site-connector' ); ?></p>
+						<?php foreach ( $backups as $bk ) : ?>
+							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="asc-rollback-row" onsubmit="return confirm('<?php
+								/* translators: %s: version. */
+								echo esc_js( sprintf( __( 'Rollback to v%s now? The plugin will be deactivated and reactivated.', 'ai-site-connector' ), $bk['version'] ) );
+							?>');">
+								<?php wp_nonce_field( 'ai_site_connector_rollback' ); ?>
+								<input type="hidden" name="action" value="ai_site_connector_rollback" />
+								<input type="hidden" name="to_version" value="<?php echo esc_attr( $bk['version'] ); ?>" />
+								<button type="submit" class="button button-secondary"><?php
+									/* translators: 1: version, 2: relative time. */
+									echo esc_html( sprintf( __( 'Rollback to v%1$s (saved %2$s ago)', 'ai-site-connector' ),
+										$bk['version'],
+										human_time_diff( $bk['modified'], time() )
+									) );
+								?></button>
+							</form>
+						<?php endforeach; ?>
+					</details>
+				<?php endif; ?>
+			<?php elseif ( $disabled ) : ?>
+				<p class="description"><?php
+					printf(
+						/* translators: %s: constant name. */
+						esc_html__( 'Self-update is disabled by the %s constant in wp-config.php.', 'ai-site-connector' ),
+						'<code>AI_SITE_CONNECTOR_UPDATE_DISABLE</code>'
+					);
+				?></p>
+			<?php else : ?>
+				<p class="description"><?php esc_html_e( 'You do not have the update_plugins capability — only super admins / admins can update plugins.', 'ai-site-connector' ); ?></p>
+			<?php endif; ?>
 		</div>
 		<?php
 	}
@@ -549,56 +799,227 @@ class AI_Site_Connector_Admin_Page {
 		<?php
 	}
 
-	private static function render_connection_pack( $pack ) {
-		$json   = wp_json_encode( $pack, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
-		$user   = isset( $pack['username'] ) ? $pack['username'] : '';
-		$pass   = isset( $pack['application_password'] ) ? $pack['application_password'] : '';
-		$base   = isset( $pack['rest_api_base'] ) ? $pack['rest_api_base'] : '';
-		$pretty = $pack;
-		// Mask password in any echoed-back HTML (we still keep it inside the JSON pre block for the user to copy).
-		$pretty['application_password'] = '••••••••••••••••';
+	private static function render_api_explorer() {
+		$routes = AI_Site_Connector_API_Explorer::discoverable_routes();
 		?>
-		<div class="asc-pack">
+		<div class="asc-card">
+			<h2><?php esc_html_e( 'REST API Explorer', 'ai-site-connector' ); ?></h2>
+			<p class="description">
+				<?php esc_html_e( 'Browse the REST routes most relevant to AI tools and "Try it" inline. Requests are dispatched in-process via rest_do_request() — no HTTP loopback, so WAF / SSL / Authorization-stripping issues never apply here.', 'ai-site-connector' ); ?>
+			</p>
+			<table class="widefat striped asc-explorer-table">
+				<thead>
+					<tr>
+						<th style="width: 110px;"><?php esc_html_e( 'Namespace', 'ai-site-connector' ); ?></th>
+						<th style="width: 240px;"><?php esc_html_e( 'Methods', 'ai-site-connector' ); ?></th>
+						<th><?php esc_html_e( 'Route', 'ai-site-connector' ); ?></th>
+						<th style="width: 1%; white-space: nowrap;"><?php esc_html_e( 'Action', 'ai-site-connector' ); ?></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ( $routes as $row ) : ?>
+						<tr class="asc-explorer-row" data-route="<?php echo esc_attr( $row['route'] ); ?>" data-methods="<?php echo esc_attr( implode( ',', $row['methods'] ) ); ?>">
+							<td><span class="asc-badge <?php echo 'ai-site-connector' === $row['namespace'] ? 'asc-ok' : ''; ?>"><?php echo esc_html( $row['namespace'] ); ?></span></td>
+							<td><code><?php echo esc_html( implode( ' ', $row['methods'] ) ); ?></code></td>
+							<td><code><?php echo esc_html( $row['route'] ); ?></code><?php if ( ! empty( $row['description'] ) ) : ?><br><span class="description"><?php echo esc_html( $row['description'] ); ?></span><?php endif; ?></td>
+							<td><button type="button" class="button button-secondary asc-try-it"><?php esc_html_e( 'Try it', 'ai-site-connector' ); ?></button></td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+			<div id="asc-try-it-result" class="asc-try-it-result" hidden>
+				<h3><?php esc_html_e( 'Response', 'ai-site-connector' ); ?></h3>
+				<p class="description"><span id="asc-try-it-meta"></span></p>
+				<pre class="asc-codeblock" id="asc-try-it-body"></pre>
+			</div>
+			<script type="text/javascript">
+			(function () {
+				var ajaxUrl = <?php echo wp_json_encode( admin_url( 'admin-ajax.php' ) ); ?>;
+				var nonce   = <?php echo wp_json_encode( wp_create_nonce( AI_Site_Connector_API_Explorer::NONCE ) ); ?>;
+				var action  = <?php echo wp_json_encode( AI_Site_Connector_API_Explorer::AJAX_ACTION ); ?>;
+
+				document.querySelectorAll('.asc-try-it').forEach(function (btn) {
+					btn.addEventListener('click', function () {
+						var row     = btn.closest('.asc-explorer-row');
+						var route   = row.dataset.route;
+						var methods = (row.dataset.methods || 'GET').split(',');
+						var method  = methods.indexOf('GET') !== -1 ? 'GET' : methods[0];
+
+						var meta = document.getElementById('asc-try-it-meta');
+						var body = document.getElementById('asc-try-it-body');
+						var wrap = document.getElementById('asc-try-it-result');
+						wrap.hidden = false;
+						meta.textContent = method + ' ' + route + ' — running…';
+						body.textContent = '';
+
+						var form = new FormData();
+						form.append('action', action);
+						form.append('nonce', nonce);
+						form.append('method', method);
+						form.append('route', route);
+
+						fetch(ajaxUrl, { method: 'POST', body: form, credentials: 'same-origin' })
+							.then(function (r) { return r.json(); })
+							.then(function (j) {
+								if (j && j.success) {
+									meta.textContent = method + ' ' + route + ' — HTTP ' + (j.data && j.data.status);
+									body.textContent = JSON.stringify(j.data && j.data.data, null, 2);
+								} else {
+									meta.textContent = method + ' ' + route + ' — error';
+									body.textContent = JSON.stringify(j, null, 2);
+								}
+							})
+							.catch(function (err) {
+								meta.textContent = method + ' ' + route + ' — network error';
+								body.textContent = String(err);
+							});
+					});
+				});
+			})();
+			</script>
+		</div>
+		<?php
+	}
+
+	private static function render_audit_digest_card() {
+		$cadence    = AI_Site_Connector_Audit_Digest::cadence();
+		$recipients = (string) get_option( AI_Site_Connector_Audit_Digest::RECIPIENTS_OPTION, '' );
+		$next_send  = wp_next_scheduled( AI_Site_Connector_Audit_Digest::CRON_HOOK );
+		?>
+		<div class="asc-card">
+			<h2><?php esc_html_e( 'Email digest', 'ai-site-connector' ); ?></h2>
+			<p class="description">
+				<?php esc_html_e( 'Optional periodic summary of audit events sent by email. Lighter-weight alternative to a real-time webhook. Empty windows (no events) are skipped automatically.', 'ai-site-connector' ); ?>
+			</p>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<input type="hidden" name="action" value="ai_site_connector_save_digest_settings" />
+				<table class="asc-kv">
+					<tr>
+						<th><label for="digest_cadence"><?php esc_html_e( 'Cadence', 'ai-site-connector' ); ?></label></th>
+						<td>
+							<select name="digest_cadence" id="digest_cadence">
+								<option value="off" <?php selected( $cadence, 'off' ); ?>><?php esc_html_e( 'Off (no email)', 'ai-site-connector' ); ?></option>
+								<option value="daily" <?php selected( $cadence, 'daily' ); ?>><?php esc_html_e( 'Daily', 'ai-site-connector' ); ?></option>
+								<option value="weekly" <?php selected( $cadence, 'weekly' ); ?>><?php esc_html_e( 'Weekly', 'ai-site-connector' ); ?></option>
+							</select>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="digest_recipients"><?php esc_html_e( 'Recipients', 'ai-site-connector' ); ?></label></th>
+						<td>
+							<input type="text" name="digest_recipients" id="digest_recipients" class="regular-text" value="<?php echo esc_attr( $recipients ); ?>" placeholder="<?php echo esc_attr( get_option( 'admin_email' ) ); ?>" />
+							<p class="description"><?php esc_html_e( 'Comma-separated emails. Defaults to the WordPress admin email if blank.', 'ai-site-connector' ); ?></p>
+						</td>
+					</tr>
+					<?php if ( $next_send ) : ?>
+					<tr>
+						<th><?php esc_html_e( 'Next send', 'ai-site-connector' ); ?></th>
+						<td>
+							<?php
+							echo esc_html(
+								human_time_diff( time(), (int) $next_send ) . ' (' . gmdate( 'Y-m-d H:i', (int) $next_send ) . ' UTC)'
+							);
+							?>
+						</td>
+					</tr>
+					<?php endif; ?>
+				</table>
+				<p>
+					<button type="submit" class="button button-primary"><?php esc_html_e( 'Save digest settings', 'ai-site-connector' ); ?></button>
+				</p>
+			</form>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<input type="hidden" name="action" value="ai_site_connector_send_test_digest" />
+				<p>
+					<button type="submit" class="button button-secondary"><?php esc_html_e( 'Send test digest now', 'ai-site-connector' ); ?></button>
+					<span class="description"><?php esc_html_e( 'Sends a one-off email covering the last 7 days to the configured recipients.', 'ai-site-connector' ); ?></span>
+				</p>
+			</form>
+		</div>
+		<?php
+	}
+
+	private static function render_preflight_result( $preflight ) {
+		if ( ! is_array( $preflight ) || empty( $preflight['status'] ) ) {
+			return;
+		}
+		$status = $preflight['status'];
+		$code   = isset( $preflight['code'] ) ? $preflight['code'] : '';
+		$hint   = isset( $preflight['hint'] ) ? $preflight['hint'] : '';
+		$badge_class = 'pass' === $status ? 'asc-ok' : ( 'skipped' === $status ? 'asc-warn' : 'asc-bad' );
+		$badge_label = 'pass' === $status
+			? __( 'Pre-flight ✓ verified', 'ai-site-connector' )
+			: ( 'skipped' === $status
+				? __( 'Pre-flight skipped', 'ai-site-connector' )
+				: sprintf(
+					/* translators: %s: HTTP status code or error code. */
+					__( 'Pre-flight ✗ failed (%s)', 'ai-site-connector' ),
+					(string) $code
+				) );
+		?>
+		<p class="asc-preflight">
+			<span class="asc-badge <?php echo esc_attr( $badge_class ); ?>"><?php echo esc_html( $badge_label ); ?></span>
+			<span class="asc-preflight-hint"><?php echo esc_html( $hint ); ?></span>
+		</p>
+		<?php
+	}
+
+	private static function render_connection_pack( $pack ) {
+		$formats = AI_Site_Connector_Connection_Formats::all( $pack );
+		if ( empty( $formats ) ) {
+			return;
+		}
+		// Unique radio-group name per render so multiple packs on one page don't collide.
+		$group = 'asc-fmt-' . substr( md5( wp_json_encode( $pack ) . microtime( true ) ), 0, 8 );
+		?>
+		<div class="asc-pack asc-format-picker">
 			<h3><?php esc_html_e( 'Connection pack — copy now, you will not see this password again', 'ai-site-connector' ); ?></h3>
 			<p class="description"><strong><?php esc_html_e( 'Save this in a password manager. Do not commit it to git.', 'ai-site-connector' ); ?></strong></p>
-			<details open>
-				<summary><?php esc_html_e( 'connection-pack.json (full, includes plaintext password)', 'ai-site-connector' ); ?></summary>
-				<pre class="asc-codeblock" data-copy><?php echo esc_html( $json ); ?></pre>
-				<button type="button" class="button" data-asc-copy="prev"><?php esc_html_e( 'Copy JSON', 'ai-site-connector' ); ?></button>
-			</details>
 
-			<h4><?php esc_html_e( 'Test with curl', 'ai-site-connector' ); ?></h4>
-			<pre class="asc-codeblock" data-copy>curl -u '<?php echo esc_html( $user ); ?>:<?php echo esc_html( $pass ); ?>' '<?php echo esc_html( $base ); ?>wp/v2/users/me'</pre>
-			<button type="button" class="button" data-asc-copy="prev"><?php esc_html_e( 'Copy curl', 'ai-site-connector' ); ?></button>
+			<?php
+			// Radio inputs come first so the :checked ~ .panels selectors work without JS.
+			foreach ( $formats as $idx => $fmt ) :
+				$radio_id = $group . '-' . $fmt['id'];
+				?>
+				<input
+					type="radio"
+					name="<?php echo esc_attr( $group ); ?>"
+					id="<?php echo esc_attr( $radio_id ); ?>"
+					class="asc-fmt-radio asc-fmt-radio-<?php echo esc_attr( $fmt['id'] ); ?>"
+					<?php checked( 0, $idx ); ?>
+				/>
+			<?php endforeach; ?>
 
-			<h4><?php esc_html_e( 'Test with Python (requests)', 'ai-site-connector' ); ?></h4>
-			<pre class="asc-codeblock" data-copy>import requests
-r = requests.get(
-    "<?php echo esc_html( $base ); ?>wp/v2/users/me",
-    auth=("<?php echo esc_html( $user ); ?>", "<?php echo esc_html( $pass ); ?>"),
-    timeout=15,
-)
-print(r.status_code, r.json())</pre>
-			<button type="button" class="button" data-asc-copy="prev"><?php esc_html_e( 'Copy Python', 'ai-site-connector' ); ?></button>
+			<div class="asc-fmt-tabs" role="tablist">
+				<?php foreach ( $formats as $fmt ) :
+					$radio_id = $group . '-' . $fmt['id'];
+					?>
+					<label
+						for="<?php echo esc_attr( $radio_id ); ?>"
+						class="asc-fmt-tab asc-fmt-tab-<?php echo esc_attr( $fmt['id'] ); ?>"
+						role="tab"
+					><?php echo esc_html( $fmt['label'] ); ?></label>
+				<?php endforeach; ?>
+			</div>
 
-			<h4><?php esc_html_e( 'Test with JavaScript (fetch)', 'ai-site-connector' ); ?></h4>
-			<pre class="asc-codeblock" data-copy>const auth = "Basic " + btoa("<?php echo esc_html( $user ); ?>:<?php echo esc_html( $pass ); ?>");
-const r = await fetch("<?php echo esc_html( $base ); ?>wp/v2/users/me", { headers: { Authorization: auth } });
-console.log(r.status, await r.json());</pre>
-			<button type="button" class="button" data-asc-copy="prev"><?php esc_html_e( 'Copy JS', 'ai-site-connector' ); ?></button>
-
-			<h4><?php esc_html_e( 'Claude Code instructions', 'ai-site-connector' ); ?></h4>
-			<pre class="asc-codeblock" data-copy>You can authenticate to this WordPress site using HTTP Basic Auth.
-- REST base: <?php echo esc_html( $base ); ?>
-
-- Username: <?php echo esc_html( $user ); ?>
-
-- Password: (Application Password from the connection pack)
-Add header: Authorization: Basic base64(username:application_password)
-Plugin health endpoint: <?php echo esc_html( isset( $pack['plugin_health_endpoint'] ) ? $pack['plugin_health_endpoint'] : '' ); ?>
-
-Do not commit this password to git.</pre>
-			<button type="button" class="button" data-asc-copy="prev"><?php esc_html_e( 'Copy instructions', 'ai-site-connector' ); ?></button>
+			<div class="asc-fmt-panels">
+				<?php foreach ( $formats as $fmt ) : ?>
+					<section
+						class="asc-fmt-panel asc-fmt-panel-<?php echo esc_attr( $fmt['id'] ); ?>"
+						role="tabpanel"
+						aria-label="<?php echo esc_attr( $fmt['label'] ); ?>"
+					>
+						<p class="description"><?php echo esc_html( $fmt['hint'] ); ?></p>
+						<pre class="asc-codeblock" data-copy><?php echo esc_html( $fmt['code'] ); ?></pre>
+						<button type="button" class="button" data-asc-copy="prev"><?php
+							/* translators: %s: format label, e.g. "Claude Desktop (MCP)". */
+							echo esc_html( sprintf( __( 'Copy %s', 'ai-site-connector' ), $fmt['label'] ) );
+						?></button>
+					</section>
+				<?php endforeach; ?>
+			</div>
 		</div>
 		<?php
 	}
@@ -615,6 +1036,7 @@ Do not commit this password to git.</pre>
 		$retention_days = AI_Site_Connector_Audit_Log::retention_days();
 		$next_run       = wp_next_scheduled( AI_Site_Connector_Audit_Log::CRON_HOOK );
 		$tools          = AI_Site_Connector_Audit_Log::distinct_tools();
+		self::render_audit_digest_card();
 		?>
 		<div class="asc-card">
 			<h2><?php esc_html_e( 'Retention', 'ai-site-connector' ); ?></h2>

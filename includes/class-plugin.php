@@ -24,15 +24,21 @@ class AI_Site_Connector_Plugin {
 	private function boot() {
 		AI_Site_Connector_Roles::register_hooks();
 		AI_Site_Connector_Audit_Log::register_hooks();
+		AI_Site_Connector_Audit_Digest::register_hooks();
 		AI_Site_Connector_Permissions::register_hooks();
 		AI_Site_Connector_Diagnostics::register_hooks();
 		AI_Site_Connector_Cache::register_hooks();
 		AI_Site_Connector_Media::register_hooks();
 		AI_Site_Connector_Export::register_hooks();
 		AI_Site_Connector_REST_Controller::register_hooks();
+		AI_Site_Connector_Updater::register_hooks();
+		AI_Site_Connector_Backup_Manager::register_hooks();
+		AI_Site_Connector_API_Explorer::register_hooks();
+		AI_Site_Connector_MCP_Server::register_hooks();
 
 		if ( is_admin() ) {
 			AI_Site_Connector_Admin_Page::register_hooks();
+			AI_Site_Connector_Onboarding::register_hooks();
 		}
 
 		if ( defined( 'WP_CLI' ) && WP_CLI && class_exists( 'AI_Site_Connector_CLI' ) ) {
@@ -59,6 +65,11 @@ class AI_Site_Connector_Plugin {
 		AI_Site_Connector_Roles::ensure_role();
 		AI_Site_Connector_Audit_Log::install_table();
 		AI_Site_Connector_Audit_Log::maybe_schedule_cron();
+		// Default new installs to "onboarding not yet completed" so the welcome notice shows.
+		if ( false === get_option( AI_Site_Connector_Onboarding::OPTION, false )
+			&& false === get_option( AI_Site_Connector_Onboarding::OPTION ) ) {
+			add_option( AI_Site_Connector_Onboarding::OPTION, 0, '', false );
+		}
 		AI_Site_Connector_Audit_Log::record(
 			'plugin_activated',
 			array(
@@ -70,6 +81,7 @@ class AI_Site_Connector_Plugin {
 
 	public static function deactivate() {
 		AI_Site_Connector_Audit_Log::unschedule_cron();
+		AI_Site_Connector_Audit_Digest::unschedule_cron();
 		AI_Site_Connector_Audit_Log::record(
 			'plugin_deactivated',
 			array(

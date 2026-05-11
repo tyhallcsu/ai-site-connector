@@ -399,4 +399,22 @@ class AI_Site_Connector_Audit_Log {
 		fclose( $fh );
 		return is_string( $csv ) ? $csv : '';
 	}
+
+	/**
+	 * Fetch audit rows newer than $cutoff_unix_timestamp.
+	 *
+	 * @param int $cutoff_unix_timestamp Unix epoch. Rows with `created_at` strictly after this are returned.
+	 * @param int $limit                 Max rows. Clamped to [1, 5000].
+	 * @return array Rows (most recent first).
+	 */
+	public static function since( $cutoff_unix_timestamp, $limit = 1000 ) {
+		global $wpdb;
+		$table  = self::table_name();
+		$limit  = max( 1, min( 5000, (int) $limit ) );
+		$cutoff = gmdate( 'Y-m-d H:i:s', (int) $cutoff_unix_timestamp );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return $wpdb->get_results(
+			$wpdb->prepare( "SELECT * FROM {$table} WHERE created_at >= %s ORDER BY id DESC LIMIT %d", $cutoff, $limit )
+		);
+	}
 }

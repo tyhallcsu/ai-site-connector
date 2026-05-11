@@ -166,6 +166,61 @@ class AI_Site_Connector_CLI {
 	}
 
 	/**
+	 * Atomically rotate an Application Password.
+	 *
+	 * Mints a new password preserving sidecar metadata (scopes, IP allowlist,
+	 * expiry), then revokes the old one. If the revoke fails the new password
+	 * is rolled back so you're never left with two valid credentials.
+	 *
+	 * ## OPTIONS
+	 *
+	 * --username=<username>
+	 * : Login of the WordPress user whose password is being rotated.
+	 *
+	 * --uuid=<uuid>
+	 * : UUID of the existing Application Password to rotate.
+	 *
+	 * [--name=<name>]
+	 * : Optional name for the new password. Defaults to "<old name> (rotated <date>)".
+	 *
+	 * [--format=<format>]
+	 * : json|table|yaml. Default: table.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *   wp ai-connector rotate-password --username=ai-agent --uuid=abc-123
+	 *   wp ai-connector rotate-password --username=ai-agent --uuid=abc-123 --format=json
+	 */
+	public function rotate_password( $args, $assoc ) {
+		$username = isset( $assoc['username'] ) ? $assoc['username'] : '';
+		$uuid     = isset( $assoc['uuid'] ) ? $assoc['uuid'] : '';
+		$new_name = isset( $assoc['name'] ) ? $assoc['name'] : null;
+		$user     = $username ? get_user_by( 'login', $username ) : null;
+		if ( ! $user ) {
+			WP_CLI::error( 'User not found.' );
+		}
+		$res = AI_Site_Connector_Application_Passwords::rotate( $user->ID, $uuid, $new_name );
+		if ( is_wp_error( $res ) ) {
+			WP_CLI::error( $res->get_error_message() );
+		}
+		$pack = array(
+			'site_url'             => home_url(),
+			'rest_api_base'        => trailingslashit( rest_url() ),
+			'username'             => $user->user_login,
+			'application_password' => $res['password'],
+			'app_password_uuid'    => $res['uuid'],
+			'app_password_name'    => $res['name'],
+		);
+		$format = isset( $assoc['format'] ) ? $assoc['format'] : 'table';
+		if ( 'json' === $format ) {
+			WP_CLI::log( wp_json_encode( $pack, JSON_PRETTY_PRINT ) );
+		} else {
+			\WP_CLI\Utils\format_items( $format, array( $pack ), array_keys( $pack ) );
+		}
+		WP_CLI::success( sprintf( 'Application Password rotated for %s. Save the new password — it will not be shown again.', $user->user_login ) );
+	}
+
+	/**
 	 * Run an end-to-end self-test of the plugin install.
 	 *
 	 * Exits 0 if every check passes, non-zero on any failure. Designed for use

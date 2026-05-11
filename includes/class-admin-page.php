@@ -21,6 +21,7 @@ class AI_Site_Connector_Admin_Page {
 		add_action( 'admin_post_ai_site_connector_create_user', array( __CLASS__, 'handle_create_user' ) );
 		add_action( 'admin_post_ai_site_connector_generate_password', array( __CLASS__, 'handle_generate_password' ) );
 		add_action( 'admin_post_ai_site_connector_revoke_password', array( __CLASS__, 'handle_revoke_password' ) );
+		add_action( 'admin_post_ai_site_connector_rotate_password', array( __CLASS__, 'handle_rotate_password' ) );
 		add_action( 'admin_post_ai_site_connector_test_rest', array( __CLASS__, 'handle_test_rest' ) );
 		add_action( 'admin_post_ai_site_connector_prune_log', array( __CLASS__, 'handle_prune_log' ) );
 		add_action( 'admin_post_ai_site_connector_save_uninstall_pref', array( __CLASS__, 'handle_save_uninstall_pref' ) );
@@ -299,6 +300,38 @@ class AI_Site_Connector_Admin_Page {
 		} else {
 			self::flash( __( 'Application Password revoked.', 'ai-site-connector' ), 'success' );
 		}
+		self::redirect_back( 'credentials' );
+	}
+
+	public static function handle_rotate_password() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Insufficient permissions.', 'ai-site-connector' ) );
+		}
+		check_admin_referer( self::NONCE_ACTION, self::NONCE_FIELD );
+
+		$user_id = isset( $_POST['ai_user_id'] ) ? (int) $_POST['ai_user_id'] : 0;
+		$uuid    = isset( $_POST['ai_uuid'] ) ? sanitize_text_field( wp_unslash( $_POST['ai_uuid'] ) ) : '';
+
+		$res = AI_Site_Connector_Application_Passwords::rotate( $user_id, $uuid );
+		if ( is_wp_error( $res ) ) {
+			self::flash( $res->get_error_message(), 'error' );
+			self::redirect_back( 'credentials' );
+		}
+
+		// Re-emit a full connection pack for the new password so the operator
+		// sees the same format-picker UI they got on initial creation.
+		$pack = self::build_connection_pack( $user_id, $res );
+		self::flash(
+			sprintf(
+				/* translators: %s: new UUID. */
+				__( 'Application Password rotated. New UUID: %s. Copy the new password now — it will not be shown again.', 'ai-site-connector' ),
+				$res['uuid']
+			),
+			'success',
+			array(
+				'connection_pack' => $pack,
+			)
+		);
 		self::redirect_back( 'credentials' );
 	}
 
@@ -792,6 +825,13 @@ class AI_Site_Connector_Admin_Page {
 							<td><?php echo esc_html( isset( $p['created'] ) ? gmdate( 'Y-m-d H:i:s', (int) $p['created'] ) : '' ); ?></td>
 							<td><?php echo esc_html( ! empty( $p['last_used'] ) ? gmdate( 'Y-m-d H:i:s', (int) $p['last_used'] ) : '—' ); ?></td>
 							<td>
+								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline; margin-right: 6px;">
+									<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+									<input type="hidden" name="action" value="ai_site_connector_rotate_password" />
+									<input type="hidden" name="ai_user_id" value="<?php echo (int) $u->ID; ?>" />
+									<input type="hidden" name="ai_uuid" value="<?php echo esc_attr( isset( $p['uuid'] ) ? $p['uuid'] : '' ); ?>" />
+									<button type="submit" class="button" onclick="return confirm('<?php echo esc_js( __( 'Rotate this Application Password? A new one will be minted with the same scopes/IP/expiry; AI tools must use the new password going forward.', 'ai-site-connector' ) ); ?>');"><?php esc_html_e( 'Rotate', 'ai-site-connector' ); ?></button>
+								</form>
 								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline">
 									<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
 									<input type="hidden" name="action" value="ai_site_connector_revoke_password" />

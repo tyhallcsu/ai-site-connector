@@ -288,6 +288,32 @@ class AI_Site_Connector_REST_Controller {
 				'permission_callback' => array( __CLASS__, 'auth_admin' ),
 			)
 		);
+
+		register_rest_route(
+			$ns,
+			'/credentials/rotate-password',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'route_rotate_password' ),
+				'permission_callback' => array( __CLASS__, 'auth_admin' ),
+				'args'                => array(
+					'user_id' => array( 'type' => 'integer', 'required' => true ),
+					'uuid'    => array( 'type' => 'string',  'required' => true ),
+					'name'    => array( 'type' => 'string',  'required' => false ),
+				),
+			)
+		);
+	}
+
+	public static function route_rotate_password( WP_REST_Request $request ) {
+		$user_id = (int) $request->get_param( 'user_id' );
+		$uuid    = (string) $request->get_param( 'uuid' );
+		$name    = $request->get_param( 'name' );
+		$res     = AI_Site_Connector_Application_Passwords::rotate( $user_id, $uuid, $name );
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		return rest_ensure_response( $res );
 	}
 
 	public static function auth_upload() {

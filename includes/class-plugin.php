@@ -60,6 +60,7 @@ class AI_Site_Connector_Plugin {
 			WP_CLI::add_command( 'ai-connector create-user', array( 'AI_Site_Connector_CLI', 'create_user' ) );
 			WP_CLI::add_command( 'ai-connector generate-password', array( 'AI_Site_Connector_CLI', 'generate_password' ) );
 			WP_CLI::add_command( 'ai-connector revoke-password', array( 'AI_Site_Connector_CLI', 'revoke_password' ) );
+			WP_CLI::add_command( 'ai-connector rotate-password', array( 'AI_Site_Connector_CLI', 'rotate_password' ) );
 		}
 	}
 

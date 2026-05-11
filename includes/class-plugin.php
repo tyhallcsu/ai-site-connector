@@ -24,6 +24,7 @@ class AI_Site_Connector_Plugin {
 	private function boot() {
 		AI_Site_Connector_Roles::register_hooks();
 		AI_Site_Connector_Audit_Log::register_hooks();
+		AI_Site_Connector_Audit_Digest::register_hooks();
 		AI_Site_Connector_REST_Controller::register_hooks();
 		AI_Site_Connector_Updater::register_hooks();
 
@@ -66,6 +67,7 @@ class AI_Site_Connector_Plugin {
 
 	public static function deactivate() {
 		AI_Site_Connector_Audit_Log::unschedule_cron();
+		AI_Site_Connector_Audit_Digest::unschedule_cron();
 		AI_Site_Connector_Audit_Log::record(
 			'plugin_deactivated',
 			array(

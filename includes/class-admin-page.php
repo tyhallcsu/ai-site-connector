@@ -717,6 +717,66 @@ class AI_Site_Connector_Admin_Page {
 		<?php
 	}
 
+	private static function render_audit_digest_card() {
+		$cadence    = AI_Site_Connector_Audit_Digest::cadence();
+		$recipients = (string) get_option( AI_Site_Connector_Audit_Digest::RECIPIENTS_OPTION, '' );
+		$next_send  = wp_next_scheduled( AI_Site_Connector_Audit_Digest::CRON_HOOK );
+		?>
+		<div class="asc-card">
+			<h2><?php esc_html_e( 'Email digest', 'ai-site-connector' ); ?></h2>
+			<p class="description">
+				<?php esc_html_e( 'Optional periodic summary of audit events sent by email. Lighter-weight alternative to a real-time webhook. Empty windows (no events) are skipped automatically.', 'ai-site-connector' ); ?>
+			</p>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<input type="hidden" name="action" value="ai_site_connector_save_digest_settings" />
+				<table class="asc-kv">
+					<tr>
+						<th><label for="digest_cadence"><?php esc_html_e( 'Cadence', 'ai-site-connector' ); ?></label></th>
+						<td>
+							<select name="digest_cadence" id="digest_cadence">
+								<option value="off" <?php selected( $cadence, 'off' ); ?>><?php esc_html_e( 'Off (no email)', 'ai-site-connector' ); ?></option>
+								<option value="daily" <?php selected( $cadence, 'daily' ); ?>><?php esc_html_e( 'Daily', 'ai-site-connector' ); ?></option>
+								<option value="weekly" <?php selected( $cadence, 'weekly' ); ?>><?php esc_html_e( 'Weekly', 'ai-site-connector' ); ?></option>
+							</select>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="digest_recipients"><?php esc_html_e( 'Recipients', 'ai-site-connector' ); ?></label></th>
+						<td>
+							<input type="text" name="digest_recipients" id="digest_recipients" class="regular-text" value="<?php echo esc_attr( $recipients ); ?>" placeholder="<?php echo esc_attr( get_option( 'admin_email' ) ); ?>" />
+							<p class="description"><?php esc_html_e( 'Comma-separated emails. Defaults to the WordPress admin email if blank.', 'ai-site-connector' ); ?></p>
+						</td>
+					</tr>
+					<?php if ( $next_send ) : ?>
+					<tr>
+						<th><?php esc_html_e( 'Next send', 'ai-site-connector' ); ?></th>
+						<td>
+							<?php
+							echo esc_html(
+								human_time_diff( time(), (int) $next_send ) . ' (' . gmdate( 'Y-m-d H:i', (int) $next_send ) . ' UTC)'
+							);
+							?>
+						</td>
+					</tr>
+					<?php endif; ?>
+				</table>
+				<p>
+					<button type="submit" class="button button-primary"><?php esc_html_e( 'Save digest settings', 'ai-site-connector' ); ?></button>
+				</p>
+			</form>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<input type="hidden" name="action" value="ai_site_connector_send_test_digest" />
+				<p>
+					<button type="submit" class="button button-secondary"><?php esc_html_e( 'Send test digest now', 'ai-site-connector' ); ?></button>
+					<span class="description"><?php esc_html_e( 'Sends a one-off email covering the last 7 days to the configured recipients.', 'ai-site-connector' ); ?></span>
+				</p>
+			</form>
+		</div>
+		<?php
+	}
+
 	private static function render_preflight_result( $preflight ) {
 		if ( ! is_array( $preflight ) || empty( $preflight['status'] ) ) {
 			return;
@@ -804,6 +864,7 @@ class AI_Site_Connector_Admin_Page {
 		$rows           = AI_Site_Connector_Audit_Log::recent( 100 );
 		$retention_days = AI_Site_Connector_Audit_Log::retention_days();
 		$next_run       = wp_next_scheduled( AI_Site_Connector_Audit_Log::CRON_HOOK );
+		self::render_audit_digest_card();
 		?>
 		<div class="asc-card">
 			<h2><?php esc_html_e( 'Retention', 'ai-site-connector' ); ?></h2>

@@ -4,6 +4,87 @@ All notable changes to AI Site Connector are documented here. The format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-05-11
+
+### Fixed
+
+- Clicking the in-plugin "Update now" button no longer leaves the plugin deactivated after the file swap (closes #44). `Plugin_Upgrader::upgrade()` deactivates the plugin via `upgrader_pre_install` but never re-activates on the single-plugin code path — only the bulk-upgrade path does that. `handle_run_update` now captures the pre-upgrade active state and explicitly calls `activate_plugin()` after a successful swap. If re-activation fails (e.g. the new code has a fatal), the redirect now bounces to the core Plugins screen so the operator sees the error inline instead of getting a 403 on the plugin's admin page (which the deactivated plugin no longer registers).
+
+### Added
+
+- New audit events: `update_reactivated` on the recovery path; `update_reactivation_failed` when `activate_plugin()` returns a `WP_Error`.
+
+### Notes
+
+- Affects every release that shipped the self-updater (v0.2.0 through v0.8.0). The native Dashboard → Updates / Plugins-screen "Update" buttons and `wp plugin update ai-site-connector` were never affected — only the in-plugin "Update now" path.
+
+## [0.8.0] - 2026-05-11
+
+Discovery + quality release.
+
+### Added
+
+- OpenAPI 3 spec at `GET /wp-json/ai-site-connector/v1/openapi.json` (closes #17). Generated from the live REST registry — new routes appear automatically. 1-hour cache, busted on plugin version change. Public read-only.
+- `/.well-known/ai-site-connector.json` discovery file (closes #18). Tiny public JSON that AI tools can fetch to auto-detect the plugin's REST namespace, MCP endpoint, OpenAPI URL, and supported auth methods. New `AI_SITE_CONNECTOR_DISCOVERY_DISABLE` kill switch.
+- Bundled stdio MCP server source in `examples/mcp-server/` (closes #16). Node 18+ Server that speaks MCP over stdio (Claude Desktop / Cursor's preferred transport) and forwards every `tools/call` to the plugin's HTTP MCP endpoint. Ships source-only — `npm install` locally then point your AI tool's config at `node /path/to/index.mjs`.
+- PHPUnit unit-test suite (closes #3). wp-mock based — runs in CI in under 5 seconds with no MySQL. Covers caps map (`class-roles`), Application Password wrapper contract (`class-application-passwords`), and per-password meta matcher helpers (CIDR + route scope). New CI job runs `composer test` on every PR.
+
+## [0.7.0] - 2026-05-11
+
+Observability release — visibility into audit events and per-credential usage.
+
+### Added
+
+- Audit log: date range + free-text search + 50-rows-per-page pagination, on top of the action/tool/status filters + CSV export that shipped in v0.4.0 (closes #20).
+- Per-Application-Password usage roll-ups (closes #19): request counts, error counts, top routes by UUID, 7-day window on the Credentials tab. Sampling knob `AI_SITE_CONNECTOR_USAGE_SAMPLE_RATE` for high-traffic sites.
+- Audit-log webhook forwarder (closes #14): post every selected event to Slack / Discord / Datadog / generic JSON. Non-blocking delivery, HMAC-SHA256 signature when a secret is configured, host-only redacted error logging.
+- One-click diagnostic report download (closes #21): button on the Diagnostics tab streams the full `Diagnostics::generate()` payload as a JSON attachment. New filter `ai_site_connector_diagnostic_report` for redaction.
+- Configurable audit-log retention in the admin UI (closes #23): numeric input on the Audit tab, server-clamped to [1, 3650] days. Filter still wins when defined in code.
+- New internal action `ai_site_connector_audit_recorded` so future features (and 3rd-party code) can react to audit writes without polling.
+
+## [0.6.0] - 2026-05-11
+
+Hardening release — per-Application-Password security controls.
+
+### Added
+
+- Atomic password rotation (closes #4): `wp ai-connector rotate-password` + admin "Rotate" button + `POST /credentials/rotate-password` REST route. Mints a new password preserving scopes/IP/expiry, revokes the old in one atomic step, rolls back on failure.
+- One-time-token connection-pack download (closes #6): generate a single-use signed URL the admin can DM. Returns the pack JSON exactly once with `Content-Disposition: attachment`, then 410s. 5-minute TTL.
+- Per-password REST scopes (closes #12): allow-list of method+route entries per Application Password. Enforced at `rest_pre_dispatch` priority 9 with 403 `scope_off`. UI checkbox tree on the Credentials tab.
+- Application Password expiration (closes #13): optional `expires_at` per password. Same-day expiries refused at REST auth with 401 `expired`. Daily WP-Cron auto-revokes expired credentials and sends a reminder email 7 days before expiry.
+- Per-password IP allowlist (closes #15): CIDR ranges (IPv4 + IPv6) per password. Enforced at REST auth with 403 `ip_off`. Reverse-proxy aware via `WP_TRUSTED_PROXIES` constant + `ai_site_connector_request_ip` filter.
+
+### Changed
+
+- New shared infrastructure: `AI_Site_Connector_App_Password_Meta` (sidecar metadata for scopes/IP/expiry/usage counters), `AI_Site_Connector_App_Password_Resolver` (per-request UUID resolver hooking the WP 5.7+ `application_password_did_authenticate` action).
+
+## [0.5.2] - 2026-05-11
+
+### Fixed
+
+- Self-updater Updates card now auto-populates on first visit instead of showing "Not checked yet" until WordPress's own `update_plugins` schedule fires. New `AI_Site_Connector_Updater::ensure_check()` does a synchronous GitHub fetch when the cache is empty.
+- Defensive `class_exists()` guard around the Updates card render — if the updater file is ever missing or surgically disabled, the card now degrades gracefully instead of throwing.
+
+### Added
+
+- Daily WP-Cron `ai_site_connector_update_check` pre-warms the release cache so fleet operators who never open the admin still get fresh status.
+
+### Changed
+
+- Activation now clears the `update_plugins` and AI Site Connector release transients so newly-activated installs immediately check fresh.
+
+## [0.5.0] - 2026-05-11
+
+### Added
+
+- First-run onboarding wizard with a 5-step "Get Started" tab + welcome notice (closes #31).
+- Backup-before-update + one-click rollback. Each self-update snapshots the previous plugin folder to `wp-content/upgrade-backups/ai-site-connector/{version}/`. Keeps the last 3, never deletes the currently-installed version (closes #32).
+- Pre-flight verification on Application Password generation. Server-side probe of `/wp/v2/users/me` with the new credentials, with per-status hints (401 = Authorization-header stripping, 403 = caps/WAF, 404 = REST off, 5xx = server error) (closes #33).
+- Sample agent code in `examples/{python,node,bash}/` — three runnable reference clients demonstrating the full flow (health, list, create, upload) (closes #34).
+- MCP HTTP transport endpoint at `/wp-json/ai-site-connector/v1/mcp` speaking JSON-RPC 2.0. Supports `initialize`, `tools/list`, `tools/call`, `ping`. 9 tools wrap the plugin's REST endpoints + core WP post operations via internal `rest_do_request`. New `AI_SITE_CONNECTOR_MCP_DISABLE` constant (closes #35).
+- Daily / weekly audit-log email digest. Configurable cadence, recipients, "Send test digest now". Empty windows skipped on auto-runs (closes #36).
+- In-admin REST endpoint explorer ("API Explorer" tab). Lists the plugin's REST routes plus a curated set of `wp/v2/*` routes with an inline "Try it" button. Internal dispatch via `rest_do_request` — no HTTP loopback (closes #37).
+
 ## [0.4.0] - 2026-05-11
 
 Numbered 0.4.0 (not 0.2.0) because v0.2.0 and v0.3.0 had already been

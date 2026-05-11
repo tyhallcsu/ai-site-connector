@@ -94,6 +94,15 @@ class AI_Site_Connector_Audit_Webhook {
 		if ( '' === $url ) {
 			return;
 		}
+		// Re-check the URL at delivery time, not just at save time. DNS can
+		// change between when the operator typed it and when WP-Cron fires —
+		// re-resolving on every send is the standard defense-in-depth pattern
+		// against DNS rebinding for SSRF.
+		$guard = AI_Site_Connector_Url_Guard::check_outbound_safe( $url, 'webhook_delivery' );
+		if ( is_wp_error( $guard ) ) {
+			self::log_delivery_failure( $url, 'url_guard_' . $guard->get_error_code(), $guard->get_error_message() );
+			return;
+		}
 		$row = AI_Site_Connector_Audit_Log::get_row( (int) $row_id );
 		if ( ! $row ) {
 			return;
@@ -220,6 +229,31 @@ class AI_Site_Connector_Audit_Webhook {
 		$events = isset( $_POST['webhook_events'] ) && is_array( $_POST['webhook_events'] )
 			? array_filter( array_map( 'sanitize_key', wp_unslash( $_POST['webhook_events'] ) ) )
 			: array();
+
+		// SSRF guard at save time gives operators a clear inline error instead
+		// of a silent delivery failure later. Empty URL is fine (disables the
+		// webhook) — only check when there's something to validate.
+		if ( '' !== $url ) {
+			$guard = AI_Site_Connector_Url_Guard::check_outbound_safe( $url, 'webhook_save' );
+			if ( is_wp_error( $guard ) ) {
+				set_transient(
+					AI_Site_Connector_Admin_Page::FLASH_OPTION . '_' . get_current_user_id(),
+					array(
+						'msg'   => sprintf(
+							/* translators: %s: guard error message. */
+							__( 'Webhook URL rejected: %s', 'ai-site-connector' ),
+							$guard->get_error_message()
+						),
+						'type'  => 'error',
+						'extra' => array(),
+					),
+					60
+				);
+				wp_safe_redirect( add_query_arg( array( 'page' => AI_Site_Connector_Admin_Page::PAGE_SLUG, 'tab' => 'audit' ), admin_url( 'tools.php' ) ) );
+				exit;
+			}
+		}
+
 		update_option( self::URL_OPTION, $url, false );
 		update_option( self::SECRET_OPTION, $secret, false );
 		update_option( self::FORMAT_OPTION, $format );

@@ -40,6 +40,7 @@ define( 'AI_SITE_CONNECTOR_REST_NAMESPACE', 'ai-site-connector/v1' );
 define( 'AI_SITE_CONNECTOR_OPERATOR_ROLE', 'ai_site_operator' );
 
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-plugin.php';
+require_once AI_SITE_CONNECTOR_DIR . 'includes/class-url-guard.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-roles.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-user-manager.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-application-passwords.php';

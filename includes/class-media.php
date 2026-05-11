@@ -64,9 +64,11 @@ class AI_Site_Connector_Media {
 			return new WP_Error( 'rest_invalid_param', __( 'A "url" parameter is required.', 'ai-site-connector' ), array( 'status' => 400 ) );
 		}
 
-		$scheme = wp_parse_url( $url, PHP_URL_SCHEME );
-		if ( ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
-			return new WP_Error( 'rest_invalid_param', __( 'URL scheme must be http or https.', 'ai-site-connector' ), array( 'status' => 400 ) );
+		// SSRF guard — verifies scheme + that the host doesn't resolve to a
+		// private, loopback, link-local, or reserved IP. See class-url-guard.php.
+		$guard = AI_Site_Connector_Url_Guard::check_outbound_safe( $url, 'media_sideload' );
+		if ( is_wp_error( $guard ) ) {
+			return $guard;
 		}
 
 		require_once ABSPATH . 'wp-admin/includes/file.php';

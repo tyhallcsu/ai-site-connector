@@ -3,7 +3,7 @@
  * Plugin Name:       AI Site Connector
  * Plugin URI:        https://github.com/tyhallcsu/ai-site-connector
  * Description:       Connect Claude / Codex / AI coding agents to a self-hosted WordPress site over the REST API using Application Passwords. No WordPress.com or Jetpack required.
- * Version:           0.8.1
+ * Version:           0.9.0
  * Requires at least: 5.6
  * Requires PHP:      7.4
  * Author:            sharmanhall
@@ -23,6 +23,16 @@
  *   AI_SITE_CONNECTOR_MCP_DISABLE (bool)
  *     When true, the MCP HTTP transport route at
  *     /wp-json/ai-site-connector/v1/mcp is not registered. Default: false.
+ *   AI_SITE_CONNECTOR_DISCOVERY_DISABLE (bool)
+ *     When true, /.well-known/ai-site-connector.json is not served. Default: false.
+ *   AI_SITE_CONNECTOR_WEBHOOK_SECRET (string)
+ *     Audit-log webhook HMAC secret. When defined and non-empty, takes
+ *     precedence over the wp_option, keeping the secret out of the database.
+ *   AI_SITE_CONNECTOR_CLOUDFLARE_TOKEN (string)
+ *     Cloudflare API token used by /cache/purge. Same constant-first
+ *     preference as the webhook secret.
+ *   AI_SITE_CONNECTOR_CLOUDFLARE_ZONE_ID (string)
+ *     Cloudflare zone ID paired with the token above.
  *
  * @package AI_Site_Connector
  */
@@ -31,7 +41,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AI_SITE_CONNECTOR_VERSION', '0.8.1' );
+define( 'AI_SITE_CONNECTOR_VERSION', '0.9.0' );
 define( 'AI_SITE_CONNECTOR_FILE', __FILE__ );
 define( 'AI_SITE_CONNECTOR_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AI_SITE_CONNECTOR_URL', plugin_dir_url( __FILE__ ) );
@@ -40,6 +50,7 @@ define( 'AI_SITE_CONNECTOR_REST_NAMESPACE', 'ai-site-connector/v1' );
 define( 'AI_SITE_CONNECTOR_OPERATOR_ROLE', 'ai_site_operator' );
 
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-plugin.php';
+require_once AI_SITE_CONNECTOR_DIR . 'includes/class-url-guard.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-roles.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-user-manager.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-application-passwords.php';

@@ -1684,6 +1684,7 @@ class AI_Site_Connector_Admin_Page {
 			array(
 				'label'   => __( 'MCP namespace registered', 'ai-site-connector' ),
 				'ok'      => ! empty( $diag['rest_mcp']['registered_routes'] ),
+				/* translators: %d: number of MCP REST routes currently registered. */
 				'ok_label'  => sprintf( __( '%d route(s)', 'ai-site-connector' ), count( $diag['rest_mcp']['registered_routes'] ) ),
 				'bad_label' => __( 'No routes registered — plugin boot failed?', 'ai-site-connector' ),
 			),
@@ -1995,7 +1996,16 @@ Do not commit the Application Password to git.</pre>
 		<div class="asc-pack">
 			<h4><?php esc_html_e( 'Export written', 'ai-site-connector' ); ?></h4>
 			<p>
-				<?php echo esc_html( sprintf( __( 'Kind: %s · Bytes: %d', 'ai-site-connector' ), $r['kind'], (int) $r['bytes'] ) ); ?>
+				<?php
+				echo esc_html(
+					sprintf(
+						/* translators: 1: export kind slug, 2: payload size in bytes. */
+						__( 'Kind: %1$s · Bytes: %2$d', 'ai-site-connector' ),
+						$r['kind'],
+						(int) $r['bytes']
+					)
+				);
+				?>
 			</p>
 			<p>
 				<?php esc_html_e( 'Disk path:', 'ai-site-connector' ); ?>

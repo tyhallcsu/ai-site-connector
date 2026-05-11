@@ -57,8 +57,34 @@ class AI_Site_Connector_Audit_Webhook {
 		$f = (string) get_option( self::FORMAT_OPTION, 'auto' );
 		return in_array( $f, array( 'auto', 'generic', 'slack', 'discord', 'datadog' ), true ) ? $f : 'auto';
 	}
+	/**
+	 * The webhook HMAC secret. Constant wins over option so operators can keep
+	 * the secret out of the database (preferred for shared-host backups, audit
+	 * dumps, and SQLi blast-radius reduction).
+	 *
+	 * Define `AI_SITE_CONNECTOR_WEBHOOK_SECRET` in wp-config.php to use the
+	 * constant path.
+	 */
 	public static function configured_secret() {
+		if ( defined( 'AI_SITE_CONNECTOR_WEBHOOK_SECRET' ) && '' !== (string) AI_SITE_CONNECTOR_WEBHOOK_SECRET ) {
+			return (string) AI_SITE_CONNECTOR_WEBHOOK_SECRET;
+		}
 		return (string) get_option( self::SECRET_OPTION, '' );
+	}
+
+	/**
+	 * Where is the active webhook secret coming from? Used by the admin UI to
+	 * tell the operator whether they're storing the secret in the database or
+	 * in wp-config.php.
+	 *
+	 * @return string 'constant' | 'option' | 'none'
+	 */
+	public static function secret_source() {
+		if ( defined( 'AI_SITE_CONNECTOR_WEBHOOK_SECRET' ) && '' !== (string) AI_SITE_CONNECTOR_WEBHOOK_SECRET ) {
+			return 'constant';
+		}
+		$stored = (string) get_option( self::SECRET_OPTION, '' );
+		return '' === $stored ? 'none' : 'option';
 	}
 	public static function configured_filter() {
 		$raw = get_option( self::FILTER_OPTION, null );
@@ -92,6 +118,15 @@ class AI_Site_Connector_Audit_Webhook {
 	public static function deliver( $row_id ) {
 		$url = self::configured_url();
 		if ( '' === $url ) {
+			return;
+		}
+		// Re-check the URL at delivery time, not just at save time. DNS can
+		// change between when the operator typed it and when WP-Cron fires —
+		// re-resolving on every send is the standard defense-in-depth pattern
+		// against DNS rebinding for SSRF.
+		$guard = AI_Site_Connector_Url_Guard::check_outbound_safe( $url, 'webhook_delivery' );
+		if ( is_wp_error( $guard ) ) {
+			self::log_delivery_failure( $url, 'url_guard_' . $guard->get_error_code(), $guard->get_error_message() );
 			return;
 		}
 		$row = AI_Site_Connector_Audit_Log::get_row( (int) $row_id );
@@ -220,6 +255,31 @@ class AI_Site_Connector_Audit_Webhook {
 		$events = isset( $_POST['webhook_events'] ) && is_array( $_POST['webhook_events'] )
 			? array_filter( array_map( 'sanitize_key', wp_unslash( $_POST['webhook_events'] ) ) )
 			: array();
+
+		// SSRF guard at save time gives operators a clear inline error instead
+		// of a silent delivery failure later. Empty URL is fine (disables the
+		// webhook) — only check when there's something to validate.
+		if ( '' !== $url ) {
+			$guard = AI_Site_Connector_Url_Guard::check_outbound_safe( $url, 'webhook_save' );
+			if ( is_wp_error( $guard ) ) {
+				set_transient(
+					AI_Site_Connector_Admin_Page::FLASH_OPTION . '_' . get_current_user_id(),
+					array(
+						'msg'   => sprintf(
+							/* translators: %s: guard error message. */
+							__( 'Webhook URL rejected: %s', 'ai-site-connector' ),
+							$guard->get_error_message()
+						),
+						'type'  => 'error',
+						'extra' => array(),
+					),
+					60
+				);
+				wp_safe_redirect( add_query_arg( array( 'page' => AI_Site_Connector_Admin_Page::PAGE_SLUG, 'tab' => 'audit' ), admin_url( 'tools.php' ) ) );
+				exit;
+			}
+		}
+
 		update_option( self::URL_OPTION, $url, false );
 		update_option( self::SECRET_OPTION, $secret, false );
 		update_option( self::FORMAT_OPTION, $format );

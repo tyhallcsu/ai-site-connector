@@ -4,16 +4,36 @@
  *
  * Namespace: ai-site-connector/v1
  *
- * Endpoints:
- *  - GET /health             (public, MINIMAL safe summary; richer payload only when authenticated)
- *  - GET /me/capabilities    (auth, any logged-in user; returns ONLY the calling user's caps)
- *  - GET /site-info          (auth, edit_posts)
- *  - GET /plugins            (auth, manage_options)
- *  - GET /themes             (auth, manage_options)
- *  - GET /pages              (auth, edit_pages)
- *  - GET /posts              (auth, edit_posts)
+ * The surface is narrow and permission-gated. Every write path runs through
+ * AI_Site_Connector_Permissions::require_permission() AND the underlying WP
+ * capability check. There is no file editor, no SQL exec, no plugin installer.
  *
- * No write endpoints, no arbitrary code paths.
+ * Read endpoints
+ *  - GET  /health                    (public, MINIMAL summary; richer when authed)
+ *  - GET  /me/capabilities           (auth; returns ONLY the calling user's caps)
+ *  - GET  /site-info                 (auth, edit_posts)
+ *  - GET  /plugins                   (auth, manage_options)
+ *  - GET  /themes                    (auth, manage_options)
+ *  - GET  /pages                     (auth, edit_pages)
+ *  - GET  /posts                     (auth, edit_posts)
+ *  - GET  /tools                     (auth; MCP tool catalog with per-tool allow state)
+ *  - GET  /diagnostics/site-report   (auth, manage_options)
+ *  - GET  /export/media-manifest     (auth, edit_posts)
+ *  - GET  /export/recent-changes     (auth, edit_posts)
+ *  - GET  /export/page/<id>          (auth, edit_posts)
+ *  - GET  /export/site-manifest      (auth, manage_options)
+ *
+ * Write endpoints (added in v0.4.0; each requires its own permission slug)
+ *  - POST /cache/purge               (auth, manage_options + purge_cache)
+ *  - POST /media/sideload            (auth, upload_files + upload_media)
+ *  - POST /credentials/rotate-password (auth, manage_options)
+ *
+ * One-time-token endpoint
+ *  - GET  /connection-pack/<token>   (token IS the credential; 5-min single-use)
+ *
+ * Sibling controllers register two more routes in the same namespace:
+ *  - POST /mcp                       (class-mcp-server.php; JSON-RPC 2.0 MCP transport)
+ *  - GET  /openapi.json              (class-openapi.php; public OpenAPI 3 spec)
  *
  * @package AI_Site_Connector
  */

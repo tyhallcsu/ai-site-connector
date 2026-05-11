@@ -41,16 +41,18 @@ class AI_Site_Connector_Discovery {
 		return $vars;
 	}
 
-	public static function maybe_serve() {
-		if ( '1' !== (string) get_query_var( self::QUERY_VAR ) ) {
-			return;
-		}
-		nocache_headers();
-		header( 'Content-Type: application/json; charset=utf-8' );
-		header( 'Cache-Control: public, max-age=300' );
-		header( 'Access-Control-Allow-Origin: *' );
-
-		$payload = array(
+	/**
+	 * Build the discovery payload. Pure function of plugin constants + rest_url()
+	 * so it can be exercised in unit tests without spinning up WP request state.
+	 *
+	 * Shape contract documented in docs/DISCOVERY.md. spec_version MUST be bumped
+	 * when an existing field is renamed/removed/reshaped (additive changes do not
+	 * require a bump).
+	 *
+	 * @return array<string, mixed>
+	 */
+	public static function build_payload() {
+		return array(
 			'spec_version'      => '1',
 			'plugin'            => 'ai-site-connector',
 			'version'           => AI_SITE_CONNECTOR_VERSION,
@@ -65,8 +67,18 @@ class AI_Site_Connector_Discovery {
 			'auth_methods'      => array( 'basic_auth_application_password' ),
 			'status'            => 'active',
 		);
+	}
 
-		echo wp_json_encode( $payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+	public static function maybe_serve() {
+		if ( '1' !== (string) get_query_var( self::QUERY_VAR ) ) {
+			return;
+		}
+		nocache_headers();
+		header( 'Content-Type: application/json; charset=utf-8' );
+		header( 'Cache-Control: public, max-age=300' );
+		header( 'Access-Control-Allow-Origin: *' );
+
+		echo wp_json_encode( self::build_payload(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
 		exit;
 	}
 }

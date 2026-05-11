@@ -390,7 +390,7 @@ class AI_Site_Connector_Permissions {
 		$update  = array();
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- check_admin_referer above.
 		$posted = isset( $_POST['ai_site_connector_perms'] ) && is_array( $_POST['ai_site_connector_perms'] )
-			? wp_unslash( $_POST['ai_site_connector_perms'] )
+			? array_map( 'rest_sanitize_boolean', wp_unslash( $_POST['ai_site_connector_perms'] ) )
 			: array();
 		foreach ( $catalog as $key => $_meta ) {
 			$update[ $key ] = isset( $posted[ $key ] ) ? (bool) $posted[ $key ] : false;

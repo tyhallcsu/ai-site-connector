@@ -1302,9 +1302,25 @@ class AI_Site_Connector_Admin_Page {
 			'action' => isset( $_GET['filter_action'] ) ? sanitize_key( wp_unslash( $_GET['filter_action'] ) ) : '',
 			'tool'   => isset( $_GET['filter_tool'] ) ? sanitize_key( wp_unslash( $_GET['filter_tool'] ) ) : '',
 			'status' => isset( $_GET['filter_status'] ) ? sanitize_key( wp_unslash( $_GET['filter_status'] ) ) : '',
+			'since'  => isset( $_GET['filter_since'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_since'] ) ) : '',
+			'until'  => isset( $_GET['filter_until'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_until'] ) ) : '',
+			'search' => isset( $_GET['filter_search'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_search'] ) ) : '',
 		);
+		$paged    = isset( $_GET['paged'] ) ? max( 1, (int) $_GET['paged'] ) : 1;
+		$per_page = 50;
+		$filters['offset'] = ( $paged - 1 ) * $per_page;
+		// Normalize since/until to MySQL datetime: accept Y-m-d input (date pickers
+		// emit this) and expand to start/end of day so the range is inclusive.
+		if ( '' !== $filters['since'] && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $filters['since'] ) ) {
+			$filters['since'] .= ' 00:00:00';
+		}
+		if ( '' !== $filters['until'] && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $filters['until'] ) ) {
+			$filters['until'] .= ' 23:59:59';
+		}
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
-		$rows           = AI_Site_Connector_Audit_Log::recent( 100, $filters );
+		$rows           = AI_Site_Connector_Audit_Log::recent( $per_page, $filters );
+		$total_rows     = AI_Site_Connector_Audit_Log::count( $filters );
+		$total_pages    = (int) ceil( $total_rows / $per_page );
 		$retention_days = AI_Site_Connector_Audit_Log::retention_days();
 		$next_run       = wp_next_scheduled( AI_Site_Connector_Audit_Log::CRON_HOOK );
 		$tools          = AI_Site_Connector_Audit_Log::distinct_tools();
@@ -1405,6 +1421,18 @@ class AI_Site_Connector_Admin_Page {
 						<?php endforeach; ?>
 					</select>
 				</label>
+				<label>
+					<?php esc_html_e( 'Since', 'ai-site-connector' ); ?>
+					<input type="date" name="filter_since" value="<?php echo esc_attr( substr( $filters['since'], 0, 10 ) ); ?>" />
+				</label>
+				<label>
+					<?php esc_html_e( 'Until', 'ai-site-connector' ); ?>
+					<input type="date" name="filter_until" value="<?php echo esc_attr( substr( $filters['until'], 0, 10 ) ); ?>" />
+				</label>
+				<label>
+					<?php esc_html_e( 'Search', 'ai-site-connector' ); ?>
+					<input type="text" name="filter_search" value="<?php echo esc_attr( $filters['search'] ); ?>" placeholder="<?php esc_attr_e( 'free-text in message / summary / tool / action', 'ai-site-connector' ); ?>" />
+				</label>
 				<button type="submit" class="button"><?php esc_html_e( 'Filter', 'ai-site-connector' ); ?></button>
 				<a class="button" href="<?php echo esc_url( admin_url( 'tools.php?page=' . self::PAGE_SLUG . '&tab=audit' ) ); ?>"><?php esc_html_e( 'Clear', 'ai-site-connector' ); ?></a>
 			</form>
@@ -1414,6 +1442,9 @@ class AI_Site_Connector_Admin_Page {
 				<input type="hidden" name="filter_action" value="<?php echo esc_attr( $filters['action'] ); ?>" />
 				<input type="hidden" name="filter_tool" value="<?php echo esc_attr( $filters['tool'] ); ?>" />
 				<input type="hidden" name="filter_status" value="<?php echo esc_attr( $filters['status'] ); ?>" />
+				<input type="hidden" name="filter_since" value="<?php echo esc_attr( $filters['since'] ); ?>" />
+				<input type="hidden" name="filter_until" value="<?php echo esc_attr( $filters['until'] ); ?>" />
+				<input type="hidden" name="filter_search" value="<?php echo esc_attr( $filters['search'] ); ?>" />
 				<button type="submit" class="button"><?php esc_html_e( 'Download filtered rows as CSV', 'ai-site-connector' ); ?></button>
 			</form>
 		</div>
@@ -1460,6 +1491,48 @@ class AI_Site_Connector_Admin_Page {
 				<?php endif; ?>
 				</tbody>
 			</table>
+			<?php if ( $total_pages > 1 || $total_rows > $per_page ) : ?>
+				<p class="asc-pagination" style="margin-top: 12px;">
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: 1: rows shown on this page, 2: total matching rows, 3: current page, 4: total pages. */
+							__( 'Showing %1$d of %2$d rows. Page %3$d of %4$d.', 'ai-site-connector' ),
+							count( $rows ),
+							$total_rows,
+							$paged,
+							max( 1, $total_pages )
+						)
+					);
+					?>
+					<?php
+					$base_args = array_filter(
+						array(
+							'page'           => self::PAGE_SLUG,
+							'tab'            => 'audit',
+							'filter_action'  => $filters['action'],
+							'filter_tool'    => $filters['tool'],
+							'filter_status'  => $filters['status'],
+							'filter_since'   => substr( $filters['since'], 0, 10 ),
+							'filter_until'   => substr( $filters['until'], 0, 10 ),
+							'filter_search'  => $filters['search'],
+						),
+						static function ( $v ) {
+							return '' !== (string) $v;
+						}
+					);
+					if ( $paged > 1 ) :
+						$prev_url = add_query_arg( array_merge( $base_args, array( 'paged' => $paged - 1 ) ), admin_url( 'tools.php' ) );
+						?>
+						<a href="<?php echo esc_url( $prev_url ); ?>" class="button"><?php esc_html_e( '« Previous', 'ai-site-connector' ); ?></a>
+					<?php endif; ?>
+					<?php if ( $paged < $total_pages ) :
+						$next_url = add_query_arg( array_merge( $base_args, array( 'paged' => $paged + 1 ) ), admin_url( 'tools.php' ) );
+						?>
+						<a href="<?php echo esc_url( $next_url ); ?>" class="button"><?php esc_html_e( 'Next »', 'ai-site-connector' ); ?></a>
+					<?php endif; ?>
+				</p>
+			<?php endif; ?>
 		</div>
 		<?php
 	}
@@ -1829,7 +1902,16 @@ Do not commit the Application Password to git.</pre>
 			'action' => isset( $_POST['filter_action'] ) ? sanitize_key( wp_unslash( $_POST['filter_action'] ) ) : '',
 			'tool'   => isset( $_POST['filter_tool'] ) ? sanitize_key( wp_unslash( $_POST['filter_tool'] ) ) : '',
 			'status' => isset( $_POST['filter_status'] ) ? sanitize_key( wp_unslash( $_POST['filter_status'] ) ) : '',
+			'since'  => isset( $_POST['filter_since'] ) ? sanitize_text_field( wp_unslash( $_POST['filter_since'] ) ) : '',
+			'until'  => isset( $_POST['filter_until'] ) ? sanitize_text_field( wp_unslash( $_POST['filter_until'] ) ) : '',
+			'search' => isset( $_POST['filter_search'] ) ? sanitize_text_field( wp_unslash( $_POST['filter_search'] ) ) : '',
 		);
+		if ( '' !== $filters['since'] && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $filters['since'] ) ) {
+			$filters['since'] .= ' 00:00:00';
+		}
+		if ( '' !== $filters['until'] && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $filters['until'] ) ) {
+			$filters['until'] .= ' 23:59:59';
+		}
 
 		$csv = AI_Site_Connector_Audit_Log::export_csv( $filters );
 		$filename = 'ai-site-connector-audit-' . gmdate( 'Ymd-His' ) . '.csv';

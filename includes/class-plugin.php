@@ -35,6 +35,8 @@ class AI_Site_Connector_Plugin {
 		AI_Site_Connector_Media::register_hooks();
 		AI_Site_Connector_Export::register_hooks();
 		AI_Site_Connector_REST_Controller::register_hooks();
+		AI_Site_Connector_OpenAPI::register_hooks();
+		AI_Site_Connector_Discovery::register_hooks();
 		AI_Site_Connector_Updater::register_hooks();
 		AI_Site_Connector_Backup_Manager::register_hooks();
 		AI_Site_Connector_API_Explorer::register_hooks();

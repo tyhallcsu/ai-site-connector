@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.6.0
+Stable tag: 0.7.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,15 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.7.0 =
+* Observability release — visibility into audit events and per-credential usage.
+* Audit log: date range + free-text search + 50-rows-per-page pagination, on top of the action/tool/status filters + CSV export that shipped in v0.4.0 (closes #20).
+* Per-Application-Password usage roll-ups (closes #19): request counts, error counts, top routes by UUID, 7-day window on the Credentials tab. Sampling knob `AI_SITE_CONNECTOR_USAGE_SAMPLE_RATE` for high-traffic sites.
+* Audit-log webhook forwarder (closes #14): post every selected event to Slack / Discord / Datadog / generic JSON. Non-blocking delivery, HMAC-SHA256 signature when a secret is configured, host-only redacted error logging.
+* One-click diagnostic report download (closes #21): button on the Diagnostics tab streams the full `Diagnostics::generate()` payload as a JSON attachment. New filter `ai_site_connector_diagnostic_report` for redaction.
+* Configurable audit-log retention in the admin UI (closes #23): numeric input on the Audit tab, server-clamped to [1, 3650] days. Filter still wins when defined in code.
+* New internal action `ai_site_connector_audit_recorded` so future features (and 3rd-party code) can react to audit writes without polling.
+
 = 0.6.0 =
 * Hardening release — per-Application-Password security controls.
 * Atomic password rotation (closes #4): `wp ai-connector rotate-password` + admin "Rotate" button + `POST /credentials/rotate-password` REST route. Mints a new password preserving scopes/IP/expiry, revokes the old in one atomic step, rolls back on failure.

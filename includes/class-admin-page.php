@@ -27,6 +27,8 @@ class AI_Site_Connector_Admin_Page {
 		add_action( 'admin_post_ai_site_connector_save_uninstall_pref', array( __CLASS__, 'handle_save_uninstall_pref' ) );
 		add_action( 'admin_post_ai_site_connector_export_write', array( __CLASS__, 'handle_export_write' ) );
 		add_action( 'admin_post_ai_site_connector_export_audit_csv', array( __CLASS__, 'handle_export_audit_csv' ) );
+		add_action( 'admin_post_ai_site_connector_export_diagnostics', array( __CLASS__, 'handle_export_diagnostics' ) );
+		add_action( 'admin_post_ai_site_connector_save_retention', array( __CLASS__, 'handle_save_retention' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_assets' ) );
 	}
 
@@ -1435,6 +1437,21 @@ class AI_Site_Connector_Admin_Page {
 					?>
 				<?php endif; ?>
 			</p>
+			<?php $filter_override = (int) apply_filters( 'ai_site_connector_log_retention_days', $retention_days ) !== (int) get_option( AI_Site_Connector_Audit_Log::RETENTION_OPTION, AI_Site_Connector_Audit_Log::DEFAULT_RETENTION ); ?>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-bottom: 12px;">
+				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<input type="hidden" name="action" value="ai_site_connector_save_retention" />
+				<label>
+					<?php esc_html_e( 'Retention window (days):', 'ai-site-connector' ); ?>
+					<input type="number" name="retention_days" min="1" max="3650" step="1" value="<?php echo esc_attr( (string) (int) get_option( AI_Site_Connector_Audit_Log::RETENTION_OPTION, AI_Site_Connector_Audit_Log::DEFAULT_RETENTION ) ); ?>" />
+				</label>
+				<button type="submit" class="button button-secondary" <?php disabled( $filter_override ); ?>>
+					<?php esc_html_e( 'Save retention', 'ai-site-connector' ); ?>
+				</button>
+				<?php if ( $filter_override ) : ?>
+					<span class="description"><?php esc_html_e( 'Locked by ai_site_connector_log_retention_days filter in code.', 'ai-site-connector' ); ?></span>
+				<?php endif; ?>
+			</form>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
 				<input type="hidden" name="action" value="ai_site_connector_prune_log" />
@@ -1834,10 +1851,81 @@ Do not commit the Application Password to git.</pre>
 		<div class="asc-card">
 			<h2><?php esc_html_e( 'Site capability report', 'ai-site-connector' ); ?></h2>
 			<p class="description"><?php esc_html_e( 'Same payload returned by GET /diagnostics/site-report. No secrets are included — safe to paste into a support thread.', 'ai-site-connector' ); ?></p>
-			<pre class="asc-codeblock" data-copy><?php echo esc_html( (string) wp_json_encode( $report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ); ?></pre>
-			<button type="button" class="button" data-asc-copy="prev"><?php esc_html_e( 'Copy JSON', 'ai-site-connector' ); ?></button>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline">
+				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<input type="hidden" name="action" value="ai_site_connector_export_diagnostics" />
+				<p><button type="submit" class="button button-primary"><?php esc_html_e( 'Download diagnostic report (JSON)', 'ai-site-connector' ); ?></button></p>
+			</form>
+			<details>
+				<summary><?php esc_html_e( 'Preview JSON', 'ai-site-connector' ); ?></summary>
+				<pre class="asc-codeblock" data-copy><?php echo esc_html( (string) wp_json_encode( $report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ); ?></pre>
+				<button type="button" class="button" data-asc-copy="prev"><?php esc_html_e( 'Copy JSON', 'ai-site-connector' ); ?></button>
+			</details>
 		</div>
 		<?php
+	}
+
+	public static function handle_save_retention() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Insufficient permissions.', 'ai-site-connector' ) );
+		}
+		check_admin_referer( self::NONCE_ACTION, self::NONCE_FIELD );
+
+		$old_days = (int) get_option( AI_Site_Connector_Audit_Log::RETENTION_OPTION, AI_Site_Connector_Audit_Log::DEFAULT_RETENTION );
+		$new_days = isset( $_POST['retention_days'] ) ? (int) $_POST['retention_days'] : $old_days;
+		$new_days = max( 1, min( 3650, $new_days ) );
+		update_option( AI_Site_Connector_Audit_Log::RETENTION_OPTION, $new_days );
+
+		AI_Site_Connector_Audit_Log::record(
+			'audit_retention_updated',
+			array(
+				'message' => sprintf( 'Audit retention window updated from %d to %d days.', $old_days, $new_days ),
+				'meta'    => array( 'old_days' => $old_days, 'new_days' => $new_days ),
+			)
+		);
+
+		self::flash(
+			sprintf(
+				/* translators: %d: new retention days. */
+				__( 'Audit retention saved: %d days.', 'ai-site-connector' ),
+				$new_days
+			),
+			'success'
+		);
+		self::redirect_back( 'audit' );
+	}
+
+	public static function handle_export_diagnostics() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Insufficient permissions.', 'ai-site-connector' ) );
+		}
+		check_admin_referer( self::NONCE_ACTION, self::NONCE_FIELD );
+
+		$report = AI_Site_Connector_Diagnostics::generate();
+		/**
+		 * Filter the diagnostic report before download. Used by future
+		 * features to redact extra secret keys; the report itself is built
+		 * to not include passwords / tokens, but defensive filters can
+		 * scrub additional values if needed.
+		 *
+		 * @param array $report
+		 */
+		$report = (array) apply_filters( 'ai_site_connector_diagnostic_report', $report );
+
+		AI_Site_Connector_Audit_Log::record(
+			'diagnostic_report_exported',
+			array( 'message' => sprintf( 'Diagnostic report exported by user id %d.', get_current_user_id() ) )
+		);
+
+		$host     = wp_parse_url( home_url(), PHP_URL_HOST );
+		$host     = $host ? preg_replace( '/[^A-Za-z0-9.\-]+/', '', $host ) : 'site';
+		$filename = 'ai-site-connector-diagnostic-' . $host . '-' . gmdate( 'Ymd-His' ) . '.json';
+
+		nocache_headers();
+		header( 'Content-Type: application/json; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename=' . $filename );
+		echo wp_json_encode( $report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+		exit;
 	}
 
 	/** Export tab — write JSON manifests to wp-content/uploads/ai-site-connector/exports/. */

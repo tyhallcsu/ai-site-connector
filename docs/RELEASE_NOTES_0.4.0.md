@@ -1,8 +1,13 @@
-# Release notes — v0.2.0
+# Release notes — v0.4.0
 
 Adds the MCP tool surface, permission guard, audit log v2, media upload,
 cache purge, and export helpers. Backwards-compatible with v0.1 — every
 existing REST endpoint and admin form still works unchanged.
+
+> Numbered v0.4.0 because v0.2.0 and v0.3.0 were already published on this
+> repo from a parallel `claude/feature-batch-2` branch (native GH updater,
+> CI fix, tool-specific connection packs). Skipping the colliding numbers
+> keeps the published-versions timeline monotonic.
 
 ## What's new
 

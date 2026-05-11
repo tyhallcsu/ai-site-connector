@@ -4,7 +4,15 @@ All notable changes to AI Site Connector are documented here. The format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - 2026-05-11
+## [0.4.0] - 2026-05-11
+
+Numbered 0.4.0 (not 0.2.0) because v0.2.0 and v0.3.0 had already been
+published from a parallel `claude/feature-batch-2` branch (native GH
+updater, exec-bit CI fix, tool-specific connection packs) before this
+feature batch landed on `main`. Skipping the colliding numbers keeps
+the published-versions timeline monotonic.
+
+
 
 ### Added
 

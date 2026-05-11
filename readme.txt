@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.2.0
+Stable tag: 0.4.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,7 +37,7 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
-= 0.2.0 =
+= 0.4.0 =
 * New: Connection Test admin tab — pass/fail badges for every link in the MCP chain, available-tools table, copy-paste agent prompt.
 * New: Tool whitelist / permission guard — central `AI_Site_Connector_Permissions` gate enforced before every tool call; global read-only toggle; nine permission keys (read_content, write_content, upload_media, update_seo, purge_cache, export_manifest, view_diagnostics, update_options, destructive_operations); conservative defaults.
 * New: Site capability report at GET /diagnostics/site-report — WP/PHP versions, theme, active plugins, page builder / SEO / cache plugin detection, REST routes, current user caps, env limits, cron status.

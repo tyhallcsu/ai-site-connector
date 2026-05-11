@@ -57,8 +57,34 @@ class AI_Site_Connector_Audit_Webhook {
 		$f = (string) get_option( self::FORMAT_OPTION, 'auto' );
 		return in_array( $f, array( 'auto', 'generic', 'slack', 'discord', 'datadog' ), true ) ? $f : 'auto';
 	}
+	/**
+	 * The webhook HMAC secret. Constant wins over option so operators can keep
+	 * the secret out of the database (preferred for shared-host backups, audit
+	 * dumps, and SQLi blast-radius reduction).
+	 *
+	 * Define `AI_SITE_CONNECTOR_WEBHOOK_SECRET` in wp-config.php to use the
+	 * constant path.
+	 */
 	public static function configured_secret() {
+		if ( defined( 'AI_SITE_CONNECTOR_WEBHOOK_SECRET' ) && '' !== (string) AI_SITE_CONNECTOR_WEBHOOK_SECRET ) {
+			return (string) AI_SITE_CONNECTOR_WEBHOOK_SECRET;
+		}
 		return (string) get_option( self::SECRET_OPTION, '' );
+	}
+
+	/**
+	 * Where is the active webhook secret coming from? Used by the admin UI to
+	 * tell the operator whether they're storing the secret in the database or
+	 * in wp-config.php.
+	 *
+	 * @return string 'constant' | 'option' | 'none'
+	 */
+	public static function secret_source() {
+		if ( defined( 'AI_SITE_CONNECTOR_WEBHOOK_SECRET' ) && '' !== (string) AI_SITE_CONNECTOR_WEBHOOK_SECRET ) {
+			return 'constant';
+		}
+		$stored = (string) get_option( self::SECRET_OPTION, '' );
+		return '' === $stored ? 'none' : 'option';
 	}
 	public static function configured_filter() {
 		$raw = get_option( self::FILTER_OPTION, null );

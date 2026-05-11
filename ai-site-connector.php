@@ -23,6 +23,16 @@
  *   AI_SITE_CONNECTOR_MCP_DISABLE (bool)
  *     When true, the MCP HTTP transport route at
  *     /wp-json/ai-site-connector/v1/mcp is not registered. Default: false.
+ *   AI_SITE_CONNECTOR_DISCOVERY_DISABLE (bool)
+ *     When true, /.well-known/ai-site-connector.json is not served. Default: false.
+ *   AI_SITE_CONNECTOR_WEBHOOK_SECRET (string)
+ *     Audit-log webhook HMAC secret. When defined and non-empty, takes
+ *     precedence over the wp_option, keeping the secret out of the database.
+ *   AI_SITE_CONNECTOR_CLOUDFLARE_TOKEN (string)
+ *     Cloudflare API token used by /cache/purge. Same constant-first
+ *     preference as the webhook secret.
+ *   AI_SITE_CONNECTOR_CLOUDFLARE_ZONE_ID (string)
+ *     Cloudflare zone ID paired with the token above.
  *
  * @package AI_Site_Connector
  */

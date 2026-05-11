@@ -162,11 +162,19 @@ class AI_Site_Connector_Cache {
 	 *  - true  → purge accepted by CF API
 	 *  - string warning → token/zone present but API said no
 	 *
-	 * Secrets live in the standard plugin options keys — never hardcoded.
+	 * Both the API token and the zone ID can be supplied via wp-config.php
+	 * constants (`AI_SITE_CONNECTOR_CLOUDFLARE_TOKEN`,
+	 * `AI_SITE_CONNECTOR_CLOUDFLARE_ZONE_ID`) which override the plugin
+	 * options. Constant-first keeps the secret out of wp_options, which is
+	 * the preferred posture for backups, dumps, and SQLi blast radius.
 	 */
 	private static function purge_cloudflare() {
-		$token = trim( (string) get_option( 'ai_site_connector_cloudflare_api_token', '' ) );
-		$zone  = trim( (string) get_option( 'ai_site_connector_cloudflare_zone_id', '' ) );
+		$token = defined( 'AI_SITE_CONNECTOR_CLOUDFLARE_TOKEN' ) && '' !== (string) AI_SITE_CONNECTOR_CLOUDFLARE_TOKEN
+			? (string) AI_SITE_CONNECTOR_CLOUDFLARE_TOKEN
+			: trim( (string) get_option( 'ai_site_connector_cloudflare_api_token', '' ) );
+		$zone  = defined( 'AI_SITE_CONNECTOR_CLOUDFLARE_ZONE_ID' ) && '' !== (string) AI_SITE_CONNECTOR_CLOUDFLARE_ZONE_ID
+			? (string) AI_SITE_CONNECTOR_CLOUDFLARE_ZONE_ID
+			: trim( (string) get_option( 'ai_site_connector_cloudflare_zone_id', '' ) );
 		if ( '' === $token || '' === $zone ) {
 			return null;
 		}

@@ -211,6 +211,21 @@ Do not commit this password to git.
 
 [**examples/agent-bootstrap-prompt.md**](examples/agent-bootstrap-prompt.md) is a paste-into-Claude/Codex/Cursor system-prompt template that hands the AI agent everything it needs: connection details (with placeholders for the four values the plugin gave you), the recommended first three calls, the capability map, what NOT to try, error reference, and operating-posture rules. Use this when onboarding a new agent to a freshly-installed site.
 
+### MCP — Claude Desktop / Cursor (stdio bridge)
+
+If you use Claude Desktop or Cursor and want a one-binary local install, the plugin ships a Node 18+ stdio MCP bridge at [**examples/mcp-server/**](examples/mcp-server/). It speaks MCP over stdio (the transport these tools use locally) and forwards every `tools/call` to the plugin's HTTP MCP endpoint via Basic Auth.
+
+```bash
+cd examples/mcp-server
+npm install
+```
+
+Then point your AI tool at `node /abs/path/to/examples/mcp-server/index.mjs` with `WORDPRESS_SITE_URL`, `WORDPRESS_USERNAME`, and `WORDPRESS_APPLICATION_PASSWORD` in `env`. The full Claude Desktop / Cursor config blocks live in [examples/mcp-server/README.md](examples/mcp-server/README.md).
+
+### Discovery — `/.well-known/ai-site-connector.json`
+
+AI tooling can detect the plugin and its sub-surfaces (MCP transport, OpenAPI spec, tools catalog) by fetching `https://<site>/.well-known/ai-site-connector.json`. The full payload schema and field reference are in [**docs/DISCOVERY.md**](docs/DISCOVERY.md). Disable with `define( 'AI_SITE_CONNECTOR_DISCOVERY_DISABLE', true )` in `wp-config.php`.
+
 ---
 
 ## REST endpoints (added by this plugin)

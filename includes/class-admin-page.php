@@ -27,6 +27,8 @@ class AI_Site_Connector_Admin_Page {
 		add_action( 'admin_post_ai_site_connector_save_uninstall_pref', array( __CLASS__, 'handle_save_uninstall_pref' ) );
 		add_action( 'admin_post_ai_site_connector_export_write', array( __CLASS__, 'handle_export_write' ) );
 		add_action( 'admin_post_ai_site_connector_export_audit_csv', array( __CLASS__, 'handle_export_audit_csv' ) );
+		add_action( 'admin_post_ai_site_connector_export_diagnostics', array( __CLASS__, 'handle_export_diagnostics' ) );
+		add_action( 'admin_post_ai_site_connector_save_retention', array( __CLASS__, 'handle_save_retention' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_assets' ) );
 	}
 
@@ -1004,14 +1006,36 @@ class AI_Site_Connector_Admin_Page {
 				?>
 				<h3><?php echo esc_html( $u->user_login ); ?> <span class="description">(id=<?php echo (int) $u->ID; ?>)</span></h3>
 				<table class="widefat striped">
-					<thead><tr><th><?php esc_html_e( 'Name', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'UUID', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Created', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Last used', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Action', 'ai-site-connector' ); ?></th></tr></thead>
+					<thead><tr><th><?php esc_html_e( 'Name', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'UUID', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Created', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Last used', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Usage (7d)', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Action', 'ai-site-connector' ); ?></th></tr></thead>
 					<tbody>
 					<?php foreach ( $pwds as $p ) : ?>
+						<?php $usage = class_exists( 'AI_Site_Connector_Usage_Tracker' ) && ! empty( $p['uuid'] )
+							? AI_Site_Connector_Usage_Tracker::rollup_for( (int) $u->ID, (string) $p['uuid'], 7 )
+							: null; ?>
 						<tr>
 							<td><?php echo esc_html( isset( $p['name'] ) ? $p['name'] : '' ); ?></td>
 							<td><code><?php echo esc_html( isset( $p['uuid'] ) ? $p['uuid'] : '' ); ?></code></td>
 							<td><?php echo esc_html( isset( $p['created'] ) ? gmdate( 'Y-m-d H:i:s', (int) $p['created'] ) : '' ); ?></td>
 							<td><?php echo esc_html( ! empty( $p['last_used'] ) ? gmdate( 'Y-m-d H:i:s', (int) $p['last_used'] ) : '—' ); ?></td>
+							<td>
+								<?php if ( $usage && $usage['requests'] > 0 ) : ?>
+									<strong><?php echo esc_html( (string) $usage['requests'] ); ?></strong> req<?php
+										if ( $usage['errors'] > 0 ) {
+											echo ' / ' . esc_html( (string) $usage['errors'] ) . ' err';
+										}
+										if ( ! empty( $usage['sampled'] ) ) {
+											echo ' <span class="description">(sampled @ ' . esc_html( number_format( $usage['rate'] * 100, 0 ) ) . '%)</span>';
+										}
+									?>
+									<?php if ( ! empty( $usage['by_route'] ) ) :
+										$top_routes = array_slice( array_keys( $usage['by_route'] ), 0, 3 );
+										?>
+										<br><span class="description"><?php echo esc_html( implode( ', ', $top_routes ) ); ?></span>
+									<?php endif; ?>
+								<?php else : ?>
+									<span class="description">—</span>
+								<?php endif; ?>
+							</td>
 							<td>
 								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline; margin-right: 6px;">
 									<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
@@ -1120,6 +1144,63 @@ class AI_Site_Connector_Admin_Page {
 				});
 			})();
 			</script>
+		</div>
+		<?php
+	}
+
+	private static function render_audit_webhook_card() {
+		if ( ! class_exists( 'AI_Site_Connector_Audit_Webhook' ) ) {
+			return;
+		}
+		$url    = AI_Site_Connector_Audit_Webhook::configured_url();
+		$secret = AI_Site_Connector_Audit_Webhook::configured_secret();
+		$format = AI_Site_Connector_Audit_Webhook::configured_format();
+		$events = AI_Site_Connector_Audit_Webhook::configured_filter();
+		$defaults = AI_Site_Connector_Audit_Webhook::default_filter_list();
+		?>
+		<div class="asc-card">
+			<h2><?php esc_html_e( 'Webhook forwarder', 'ai-site-connector' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'POST every selected audit event to an HTTPS endpoint (Slack / Discord / Datadog / generic JSON). Delivery is non-blocking — a broken receiver never delays REST traffic. HMAC-SHA256 signature in the X-AISC-Signature header when a secret is set.', 'ai-site-connector' ); ?></p>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<input type="hidden" name="action" value="ai_site_connector_save_webhook" />
+				<table class="asc-kv">
+					<tr><th><label for="webhook_url"><?php esc_html_e( 'Webhook URL', 'ai-site-connector' ); ?></label></th>
+						<td><input type="url" id="webhook_url" name="webhook_url" class="regular-text" value="<?php echo esc_attr( $url ); ?>" placeholder="https://hooks.slack.com/services/..." /></td></tr>
+					<tr><th><label for="webhook_secret"><?php esc_html_e( 'Shared secret (optional)', 'ai-site-connector' ); ?></label></th>
+						<td><input type="text" id="webhook_secret" name="webhook_secret" class="regular-text" value="<?php echo esc_attr( $secret ); ?>" /></td></tr>
+					<tr><th><label for="webhook_format"><?php esc_html_e( 'Format', 'ai-site-connector' ); ?></label></th>
+						<td>
+							<select id="webhook_format" name="webhook_format">
+								<?php foreach ( array( 'auto', 'generic', 'slack', 'discord', 'datadog' ) as $f ) : ?>
+									<option value="<?php echo esc_attr( $f ); ?>" <?php selected( $format, $f ); ?>><?php echo esc_html( $f ); ?></option>
+								<?php endforeach; ?>
+							</select>
+							<p class="description"><?php esc_html_e( '"auto" picks based on URL host.', 'ai-site-connector' ); ?></p>
+						</td></tr>
+					<tr><th><?php esc_html_e( 'Events to forward', 'ai-site-connector' ); ?></th>
+						<td>
+							<fieldset>
+								<?php foreach ( $defaults as $evt ) : ?>
+									<label style="display:block">
+										<input type="checkbox" name="webhook_events[]" value="<?php echo esc_attr( $evt ); ?>" <?php checked( in_array( $evt, $events, true ) ); ?> />
+										<code><?php echo esc_html( $evt ); ?></code>
+									</label>
+								<?php endforeach; ?>
+							</fieldset>
+						</td></tr>
+				</table>
+				<p>
+					<button type="submit" class="button button-primary"><?php esc_html_e( 'Save webhook settings', 'ai-site-connector' ); ?></button>
+				</p>
+			</form>
+			<?php if ( '' !== $url ) : ?>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+					<input type="hidden" name="action" value="ai_site_connector_test_webhook" />
+					<p><button type="submit" class="button button-secondary"><?php esc_html_e( 'Send test event', 'ai-site-connector' ); ?></button></p>
+				</form>
+			<?php endif; ?>
 		</div>
 		<?php
 	}
@@ -1302,13 +1383,30 @@ class AI_Site_Connector_Admin_Page {
 			'action' => isset( $_GET['filter_action'] ) ? sanitize_key( wp_unslash( $_GET['filter_action'] ) ) : '',
 			'tool'   => isset( $_GET['filter_tool'] ) ? sanitize_key( wp_unslash( $_GET['filter_tool'] ) ) : '',
 			'status' => isset( $_GET['filter_status'] ) ? sanitize_key( wp_unslash( $_GET['filter_status'] ) ) : '',
+			'since'  => isset( $_GET['filter_since'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_since'] ) ) : '',
+			'until'  => isset( $_GET['filter_until'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_until'] ) ) : '',
+			'search' => isset( $_GET['filter_search'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_search'] ) ) : '',
 		);
+		$paged    = isset( $_GET['paged'] ) ? max( 1, (int) $_GET['paged'] ) : 1;
+		$per_page = 50;
+		$filters['offset'] = ( $paged - 1 ) * $per_page;
+		// Normalize since/until to MySQL datetime: accept Y-m-d input (date pickers
+		// emit this) and expand to start/end of day so the range is inclusive.
+		if ( '' !== $filters['since'] && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $filters['since'] ) ) {
+			$filters['since'] .= ' 00:00:00';
+		}
+		if ( '' !== $filters['until'] && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $filters['until'] ) ) {
+			$filters['until'] .= ' 23:59:59';
+		}
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
-		$rows           = AI_Site_Connector_Audit_Log::recent( 100, $filters );
+		$rows           = AI_Site_Connector_Audit_Log::recent( $per_page, $filters );
+		$total_rows     = AI_Site_Connector_Audit_Log::count( $filters );
+		$total_pages    = (int) ceil( $total_rows / $per_page );
 		$retention_days = AI_Site_Connector_Audit_Log::retention_days();
 		$next_run       = wp_next_scheduled( AI_Site_Connector_Audit_Log::CRON_HOOK );
 		$tools          = AI_Site_Connector_Audit_Log::distinct_tools();
 		self::render_audit_digest_card();
+		self::render_audit_webhook_card();
 		?>
 		<div class="asc-card">
 			<h2><?php esc_html_e( 'Retention', 'ai-site-connector' ); ?></h2>
@@ -1339,6 +1437,21 @@ class AI_Site_Connector_Admin_Page {
 					?>
 				<?php endif; ?>
 			</p>
+			<?php $filter_override = (int) apply_filters( 'ai_site_connector_log_retention_days', $retention_days ) !== (int) get_option( AI_Site_Connector_Audit_Log::RETENTION_OPTION, AI_Site_Connector_Audit_Log::DEFAULT_RETENTION ); ?>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-bottom: 12px;">
+				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<input type="hidden" name="action" value="ai_site_connector_save_retention" />
+				<label>
+					<?php esc_html_e( 'Retention window (days):', 'ai-site-connector' ); ?>
+					<input type="number" name="retention_days" min="1" max="3650" step="1" value="<?php echo esc_attr( (string) (int) get_option( AI_Site_Connector_Audit_Log::RETENTION_OPTION, AI_Site_Connector_Audit_Log::DEFAULT_RETENTION ) ); ?>" />
+				</label>
+				<button type="submit" class="button button-secondary" <?php disabled( $filter_override ); ?>>
+					<?php esc_html_e( 'Save retention', 'ai-site-connector' ); ?>
+				</button>
+				<?php if ( $filter_override ) : ?>
+					<span class="description"><?php esc_html_e( 'Locked by ai_site_connector_log_retention_days filter in code.', 'ai-site-connector' ); ?></span>
+				<?php endif; ?>
+			</form>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
 				<input type="hidden" name="action" value="ai_site_connector_prune_log" />
@@ -1405,6 +1518,18 @@ class AI_Site_Connector_Admin_Page {
 						<?php endforeach; ?>
 					</select>
 				</label>
+				<label>
+					<?php esc_html_e( 'Since', 'ai-site-connector' ); ?>
+					<input type="date" name="filter_since" value="<?php echo esc_attr( substr( $filters['since'], 0, 10 ) ); ?>" />
+				</label>
+				<label>
+					<?php esc_html_e( 'Until', 'ai-site-connector' ); ?>
+					<input type="date" name="filter_until" value="<?php echo esc_attr( substr( $filters['until'], 0, 10 ) ); ?>" />
+				</label>
+				<label>
+					<?php esc_html_e( 'Search', 'ai-site-connector' ); ?>
+					<input type="text" name="filter_search" value="<?php echo esc_attr( $filters['search'] ); ?>" placeholder="<?php esc_attr_e( 'free-text in message / summary / tool / action', 'ai-site-connector' ); ?>" />
+				</label>
 				<button type="submit" class="button"><?php esc_html_e( 'Filter', 'ai-site-connector' ); ?></button>
 				<a class="button" href="<?php echo esc_url( admin_url( 'tools.php?page=' . self::PAGE_SLUG . '&tab=audit' ) ); ?>"><?php esc_html_e( 'Clear', 'ai-site-connector' ); ?></a>
 			</form>
@@ -1414,6 +1539,9 @@ class AI_Site_Connector_Admin_Page {
 				<input type="hidden" name="filter_action" value="<?php echo esc_attr( $filters['action'] ); ?>" />
 				<input type="hidden" name="filter_tool" value="<?php echo esc_attr( $filters['tool'] ); ?>" />
 				<input type="hidden" name="filter_status" value="<?php echo esc_attr( $filters['status'] ); ?>" />
+				<input type="hidden" name="filter_since" value="<?php echo esc_attr( $filters['since'] ); ?>" />
+				<input type="hidden" name="filter_until" value="<?php echo esc_attr( $filters['until'] ); ?>" />
+				<input type="hidden" name="filter_search" value="<?php echo esc_attr( $filters['search'] ); ?>" />
 				<button type="submit" class="button"><?php esc_html_e( 'Download filtered rows as CSV', 'ai-site-connector' ); ?></button>
 			</form>
 		</div>
@@ -1460,6 +1588,48 @@ class AI_Site_Connector_Admin_Page {
 				<?php endif; ?>
 				</tbody>
 			</table>
+			<?php if ( $total_pages > 1 || $total_rows > $per_page ) : ?>
+				<p class="asc-pagination" style="margin-top: 12px;">
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: 1: rows shown on this page, 2: total matching rows, 3: current page, 4: total pages. */
+							__( 'Showing %1$d of %2$d rows. Page %3$d of %4$d.', 'ai-site-connector' ),
+							count( $rows ),
+							$total_rows,
+							$paged,
+							max( 1, $total_pages )
+						)
+					);
+					?>
+					<?php
+					$base_args = array_filter(
+						array(
+							'page'           => self::PAGE_SLUG,
+							'tab'            => 'audit',
+							'filter_action'  => $filters['action'],
+							'filter_tool'    => $filters['tool'],
+							'filter_status'  => $filters['status'],
+							'filter_since'   => substr( $filters['since'], 0, 10 ),
+							'filter_until'   => substr( $filters['until'], 0, 10 ),
+							'filter_search'  => $filters['search'],
+						),
+						static function ( $v ) {
+							return '' !== (string) $v;
+						}
+					);
+					if ( $paged > 1 ) :
+						$prev_url = add_query_arg( array_merge( $base_args, array( 'paged' => $paged - 1 ) ), admin_url( 'tools.php' ) );
+						?>
+						<a href="<?php echo esc_url( $prev_url ); ?>" class="button"><?php esc_html_e( '« Previous', 'ai-site-connector' ); ?></a>
+					<?php endif; ?>
+					<?php if ( $paged < $total_pages ) :
+						$next_url = add_query_arg( array_merge( $base_args, array( 'paged' => $paged + 1 ) ), admin_url( 'tools.php' ) );
+						?>
+						<a href="<?php echo esc_url( $next_url ); ?>" class="button"><?php esc_html_e( 'Next »', 'ai-site-connector' ); ?></a>
+					<?php endif; ?>
+				</p>
+			<?php endif; ?>
 		</div>
 		<?php
 	}
@@ -1681,10 +1851,81 @@ Do not commit the Application Password to git.</pre>
 		<div class="asc-card">
 			<h2><?php esc_html_e( 'Site capability report', 'ai-site-connector' ); ?></h2>
 			<p class="description"><?php esc_html_e( 'Same payload returned by GET /diagnostics/site-report. No secrets are included — safe to paste into a support thread.', 'ai-site-connector' ); ?></p>
-			<pre class="asc-codeblock" data-copy><?php echo esc_html( (string) wp_json_encode( $report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ); ?></pre>
-			<button type="button" class="button" data-asc-copy="prev"><?php esc_html_e( 'Copy JSON', 'ai-site-connector' ); ?></button>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline">
+				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<input type="hidden" name="action" value="ai_site_connector_export_diagnostics" />
+				<p><button type="submit" class="button button-primary"><?php esc_html_e( 'Download diagnostic report (JSON)', 'ai-site-connector' ); ?></button></p>
+			</form>
+			<details>
+				<summary><?php esc_html_e( 'Preview JSON', 'ai-site-connector' ); ?></summary>
+				<pre class="asc-codeblock" data-copy><?php echo esc_html( (string) wp_json_encode( $report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ); ?></pre>
+				<button type="button" class="button" data-asc-copy="prev"><?php esc_html_e( 'Copy JSON', 'ai-site-connector' ); ?></button>
+			</details>
 		</div>
 		<?php
+	}
+
+	public static function handle_save_retention() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Insufficient permissions.', 'ai-site-connector' ) );
+		}
+		check_admin_referer( self::NONCE_ACTION, self::NONCE_FIELD );
+
+		$old_days = (int) get_option( AI_Site_Connector_Audit_Log::RETENTION_OPTION, AI_Site_Connector_Audit_Log::DEFAULT_RETENTION );
+		$new_days = isset( $_POST['retention_days'] ) ? (int) $_POST['retention_days'] : $old_days;
+		$new_days = max( 1, min( 3650, $new_days ) );
+		update_option( AI_Site_Connector_Audit_Log::RETENTION_OPTION, $new_days );
+
+		AI_Site_Connector_Audit_Log::record(
+			'audit_retention_updated',
+			array(
+				'message' => sprintf( 'Audit retention window updated from %d to %d days.', $old_days, $new_days ),
+				'meta'    => array( 'old_days' => $old_days, 'new_days' => $new_days ),
+			)
+		);
+
+		self::flash(
+			sprintf(
+				/* translators: %d: new retention days. */
+				__( 'Audit retention saved: %d days.', 'ai-site-connector' ),
+				$new_days
+			),
+			'success'
+		);
+		self::redirect_back( 'audit' );
+	}
+
+	public static function handle_export_diagnostics() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Insufficient permissions.', 'ai-site-connector' ) );
+		}
+		check_admin_referer( self::NONCE_ACTION, self::NONCE_FIELD );
+
+		$report = AI_Site_Connector_Diagnostics::generate();
+		/**
+		 * Filter the diagnostic report before download. Used by future
+		 * features to redact extra secret keys; the report itself is built
+		 * to not include passwords / tokens, but defensive filters can
+		 * scrub additional values if needed.
+		 *
+		 * @param array $report
+		 */
+		$report = (array) apply_filters( 'ai_site_connector_diagnostic_report', $report );
+
+		AI_Site_Connector_Audit_Log::record(
+			'diagnostic_report_exported',
+			array( 'message' => sprintf( 'Diagnostic report exported by user id %d.', get_current_user_id() ) )
+		);
+
+		$host     = wp_parse_url( home_url(), PHP_URL_HOST );
+		$host     = $host ? preg_replace( '/[^A-Za-z0-9.\-]+/', '', $host ) : 'site';
+		$filename = 'ai-site-connector-diagnostic-' . $host . '-' . gmdate( 'Ymd-His' ) . '.json';
+
+		nocache_headers();
+		header( 'Content-Type: application/json; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename=' . $filename );
+		echo wp_json_encode( $report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+		exit;
 	}
 
 	/** Export tab — write JSON manifests to wp-content/uploads/ai-site-connector/exports/. */
@@ -1829,7 +2070,16 @@ Do not commit the Application Password to git.</pre>
 			'action' => isset( $_POST['filter_action'] ) ? sanitize_key( wp_unslash( $_POST['filter_action'] ) ) : '',
 			'tool'   => isset( $_POST['filter_tool'] ) ? sanitize_key( wp_unslash( $_POST['filter_tool'] ) ) : '',
 			'status' => isset( $_POST['filter_status'] ) ? sanitize_key( wp_unslash( $_POST['filter_status'] ) ) : '',
+			'since'  => isset( $_POST['filter_since'] ) ? sanitize_text_field( wp_unslash( $_POST['filter_since'] ) ) : '',
+			'until'  => isset( $_POST['filter_until'] ) ? sanitize_text_field( wp_unslash( $_POST['filter_until'] ) ) : '',
+			'search' => isset( $_POST['filter_search'] ) ? sanitize_text_field( wp_unslash( $_POST['filter_search'] ) ) : '',
 		);
+		if ( '' !== $filters['since'] && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $filters['since'] ) ) {
+			$filters['since'] .= ' 00:00:00';
+		}
+		if ( '' !== $filters['until'] && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $filters['until'] ) ) {
+			$filters['until'] .= ' 23:59:59';
+		}
 
 		$csv = AI_Site_Connector_Audit_Log::export_csv( $filters );
 		$filename = 'ai-site-connector-audit-' . gmdate( 'Ymd-His' ) . '.csv';

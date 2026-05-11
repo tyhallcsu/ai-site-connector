@@ -310,15 +310,78 @@ class AI_Site_Connector_Audit_Log {
 			),
 			array( '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
 		);
+		$row_id = (int) $wpdb->insert_id;
+		if ( $row_id > 0 ) {
+			/**
+			 * Fires after a row is inserted into the audit log. Used by the
+			 * webhook forwarder to schedule non-blocking delivery. Listeners
+			 * MUST NOT do synchronous network I/O here.
+			 *
+			 * @param int    $row_id  The inserted row id.
+			 * @param string $action  Action slug.
+			 */
+			do_action( 'ai_site_connector_audit_recorded', $row_id, sanitize_key( $action ) );
+		}
+	}
+
+	/**
+	 * Fetch a single audit row by id.
+	 */
+	public static function get_row( $id ) {
+		global $wpdb;
+		$id    = (int) $id;
+		if ( $id <= 0 ) {
+			return null;
+		}
+		$table = self::table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.DirectQuery
+		return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ) );
 	}
 
 	public static function recent( $limit = 50, $filters = array() ) {
 		global $wpdb;
 		$table   = self::table_name();
 		$limit   = max( 1, min( 500, (int) $limit ) );
+		$offset  = isset( $filters['offset'] ) ? max( 0, (int) $filters['offset'] ) : 0;
+		list( $where_sql, $prepare ) = self::build_filter_where( $filters );
+
+		$prepare[] = $limit;
+		$prepare[] = $offset;
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$sql = "SELECT * FROM {$table} WHERE {$where_sql} ORDER BY id DESC LIMIT %d OFFSET %d";
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return $wpdb->get_results( $wpdb->prepare( $sql, $prepare ) );
+	}
+
+	/**
+	 * Total row count matching the same filters as recent(). Used by the
+	 * Audit-tab pagination widget.
+	 */
+	public static function count( $filters = array() ) {
+		global $wpdb;
+		$table = self::table_name();
+		list( $where_sql, $prepare ) = self::build_filter_where( $filters );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$sql = "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}";
+		if ( ! empty( $prepare ) ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			return (int) $wpdb->get_var( $wpdb->prepare( $sql, $prepare ) );
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.DirectQuery
+		return (int) $wpdb->get_var( $sql );
+	}
+
+	/**
+	 * Build the WHERE clause + prepared-statement values shared by recent()
+	 * and count(). Supports filters: action, tool, status, actor_user_id,
+	 * since (Y-m-d or Y-m-d H:i:s UTC), until (same), search (LIKE on
+	 * message+summary+tool+action).
+	 *
+	 * @return array{0:string, 1:array}
+	 */
+	private static function build_filter_where( array $filters ) {
 		$where   = array( '1=1' );
 		$prepare = array();
-
 		if ( ! empty( $filters['action'] ) ) {
 			$where[]   = 'action = %s';
 			$prepare[] = substr( sanitize_key( (string) $filters['action'] ), 0, 64 );
@@ -339,13 +402,23 @@ class AI_Site_Connector_Audit_Log {
 			$where[]   = 'created_at >= %s';
 			$prepare[] = (string) $filters['since'];
 		}
-
-		$where_sql = implode( ' AND ', $where );
-		$prepare[] = $limit;
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$sql = "SELECT * FROM {$table} WHERE {$where_sql} ORDER BY id DESC LIMIT %d";
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		return $wpdb->get_results( $wpdb->prepare( $sql, $prepare ) );
+		if ( ! empty( $filters['until'] ) ) {
+			$where[]   = 'created_at <= %s';
+			$prepare[] = (string) $filters['until'];
+		}
+		if ( ! empty( $filters['search'] ) ) {
+			$like_raw  = trim( (string) $filters['search'] );
+			if ( '' !== $like_raw ) {
+				global $wpdb;
+				$like      = '%' . $wpdb->esc_like( $like_raw ) . '%';
+				$where[]   = '(message LIKE %s OR summary LIKE %s OR tool LIKE %s OR action LIKE %s)';
+				$prepare[] = $like;
+				$prepare[] = $like;
+				$prepare[] = $like;
+				$prepare[] = $like;
+			}
+		}
+		return array( implode( ' AND ', $where ), $prepare );
 	}
 
 	/**

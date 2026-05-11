@@ -250,3 +250,60 @@ jobs:
           WP_PORT: 8765
           WP_CLI_MEMORY_LIMIT: 512M
         run: tests/runtime-smoke.sh
+
+  wordpress-version-compat:
+    # Surfaces breakage on older / pinned WP versions without blocking releases.
+    # Promote to required once individual rows are stable (issue #52).
+    name: WP ${{ matrix.wp }} compat
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        wp: ['5.6', '6.5']
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: asc_runtime_smoke
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          # WP 5.6 is the lowest declared support and requires PHP 8.0 or older
+          # for guaranteed bootability; 8.0 covers both rows here.
+          php-version: '8.0'
+          coverage: none
+          extensions: mysqli, curl, json
+          tools: none
+          ini-values: memory_limit=512M
+
+      - name: Install runtime tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends default-mysql-client curl jq rsync
+          curl -L https://github.com/wp-cli/builds/raw/gh-pages/phar/wp-cli.phar -o /tmp/wp
+          php /tmp/wp --info
+          chmod +x /tmp/wp
+          sudo mv /tmp/wp /usr/local/bin/wp
+
+      - name: Run WordPress runtime smoke test (WP ${{ matrix.wp }})
+        env:
+          WP_DB_NAME: asc_runtime_smoke
+          WP_DB_USER: root
+          WP_DB_PASSWORD: root
+          WP_DB_HOST: 127.0.0.1
+          WP_VERSION: ${{ matrix.wp }}
+          WP_PORT: 8765
+          WP_CLI_MEMORY_LIMIT: 512M
+        run: tests/runtime-smoke.sh

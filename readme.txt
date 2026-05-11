@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.2.0
+Stable tag: 0.3.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,10 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.3.0 =
+* Tool-specific connection packs. The credential flash now shows a tabbed picker with ready-to-paste snippets for Claude Desktop (MCP), Cursor / VS Code (MCP), n8n / Make.com / Zapier, curl, Python (requests), Node.js (fetch), the generic connection-pack JSON, and plain-text agent instructions. New `AI_Site_Connector_Connection_Formats` class so the same builders can be reused later from WP-CLI or REST.
+* CSS-only tabbed UI (no JS framework) using `:checked` sibling selectors.
+
 = 0.2.0 =
 * Native self-updater. The plugin now appears on Dashboard → Updates and the Plugins screen when a new release is published at github.com/tyhallcsu/ai-site-connector/releases, with a "View details" modal, "Check for updates now" and "Update now" controls on the Tools → AI Site Connector page, and audit-log entries for every check/install/failure.
 * Optional `AI_SITE_CONNECTOR_UPDATE_PRERELEASE` constant to opt into pre-release tags; `AI_SITE_CONNECTOR_UPDATE_DISABLE` kill switch for managed hosts.

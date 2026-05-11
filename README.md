@@ -111,7 +111,13 @@ wp ai-connector create-user --username=ai-agent --role=ai_site_operator
 1. Go to **Tools → AI Site Connector → Credentials**.
 2. Pick the AI user.
 3. Click **Generate Connection Pack**.
-4. Copy the JSON, the curl command, or the Claude Code instructions block.
+4. Pick the tab for the tool you're wiring up — each one gives you a ready-to-paste snippet:
+   * **Claude Desktop (MCP)** — `claude_desktop_config.json` block with your site URL, username, and Application Password baked in as env vars.
+   * **Cursor / VS Code (MCP)** — same shape for `.cursor/mcp.json` (or any IDE that speaks MCP).
+   * **n8n / Make.com / Zapier** — plain-text Basic Auth credential instructions for the three most common no-code automation platforms.
+   * **curl / Python (requests) / Node.js (fetch)** — quick sanity-check snippets.
+   * **connection-pack.json** — the generic structured pack for anything else.
+   * **Agent instructions (plain text)** — drop into a system prompt or onboarding doc.
 5. Save the password in your password manager. You cannot view it again.
 
 Or via WP-CLI:

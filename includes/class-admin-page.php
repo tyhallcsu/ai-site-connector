@@ -615,55 +615,59 @@ class AI_Site_Connector_Admin_Page {
 	}
 
 	private static function render_connection_pack( $pack ) {
-		$json   = wp_json_encode( $pack, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
-		$user   = isset( $pack['username'] ) ? $pack['username'] : '';
-		$pass   = isset( $pack['application_password'] ) ? $pack['application_password'] : '';
-		$base   = isset( $pack['rest_api_base'] ) ? $pack['rest_api_base'] : '';
-		$pretty = $pack;
-		// Mask password in any echoed-back HTML (we still keep it inside the JSON pre block for the user to copy).
-		$pretty['application_password'] = '••••••••••••••••';
+		$formats = AI_Site_Connector_Connection_Formats::all( $pack );
+		if ( empty( $formats ) ) {
+			return;
+		}
+		// Unique radio-group name per render so multiple packs on one page don't collide.
+		$group = 'asc-fmt-' . substr( md5( wp_json_encode( $pack ) . microtime( true ) ), 0, 8 );
 		?>
-		<div class="asc-pack">
+		<div class="asc-pack asc-format-picker">
 			<h3><?php esc_html_e( 'Connection pack — copy now, you will not see this password again', 'ai-site-connector' ); ?></h3>
 			<p class="description"><strong><?php esc_html_e( 'Save this in a password manager. Do not commit it to git.', 'ai-site-connector' ); ?></strong></p>
-			<details open>
-				<summary><?php esc_html_e( 'connection-pack.json (full, includes plaintext password)', 'ai-site-connector' ); ?></summary>
-				<pre class="asc-codeblock" data-copy><?php echo esc_html( $json ); ?></pre>
-				<button type="button" class="button" data-asc-copy="prev"><?php esc_html_e( 'Copy JSON', 'ai-site-connector' ); ?></button>
-			</details>
 
-			<h4><?php esc_html_e( 'Test with curl', 'ai-site-connector' ); ?></h4>
-			<pre class="asc-codeblock" data-copy>curl -u '<?php echo esc_html( $user ); ?>:<?php echo esc_html( $pass ); ?>' '<?php echo esc_html( $base ); ?>wp/v2/users/me'</pre>
-			<button type="button" class="button" data-asc-copy="prev"><?php esc_html_e( 'Copy curl', 'ai-site-connector' ); ?></button>
+			<?php
+			// Radio inputs come first so the :checked ~ .panels selectors work without JS.
+			foreach ( $formats as $idx => $fmt ) :
+				$radio_id = $group . '-' . $fmt['id'];
+				?>
+				<input
+					type="radio"
+					name="<?php echo esc_attr( $group ); ?>"
+					id="<?php echo esc_attr( $radio_id ); ?>"
+					class="asc-fmt-radio asc-fmt-radio-<?php echo esc_attr( $fmt['id'] ); ?>"
+					<?php checked( 0, $idx ); ?>
+				/>
+			<?php endforeach; ?>
 
-			<h4><?php esc_html_e( 'Test with Python (requests)', 'ai-site-connector' ); ?></h4>
-			<pre class="asc-codeblock" data-copy>import requests
-r = requests.get(
-    "<?php echo esc_html( $base ); ?>wp/v2/users/me",
-    auth=("<?php echo esc_html( $user ); ?>", "<?php echo esc_html( $pass ); ?>"),
-    timeout=15,
-)
-print(r.status_code, r.json())</pre>
-			<button type="button" class="button" data-asc-copy="prev"><?php esc_html_e( 'Copy Python', 'ai-site-connector' ); ?></button>
+			<div class="asc-fmt-tabs" role="tablist">
+				<?php foreach ( $formats as $fmt ) :
+					$radio_id = $group . '-' . $fmt['id'];
+					?>
+					<label
+						for="<?php echo esc_attr( $radio_id ); ?>"
+						class="asc-fmt-tab asc-fmt-tab-<?php echo esc_attr( $fmt['id'] ); ?>"
+						role="tab"
+					><?php echo esc_html( $fmt['label'] ); ?></label>
+				<?php endforeach; ?>
+			</div>
 
-			<h4><?php esc_html_e( 'Test with JavaScript (fetch)', 'ai-site-connector' ); ?></h4>
-			<pre class="asc-codeblock" data-copy>const auth = "Basic " + btoa("<?php echo esc_html( $user ); ?>:<?php echo esc_html( $pass ); ?>");
-const r = await fetch("<?php echo esc_html( $base ); ?>wp/v2/users/me", { headers: { Authorization: auth } });
-console.log(r.status, await r.json());</pre>
-			<button type="button" class="button" data-asc-copy="prev"><?php esc_html_e( 'Copy JS', 'ai-site-connector' ); ?></button>
-
-			<h4><?php esc_html_e( 'Claude Code instructions', 'ai-site-connector' ); ?></h4>
-			<pre class="asc-codeblock" data-copy>You can authenticate to this WordPress site using HTTP Basic Auth.
-- REST base: <?php echo esc_html( $base ); ?>
-
-- Username: <?php echo esc_html( $user ); ?>
-
-- Password: (Application Password from the connection pack)
-Add header: Authorization: Basic base64(username:application_password)
-Plugin health endpoint: <?php echo esc_html( isset( $pack['plugin_health_endpoint'] ) ? $pack['plugin_health_endpoint'] : '' ); ?>
-
-Do not commit this password to git.</pre>
-			<button type="button" class="button" data-asc-copy="prev"><?php esc_html_e( 'Copy instructions', 'ai-site-connector' ); ?></button>
+			<div class="asc-fmt-panels">
+				<?php foreach ( $formats as $fmt ) : ?>
+					<section
+						class="asc-fmt-panel asc-fmt-panel-<?php echo esc_attr( $fmt['id'] ); ?>"
+						role="tabpanel"
+						aria-label="<?php echo esc_attr( $fmt['label'] ); ?>"
+					>
+						<p class="description"><?php echo esc_html( $fmt['hint'] ); ?></p>
+						<pre class="asc-codeblock" data-copy><?php echo esc_html( $fmt['code'] ); ?></pre>
+						<button type="button" class="button" data-asc-copy="prev"><?php
+							/* translators: %s: format label, e.g. "Claude Desktop (MCP)". */
+							echo esc_html( sprintf( __( 'Copy %s', 'ai-site-connector' ), $fmt['label'] ) );
+						?></button>
+					</section>
+				<?php endforeach; ?>
+			</div>
 		</div>
 		<?php
 	}

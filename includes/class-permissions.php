@@ -224,6 +224,119 @@ class AI_Site_Connector_Permissions {
 		return true;
 	}
 
+	/**
+	 * Per-Application-Password scope + IP allowlist + expiry enforcement.
+	 *
+	 * Returns true (allow), null (no-op — request not authed via App Password,
+	 * or password has no extras), or WP_Error (deny). Called from the
+	 * rest_pre_dispatch filter for every REST request once auth has run.
+	 *
+	 * @param string $route  REST route (e.g. '/wp/v2/posts').
+	 * @param string $method HTTP method ('GET', 'POST', ...).
+	 * @return true|null|WP_Error
+	 */
+	public static function require_route_scope( $route, $method ) {
+		if ( ! class_exists( 'AI_Site_Connector_App_Password_Resolver' )
+			|| ! class_exists( 'AI_Site_Connector_App_Password_Meta' ) ) {
+			return null;
+		}
+		$uuid = AI_Site_Connector_App_Password_Resolver::current_uuid();
+		if ( ! $uuid ) {
+			return null;
+		}
+		$user_id = get_current_user_id();
+		if ( ! $user_id ) {
+			return null;
+		}
+
+		// 1. Expiry check (defense in depth alongside the daily sweep cron).
+		if ( AI_Site_Connector_App_Password_Meta::is_expired( $user_id, $uuid ) ) {
+			AI_Site_Connector_Audit_Log::record(
+				'application_password_expired_use',
+				array(
+					'tool'    => 'rest',
+					'status'  => 'denied',
+					'message' => sprintf( 'Expired Application Password used: uuid=%s, route=%s.', $uuid, $route ),
+					'meta'    => array( 'uuid' => $uuid, 'route' => $route ),
+				)
+			);
+			return new WP_Error(
+				'rest_application_password_expired',
+				__( 'This Application Password has expired.', 'ai-site-connector' ),
+				array( 'status' => 401, 'reason' => 'expired' )
+			);
+		}
+
+		// 2. Scope check.
+		$scopes = AI_Site_Connector_App_Password_Meta::get_scopes( $user_id, $uuid );
+		if ( ! empty( $scopes ) && ! AI_Site_Connector_App_Password_Meta::route_matches_scopes( $method, $route, $scopes ) ) {
+			AI_Site_Connector_Audit_Log::record(
+				'route_scope_denied',
+				array(
+					'tool'    => 'rest',
+					'status'  => 'denied',
+					'message' => sprintf( 'Scope denied: method=%s route=%s uuid=%s.', $method, $route, $uuid ),
+					'meta'    => array( 'route' => $route, 'method' => $method, 'uuid' => $uuid ),
+				)
+			);
+			return new WP_Error(
+				'rest_forbidden_scope',
+				__( 'This Application Password is not allowed to call this route.', 'ai-site-connector' ),
+				array( 'status' => 403, 'reason' => 'scope_off' )
+			);
+		}
+
+		// 3. IP allowlist check (per-password). Source IP is REMOTE_ADDR by
+		// default; XFF only honored when WP_TRUSTED_PROXIES is true (admin
+		// opt-in for sites behind a reverse proxy that's been configured to
+		// not forward arbitrary client-supplied headers).
+		$cidrs = AI_Site_Connector_App_Password_Meta::get_ip_allowlist( $user_id, $uuid );
+		if ( ! empty( $cidrs ) ) {
+			$client_ip = self::resolve_client_ip();
+			if ( '' === $client_ip || ! AI_Site_Connector_App_Password_Meta::ip_matches_cidr( $client_ip, $cidrs ) ) {
+				AI_Site_Connector_Audit_Log::record(
+					'ip_allowlist_denied',
+					array(
+						'tool'    => 'rest',
+						'status'  => 'denied',
+						'message' => sprintf( 'IP allowlist denied: route=%s uuid=%s.', $route, $uuid ),
+						'meta'    => array( 'uuid' => $uuid, 'route' => $route, 'ip_hash' => AI_Site_Connector_Audit_Log::hash_ip( $client_ip ) ),
+					)
+				);
+				return new WP_Error(
+					'rest_forbidden_ip',
+					__( 'This Application Password is not allowed from your IP.', 'ai-site-connector' ),
+					array( 'status' => 403, 'reason' => 'ip_off' )
+				);
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Resolve the client IP for allowlist matching. Default is REMOTE_ADDR;
+	 * X-Forwarded-For is only honored if the WP_TRUSTED_PROXIES constant is
+	 * defined and true (operator opt-in for reverse-proxy setups).
+	 */
+	private static function resolve_client_ip() {
+		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : '';
+		if ( defined( 'WP_TRUSTED_PROXIES' ) && WP_TRUSTED_PROXIES
+			&& ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
+			$first = trim( strtok( (string) $_SERVER['HTTP_X_FORWARDED_FOR'], ',' ) );
+			if ( '' !== $first ) {
+				$ip = $first;
+			}
+		}
+		/**
+		 * Filter the resolved client IP used for per-password allowlist
+		 * matching. Hosts with non-standard proxy headers can override.
+		 *
+		 * @param string $ip
+		 */
+		return (string) apply_filters( 'ai_site_connector_request_ip', $ip );
+	}
+
 	private static function denied( $tool, $reason, $message ) {
 		// Tool denial is itself an auditable event. Logging the denial is
 		// critical for security review — silent denies mask hostile probing.

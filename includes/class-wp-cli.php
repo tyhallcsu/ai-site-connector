@@ -114,10 +114,63 @@ class AI_Site_Connector_CLI {
 		if ( ! $user ) {
 			WP_CLI::error( 'User not found.' );
 		}
+
+		// Optional extras parsed up front so an invalid expiry refuses to
+		// create the credential.
+		$expires_at = null;
+		if ( ! empty( $assoc['expires'] ) ) {
+			$expires_at = strtotime( (string) $assoc['expires'] );
+			if ( false === $expires_at || $expires_at <= time() ) {
+				WP_CLI::error( '--expires must parse to a future date/time.' );
+			}
+		}
+		$scopes = array();
+		if ( ! empty( $assoc['scopes'] ) ) {
+			foreach ( explode( ',', (string) $assoc['scopes'] ) as $entry ) {
+				$entry = trim( $entry );
+				if ( '' === $entry ) {
+					continue;
+				}
+				if ( false !== strpos( $entry, ':' ) ) {
+					list( $m, $r ) = explode( ':', $entry, 2 );
+					$scopes[] = array( 'method' => strtoupper( trim( $m ) ), 'route' => '/' . ltrim( trim( $r ), '/' ) );
+				} else {
+					$scopes[] = array( 'method' => '*', 'route' => '/' . ltrim( $entry, '/' ) );
+				}
+			}
+		}
+		$ip_allowlist = array();
+		if ( ! empty( $assoc['ip-allowlist'] ) ) {
+			foreach ( explode( ',', (string) $assoc['ip-allowlist'] ) as $cidr ) {
+				$cidr = trim( $cidr );
+				if ( '' !== $cidr ) {
+					$ip_allowlist[] = $cidr;
+				}
+			}
+		}
+
 		$res = AI_Site_Connector_Application_Passwords::create_for_user( $user->ID, $name );
 		if ( is_wp_error( $res ) ) {
 			WP_CLI::error( $res->get_error_message() );
 		}
+
+		// Persist extras now that we have the UUID.
+		if ( class_exists( 'AI_Site_Connector_App_Password_Meta' ) ) {
+			$extras = array( 'created_by' => 0 ); // 0 = CLI/automated.
+			if ( ! empty( $scopes ) ) {
+				$extras['scopes'] = $scopes;
+			}
+			if ( ! empty( $ip_allowlist ) ) {
+				$extras['ip_allowlist'] = $ip_allowlist;
+			}
+			if ( null !== $expires_at ) {
+				$extras['expires_at'] = $expires_at;
+			}
+			if ( count( $extras ) > 1 ) {
+				AI_Site_Connector_App_Password_Meta::set_extras( $user->ID, $res['uuid'], $extras );
+			}
+		}
+
 		$pack = array(
 			'site_url'             => home_url(),
 			'rest_api_base'        => trailingslashit( rest_url() ),

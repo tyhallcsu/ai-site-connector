@@ -28,10 +28,46 @@ class AI_Site_Connector_REST_Controller {
 
 	public static function register_hooks() {
 		add_action( 'rest_api_init', array( __CLASS__, 'register_routes' ) );
+		// Enforce per-Application-Password scopes + IP allowlist + expiry on
+		// EVERY REST route (plugin namespace and core /wp/v2/*). Runs at
+		// priority 9 — before maybe_stamp_last_request — so denied requests
+		// don't get counted as "successful MCP request".
+		add_filter( 'rest_pre_dispatch', array( __CLASS__, 'maybe_enforce_app_password_extras' ), 9, 3 );
 		// Track the most recent authenticated plugin-namespace request so
 		// the admin Connection Test page can show "last successful MCP
 		// request". Wired as a no-op filter — we only read the request URI.
 		add_filter( 'rest_pre_dispatch', array( __CLASS__, 'maybe_stamp_last_request' ), 10, 3 );
+	}
+
+	/**
+	 * Per-Application-Password enforcement filter. If the request is authed
+	 * via App Password and the password has extras (scopes / IP allowlist /
+	 * expiry), short-circuit with a WP_Error when checks fail.
+	 *
+	 * @param mixed           $result  Default null (continue dispatch).
+	 * @param WP_REST_Server  $server
+	 * @param WP_REST_Request $request
+	 * @return mixed
+	 */
+	public static function maybe_enforce_app_password_extras( $result, $server, $request ) {
+		unset( $server );
+		// If an earlier filter already returned a WP_Error, don't override it.
+		if ( is_wp_error( $result ) || ! ( $request instanceof WP_REST_Request ) ) {
+			return $result;
+		}
+		// Cheap bail: only meaningful once the user is resolved. Returns null
+		// for guest / cookie / nonce auth (which doesn't have a UUID anyway).
+		if ( ! class_exists( 'AI_Site_Connector_Permissions' ) ) {
+			return $result;
+		}
+		$check = AI_Site_Connector_Permissions::require_route_scope(
+			(string) $request->get_route(),
+			(string) $request->get_method()
+		);
+		if ( is_wp_error( $check ) ) {
+			return $check;
+		}
+		return $result;
 	}
 
 	public static function maybe_stamp_last_request( $result, $server, $request ) {

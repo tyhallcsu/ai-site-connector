@@ -25,6 +25,7 @@ class AI_Site_Connector_Updater {
 	const TRANSIENT_KEY    = 'ai_site_connector_remote_release';
 	const TRANSIENT_TTL    = 6 * HOUR_IN_SECONDS;
 	const ERROR_TTL        = 30 * MINUTE_IN_SECONDS;
+	const CRON_HOOK        = 'ai_site_connector_update_check';
 	const PLUGIN_SLUG      = 'ai-site-connector';
 	const GITHUB_OWNER     = 'tyhallcsu';
 	const GITHUB_REPO      = 'ai-site-connector';
@@ -51,6 +52,65 @@ class AI_Site_Connector_Updater {
 
 		add_action( 'admin_post_ai_site_connector_check_updates', array( __CLASS__, 'handle_check_updates' ) );
 		add_action( 'admin_post_ai_site_connector_run_update', array( __CLASS__, 'handle_run_update' ) );
+
+		// Daily background check so the Updates card always has fresh data
+		// without depending on WP's update_plugins schedule (which can lag
+		// 12+ hours on quiet sites).
+		add_action( 'plugins_loaded', array( __CLASS__, 'maybe_schedule_cron' ) );
+		add_action( self::CRON_HOOK, array( __CLASS__, 'run_cron' ) );
+	}
+
+	public static function maybe_schedule_cron() {
+		if ( self::is_disabled() ) {
+			self::unschedule_cron();
+			return;
+		}
+		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
+			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::CRON_HOOK );
+		}
+	}
+
+	public static function unschedule_cron() {
+		$timestamp = wp_next_scheduled( self::CRON_HOOK );
+		if ( $timestamp ) {
+			wp_unschedule_event( $timestamp, self::CRON_HOOK );
+		}
+		wp_clear_scheduled_hook( self::CRON_HOOK );
+	}
+
+	public static function run_cron() {
+		// Force a fresh fetch by clearing the cache first; get_remote_release()
+		// will repopulate the transient as a side effect.
+		delete_site_transient( self::TRANSIENT_KEY );
+		self::get_remote_release();
+	}
+
+	/**
+	 * Public on-demand check. Called from the admin page Updates card when
+	 * the cache is empty so the operator sees real status on first visit
+	 * rather than "Not checked yet" until WP's own update_plugins schedule
+	 * gets around to firing pre_set_site_transient_update_plugins.
+	 *
+	 * Returns the cached release (or null on failure). Caller can use the
+	 * return value to render immediately.
+	 *
+	 * @return array|null Parsed release on success, null on failure / disabled.
+	 */
+	public static function ensure_check() {
+		if ( self::is_disabled() ) {
+			return null;
+		}
+		$cached = get_site_transient( self::TRANSIENT_KEY );
+		if ( is_array( $cached ) && ! empty( $cached['version'] ) ) {
+			return $cached;
+		}
+		if ( is_array( $cached ) && ! empty( $cached['error'] ) ) {
+			// Recent failure — don't re-hammer GitHub. Caller can show error state.
+			return null;
+		}
+		// No cache at all — synchronous fetch. Caps at the 10s timeout in fetch_from_github().
+		$remote = self::get_remote_release();
+		return is_array( $remote ) ? $remote : null;
 	}
 
 	/* ---------------------------------------------------------------------

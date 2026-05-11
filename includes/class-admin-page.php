@@ -24,7 +24,23 @@ class AI_Site_Connector_Admin_Page {
 		add_action( 'admin_post_ai_site_connector_test_rest', array( __CLASS__, 'handle_test_rest' ) );
 		add_action( 'admin_post_ai_site_connector_prune_log', array( __CLASS__, 'handle_prune_log' ) );
 		add_action( 'admin_post_ai_site_connector_save_uninstall_pref', array( __CLASS__, 'handle_save_uninstall_pref' ) );
+		add_action( 'admin_post_ai_site_connector_export_write', array( __CLASS__, 'handle_export_write' ) );
+		add_action( 'admin_post_ai_site_connector_export_audit_csv', array( __CLASS__, 'handle_export_audit_csv' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_assets' ) );
+	}
+
+	/**
+	 * Public alias for {@see flash()}. Lets sister classes (Permissions,
+	 * Cache, Export) post a flash message without duplicating the
+	 * transient handling.
+	 */
+	public static function flash_public( $msg, $type = 'success', $extra = array() ) {
+		self::flash( $msg, $type, $extra );
+	}
+
+	/** Public alias for {@see redirect_back()}. */
+	public static function redirect_back_public( $tab = 'overview' ) {
+		self::redirect_back( $tab );
 	}
 
 	public static function register_menu() {
@@ -394,10 +410,14 @@ class AI_Site_Connector_Admin_Page {
 			$tabs['onboarding'] = __( 'Get Started', 'ai-site-connector' );
 		}
 		$tabs['overview']    = __( 'Overview', 'ai-site-connector' );
+		$tabs['connection']  = __( 'Connection Test', 'ai-site-connector' );
 		$tabs['wizard']      = __( 'Setup Wizard', 'ai-site-connector' );
 		$tabs['credentials'] = __( 'Credentials', 'ai-site-connector' );
+		$tabs['permissions'] = __( 'Permissions', 'ai-site-connector' );
 		$tabs['audit']       = __( 'Audit Log', 'ai-site-connector' );
 		$tabs['api']         = __( 'API Explorer', 'ai-site-connector' );
+		$tabs['diagnostics'] = __( 'Diagnostics', 'ai-site-connector' );
+		$tabs['export']      = __( 'Export', 'ai-site-connector' );
 		$tabs['docs']        = __( 'Docs', 'ai-site-connector' );
 		?>
 		<div class="wrap ai-site-connector-wrap">
@@ -418,6 +438,12 @@ class AI_Site_Connector_Admin_Page {
 					<?php if ( ! empty( $flash['extra']['connection_pack'] ) ) : ?>
 						<?php self::render_connection_pack( $flash['extra']['connection_pack'] ); ?>
 					<?php endif; ?>
+					<?php if ( ! empty( $flash['extra']['cache_report'] ) ) : ?>
+						<?php self::render_cache_report( $flash['extra']['cache_report'] ); ?>
+					<?php endif; ?>
+					<?php if ( ! empty( $flash['extra']['export_result'] ) ) : ?>
+						<?php self::render_export_result( $flash['extra']['export_result'] ); ?>
+					<?php endif; ?>
 				</div>
 			<?php endif; ?>
 
@@ -436,17 +462,29 @@ class AI_Site_Connector_Admin_Page {
 						self::render_overview();
 					}
 					break;
+				case 'connection':
+					self::render_connection_test();
+					break;
 				case 'wizard':
 					self::render_wizard();
 					break;
 				case 'credentials':
 					self::render_credentials();
 					break;
+				case 'permissions':
+					self::render_permissions();
+					break;
 				case 'audit':
 					self::render_audit();
 					break;
 				case 'api':
 					self::render_api_explorer();
+					break;
+				case 'diagnostics':
+					self::render_diagnostics();
+					break;
+				case 'export':
+					self::render_export();
 					break;
 				case 'docs':
 					self::render_docs();
@@ -987,9 +1025,17 @@ class AI_Site_Connector_Admin_Page {
 	}
 
 	private static function render_audit() {
-		$rows           = AI_Site_Connector_Audit_Log::recent( 100 );
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only filters, no state change.
+		$filters = array(
+			'action' => isset( $_GET['filter_action'] ) ? sanitize_key( wp_unslash( $_GET['filter_action'] ) ) : '',
+			'tool'   => isset( $_GET['filter_tool'] ) ? sanitize_key( wp_unslash( $_GET['filter_tool'] ) ) : '',
+			'status' => isset( $_GET['filter_status'] ) ? sanitize_key( wp_unslash( $_GET['filter_status'] ) ) : '',
+		);
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+		$rows           = AI_Site_Connector_Audit_Log::recent( 100, $filters );
 		$retention_days = AI_Site_Connector_Audit_Log::retention_days();
 		$next_run       = wp_next_scheduled( AI_Site_Connector_Audit_Log::CRON_HOOK );
+		$tools          = AI_Site_Connector_Audit_Log::distinct_tools();
 		self::render_audit_digest_card();
 		?>
 		<div class="asc-card">
@@ -1061,27 +1107,82 @@ class AI_Site_Connector_Admin_Page {
 			</form>
 		</div>
 		<div class="asc-card">
+			<h2><?php esc_html_e( 'Filter & export', 'ai-site-connector' ); ?></h2>
+			<form method="get" action="<?php echo esc_url( admin_url( 'tools.php' ) ); ?>" class="asc-filter-form">
+				<input type="hidden" name="page" value="<?php echo esc_attr( self::PAGE_SLUG ); ?>" />
+				<input type="hidden" name="tab" value="audit" />
+				<label>
+					<?php esc_html_e( 'Action', 'ai-site-connector' ); ?>
+					<input type="text" name="filter_action" value="<?php echo esc_attr( $filters['action'] ); ?>" placeholder="<?php esc_attr_e( 'e.g. cache_purged', 'ai-site-connector' ); ?>" />
+				</label>
+				<label>
+					<?php esc_html_e( 'Tool', 'ai-site-connector' ); ?>
+					<select name="filter_tool">
+						<option value=""><?php esc_html_e( '(any)', 'ai-site-connector' ); ?></option>
+						<?php foreach ( $tools as $tool_slug ) : ?>
+							<option value="<?php echo esc_attr( $tool_slug ); ?>" <?php selected( $filters['tool'], $tool_slug ); ?>><?php echo esc_html( $tool_slug ); ?></option>
+						<?php endforeach; ?>
+					</select>
+				</label>
+				<label>
+					<?php esc_html_e( 'Status', 'ai-site-connector' ); ?>
+					<select name="filter_status">
+						<option value=""><?php esc_html_e( '(any)', 'ai-site-connector' ); ?></option>
+						<?php foreach ( array( 'success', 'failure', 'denied', 'info' ) as $s ) : ?>
+							<option value="<?php echo esc_attr( $s ); ?>" <?php selected( $filters['status'], $s ); ?>><?php echo esc_html( $s ); ?></option>
+						<?php endforeach; ?>
+					</select>
+				</label>
+				<button type="submit" class="button"><?php esc_html_e( 'Filter', 'ai-site-connector' ); ?></button>
+				<a class="button" href="<?php echo esc_url( admin_url( 'tools.php?page=' . self::PAGE_SLUG . '&tab=audit' ) ); ?>"><?php esc_html_e( 'Clear', 'ai-site-connector' ); ?></a>
+			</form>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-top:8px">
+				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<input type="hidden" name="action" value="ai_site_connector_export_audit_csv" />
+				<input type="hidden" name="filter_action" value="<?php echo esc_attr( $filters['action'] ); ?>" />
+				<input type="hidden" name="filter_tool" value="<?php echo esc_attr( $filters['tool'] ); ?>" />
+				<input type="hidden" name="filter_status" value="<?php echo esc_attr( $filters['status'] ); ?>" />
+				<button type="submit" class="button"><?php esc_html_e( 'Download filtered rows as CSV', 'ai-site-connector' ); ?></button>
+			</form>
+		</div>
+		<div class="asc-card">
 			<h2><?php esc_html_e( 'Recent audit events', 'ai-site-connector' ); ?></h2>
 			<table class="widefat striped">
 				<thead>
-					<tr><th><?php esc_html_e( 'When', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Action', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Actor', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Target user', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'IP', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Message', 'ai-site-connector' ); ?></th></tr>
+					<tr>
+						<th><?php esc_html_e( 'When', 'ai-site-connector' ); ?></th>
+						<th><?php esc_html_e( 'Action', 'ai-site-connector' ); ?></th>
+						<th><?php esc_html_e( 'Tool', 'ai-site-connector' ); ?></th>
+						<th><?php esc_html_e( 'Status', 'ai-site-connector' ); ?></th>
+						<th><?php esc_html_e( 'Actor', 'ai-site-connector' ); ?></th>
+						<th><?php esc_html_e( 'Target', 'ai-site-connector' ); ?></th>
+						<th><?php esc_html_e( 'Summary / Message', 'ai-site-connector' ); ?></th>
+					</tr>
 				</thead>
 				<tbody>
 				<?php if ( empty( $rows ) ) : ?>
-					<tr><td colspan="6"><?php esc_html_e( 'No events yet.', 'ai-site-connector' ); ?></td></tr>
+					<tr><td colspan="7"><?php esc_html_e( 'No events match the current filter.', 'ai-site-connector' ); ?></td></tr>
 				<?php else : ?>
 					<?php foreach ( $rows as $r ) : ?>
 						<?php
 						$actor_user  = $r->actor_user_id ? get_userdata( $r->actor_user_id ) : null;
-						$target_user = $r->target_user_id ? get_userdata( $r->target_user_id ) : null;
+						$summary     = '' !== (string) ( isset( $r->summary ) ? $r->summary : '' ) ? $r->summary : $r->message;
+						$target_lbl  = '';
+						if ( ! empty( $r->target_type ) && ! empty( $r->target_id ) ) {
+							$target_lbl = $r->target_type . '#' . $r->target_id;
+						} elseif ( ! empty( $r->target_user_id ) ) {
+							$tu = get_userdata( (int) $r->target_user_id );
+							$target_lbl = $tu ? 'user:' . $tu->user_login : 'user#' . (int) $r->target_user_id;
+						}
 						?>
 						<tr>
 							<td><?php echo esc_html( $r->created_at ); ?> UTC</td>
 							<td><code><?php echo esc_html( $r->action ); ?></code></td>
+							<td><?php echo $r->tool ? '<code>' . esc_html( $r->tool ) . '</code>' : '—'; ?></td>
+							<td><?php echo $r->status ? '<code>' . esc_html( $r->status ) . '</code>' : '—'; ?></td>
 							<td><?php echo $actor_user ? esc_html( $actor_user->user_login ) : '—'; ?></td>
-							<td><?php echo $target_user ? esc_html( $target_user->user_login ) : '—'; ?></td>
-							<td><?php echo esc_html( $r->ip ); ?></td>
-							<td><?php echo esc_html( $r->message ); ?></td>
+							<td><?php echo $target_lbl ? esc_html( $target_lbl ) : '—'; ?></td>
+							<td><?php echo esc_html( $summary ); ?></td>
 						</tr>
 					<?php endforeach; ?>
 				<?php endif; ?>
@@ -1099,9 +1200,372 @@ class AI_Site_Connector_Admin_Page {
 				<li><a href="https://github.com/tyhallcsu/ai-site-connector/blob/main/README.md" target="_blank" rel="noopener">README</a></li>
 				<li><a href="https://github.com/tyhallcsu/ai-site-connector/blob/main/docs/CLAUDE_CONNECTION_GUIDE.md" target="_blank" rel="noopener">Claude / Codex connection guide</a></li>
 				<li><a href="https://github.com/tyhallcsu/ai-site-connector/blob/main/docs/SECURITY_MODEL.md" target="_blank" rel="noopener">Security model</a></li>
+				<li><a href="https://github.com/tyhallcsu/ai-site-connector/blob/main/docs/FEATURES.md" target="_blank" rel="noopener">Features (v0.2.0)</a></li>
 				<li><a href="https://make.wordpress.org/core/2020/11/05/application-passwords-integration-guide/" target="_blank" rel="noopener">WordPress core: Application Passwords integration guide</a></li>
 			</ul>
 		</div>
 		<?php
+	}
+
+	// === New tabs (v0.2.0) ====================================================
+
+	/**
+	 * Connection Test tab — verifies every link in the MCP chain and shows
+	 * pass/fail badges plus a copyable Claude/Codex agent prompt.
+	 */
+	private static function render_connection_test() {
+		$diag = AI_Site_Connector_Diagnostics::generate();
+		$last = (string) get_option( AI_Site_Connector_REST_Controller::LAST_REQUEST_OPTION, '' );
+		$tools = AI_Site_Connector_REST_Controller::tools_catalog();
+		$user  = wp_get_current_user();
+		$base  = trailingslashit( rest_url() ) . AI_SITE_CONNECTOR_REST_NAMESPACE;
+
+		$checks = array(
+			array(
+				'label'   => __( 'HTTPS', 'ai-site-connector' ),
+				'ok'      => (bool) $diag['wordpress']['https'],
+				'ok_label'  => __( 'Enabled', 'ai-site-connector' ),
+				'bad_label' => __( 'Plain HTTP — not recommended', 'ai-site-connector' ),
+			),
+			array(
+				'label'   => __( 'REST API reachable', 'ai-site-connector' ),
+				'ok'      => (bool) $diag['rest_mcp']['rest_reachable'],
+				'ok_label'  => __( 'OK', 'ai-site-connector' ),
+				'bad_label' => __( 'Not reachable', 'ai-site-connector' ),
+			),
+			array(
+				'label'   => __( 'Application Passwords available', 'ai-site-connector' ),
+				'ok'      => (bool) $diag['wordpress']['app_passwords_available'],
+				'ok_label'  => __( 'Yes', 'ai-site-connector' ),
+				'bad_label' => __( 'No (security plugin or filter disabled them)', 'ai-site-connector' ),
+			),
+			array(
+				'label'   => __( 'MCP namespace registered', 'ai-site-connector' ),
+				'ok'      => ! empty( $diag['rest_mcp']['registered_routes'] ),
+				'ok_label'  => sprintf( __( '%d route(s)', 'ai-site-connector' ), count( $diag['rest_mcp']['registered_routes'] ) ),
+				'bad_label' => __( 'No routes registered — plugin boot failed?', 'ai-site-connector' ),
+			),
+			array(
+				'label'   => __( 'Read-only mode', 'ai-site-connector' ),
+				'ok'      => ! $diag['rest_mcp']['read_only_mode'],
+				'ok_label'  => __( 'Off (writes allowed by individual settings)', 'ai-site-connector' ),
+				'bad_label' => __( 'ON — every non-read tool is currently denied', 'ai-site-connector' ),
+			),
+			array(
+				'label'   => __( 'Last successful MCP request', 'ai-site-connector' ),
+				'ok'      => '' !== $last,
+				'ok_label'  => $last,
+				'bad_label' => __( 'Never (no request has hit /ai-site-connector/v1/* since plugin activation)', 'ai-site-connector' ),
+			),
+		);
+		?>
+		<div class="asc-card">
+			<h2><?php esc_html_e( 'Connection checks', 'ai-site-connector' ); ?></h2>
+			<table class="asc-kv">
+				<?php foreach ( $checks as $c ) : ?>
+					<tr>
+						<th><?php echo esc_html( $c['label'] ); ?></th>
+						<td><?php echo wp_kses_post( self::status_badge( (bool) $c['ok'], $c['ok_label'], $c['bad_label'] ) ); ?></td>
+					</tr>
+				<?php endforeach; ?>
+			</table>
+			<p class="description">
+				<?php
+				echo esc_html(
+					sprintf(
+						/* translators: 1: username, 2: comma-separated role list, 3: REST namespace root URL */
+						__( 'Signed in as %1$s (roles: %2$s). MCP base URL: %3$s', 'ai-site-connector' ),
+						$user->user_login,
+						implode( ', ', (array) $user->roles ),
+						$base
+					)
+				);
+				?>
+			</p>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline">
+				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<input type="hidden" name="action" value="ai_site_connector_test_rest" />
+				<button type="submit" class="button button-secondary"><?php esc_html_e( 'Run REST self-test', 'ai-site-connector' ); ?></button>
+			</form>
+		</div>
+
+		<div class="asc-card">
+			<h2><?php esc_html_e( 'Available tools', 'ai-site-connector' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'Allow / deny state is per the Permissions tab. WP capability checks still apply on top.', 'ai-site-connector' ); ?></p>
+			<table class="widefat striped">
+				<thead>
+					<tr>
+						<th><?php esc_html_e( 'Tool', 'ai-site-connector' ); ?></th>
+						<th><?php esc_html_e( 'Method', 'ai-site-connector' ); ?></th>
+						<th><?php esc_html_e( 'Route', 'ai-site-connector' ); ?></th>
+						<th><?php esc_html_e( 'Permission key', 'ai-site-connector' ); ?></th>
+						<th><?php esc_html_e( 'Status for you', 'ai-site-connector' ); ?></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ( $tools as $t ) : ?>
+						<?php $allowed = AI_Site_Connector_Permissions::can( (string) $t['permission'] ); ?>
+						<tr>
+							<td><strong><?php echo esc_html( $t['name'] ); ?></strong><br><span class="description"><?php echo esc_html( $t['description'] ); ?></span></td>
+							<td><code><?php echo esc_html( $t['method'] ); ?></code></td>
+							<td><code><?php echo esc_html( $base . $t['route'] ); ?></code></td>
+							<td><code><?php echo esc_html( $t['permission'] ); ?></code></td>
+							<td><?php echo wp_kses_post( self::status_badge( (bool) $allowed, __( 'Allowed', 'ai-site-connector' ), __( 'Denied', 'ai-site-connector' ) ) ); ?></td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+		</div>
+
+		<div class="asc-card">
+			<h2><?php esc_html_e( 'Copy-paste Claude/Codex prompt', 'ai-site-connector' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'Generate an Application Password in the Credentials tab, then paste this prompt into your AI agent (replacing the password placeholder). No secret is included in this snippet.', 'ai-site-connector' ); ?></p>
+			<pre class="asc-codeblock" data-copy>You can manage this WordPress site via its AI Site Connector REST API.
+
+Base URL: <?php echo esc_html( $base ); ?>
+
+Auth: HTTP Basic — header "Authorization: Basic base64(<?php echo esc_html( $user->user_login ); ?>:APPLICATION_PASSWORD)"
+
+Available tools (gated by per-tool whitelist in wp-admin → Tools → AI Site Connector → Permissions):
+<?php foreach ( $tools as $t ) :
+echo '  - ' . esc_html( $t['name'] ) . '  (' . esc_html( $t['method'] ) . ' ' . esc_html( $t['route'] ) . ")\n";
+endforeach; ?>
+
+Probe the connection first by calling: GET <?php echo esc_html( $base ); ?>/tools
+
+Do not commit the Application Password to git.</pre>
+			<button type="button" class="button" data-asc-copy="prev"><?php esc_html_e( 'Copy prompt', 'ai-site-connector' ); ?></button>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Permissions tab — checkbox grid for the tool whitelist and read-only toggle.
+	 */
+	private static function render_permissions() {
+		$perms     = AI_Site_Connector_Permissions::get_all();
+		$read_only = AI_Site_Connector_Permissions::is_read_only();
+		?>
+		<div class="asc-card">
+			<h2><?php esc_html_e( 'Tool whitelist', 'ai-site-connector' ); ?></h2>
+			<p class="description">
+				<?php esc_html_e( 'Each tool consults this list BEFORE executing. WP capability checks still apply on top — disabling a tool here cannot grant access, only deny it.', 'ai-site-connector' ); ?>
+			</p>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<input type="hidden" name="action" value="ai_site_connector_save_permissions" />
+				<p>
+					<label>
+						<input type="checkbox" name="ai_site_connector_read_only_mode" value="1" <?php checked( $read_only ); ?> />
+						<strong><?php esc_html_e( 'Global read-only mode', 'ai-site-connector' ); ?></strong> —
+						<?php esc_html_e( 'when on, every non-read tool is denied regardless of the per-tool settings below.', 'ai-site-connector' ); ?>
+					</label>
+				</p>
+				<table class="widefat striped">
+					<thead>
+						<tr>
+							<th><?php esc_html_e( 'Enabled', 'ai-site-connector' ); ?></th>
+							<th><?php esc_html_e( 'Tool', 'ai-site-connector' ); ?></th>
+							<th><?php esc_html_e( 'Category', 'ai-site-connector' ); ?></th>
+							<th><?php esc_html_e( 'WP capability required', 'ai-site-connector' ); ?></th>
+							<th><?php esc_html_e( 'Default', 'ai-site-connector' ); ?></th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php foreach ( $perms as $key => $row ) : ?>
+							<tr>
+								<td><input type="checkbox" name="ai_site_connector_perms[<?php echo esc_attr( $key ); ?>]" value="1" <?php checked( $row['enabled'] ); ?> /></td>
+								<td>
+									<strong><?php echo esc_html( $row['label'] ); ?></strong> <code><?php echo esc_html( $key ); ?></code><br>
+									<span class="description"><?php echo esc_html( $row['description'] ); ?></span>
+								</td>
+								<td><code><?php echo esc_html( $row['category'] ); ?></code></td>
+								<td><code><?php echo esc_html( $row['wp_cap'] ); ?></code></td>
+								<td><?php echo $row['default'] ? esc_html__( 'on', 'ai-site-connector' ) : esc_html__( 'off', 'ai-site-connector' ); ?></td>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+				<p><button type="submit" class="button button-primary"><?php esc_html_e( 'Save permissions', 'ai-site-connector' ); ?></button></p>
+			</form>
+		</div>
+		<?php
+	}
+
+	/** Diagnostics tab — renders the capability report + a cache purge button. */
+	private static function render_diagnostics() {
+		$report = AI_Site_Connector_Diagnostics::generate();
+		?>
+		<div class="asc-card">
+			<h2><?php esc_html_e( 'Cache purge', 'ai-site-connector' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'Flushes WP object cache plus every supported cache plugin that is active. Cloudflare runs only if both API token and zone are set in plugin options.', 'ai-site-connector' ); ?></p>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<input type="hidden" name="action" value="ai_site_connector_purge_cache" />
+				<p><button type="submit" class="button button-secondary"><?php esc_html_e( 'Purge all caches now', 'ai-site-connector' ); ?></button></p>
+			</form>
+		</div>
+
+		<div class="asc-card">
+			<h2><?php esc_html_e( 'Site capability report', 'ai-site-connector' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'Same payload returned by GET /diagnostics/site-report. No secrets are included — safe to paste into a support thread.', 'ai-site-connector' ); ?></p>
+			<pre class="asc-codeblock" data-copy><?php echo esc_html( (string) wp_json_encode( $report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ); ?></pre>
+			<button type="button" class="button" data-asc-copy="prev"><?php esc_html_e( 'Copy JSON', 'ai-site-connector' ); ?></button>
+		</div>
+		<?php
+	}
+
+	/** Export tab — write JSON manifests to wp-content/uploads/ai-site-connector/exports/. */
+	private static function render_export() {
+		?>
+		<div class="asc-card">
+			<h2><?php esc_html_e( 'Repo-sync exports', 'ai-site-connector' ); ?></h2>
+			<p class="description">
+				<?php esc_html_e( 'Each button writes a JSON snapshot under wp-content/uploads/ai-site-connector/exports/. The same data is available via REST under /export/* for an AI agent to fetch directly.', 'ai-site-connector' ); ?>
+			</p>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<input type="hidden" name="action" value="ai_site_connector_export_write" />
+				<p>
+					<label>
+						<input type="radio" name="export_kind" value="media-manifest" checked />
+						<?php esc_html_e( 'Media manifest (attachments + alt/caption/sha256)', 'ai-site-connector' ); ?>
+					</label><br>
+					<label>
+						<input type="radio" name="export_kind" value="recent-changes" />
+						<?php esc_html_e( 'Recent changes (posts + pages, last 50)', 'ai-site-connector' ); ?>
+					</label><br>
+					<label>
+						<input type="radio" name="export_kind" value="site-manifest" />
+						<?php esc_html_e( 'Site manifest (counts + recent + detected plugins)', 'ai-site-connector' ); ?>
+					</label>
+				</p>
+				<p><button type="submit" class="button button-primary"><?php esc_html_e( 'Write export', 'ai-site-connector' ); ?></button></p>
+			</form>
+		</div>
+
+		<div class="asc-card">
+			<h2><?php esc_html_e( 'REST routes for AI agents', 'ai-site-connector' ); ?></h2>
+			<?php $base = trailingslashit( rest_url() ) . AI_SITE_CONNECTOR_REST_NAMESPACE; ?>
+			<table class="widefat striped">
+				<thead><tr><th><?php esc_html_e( 'Method', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'URL', 'ai-site-connector' ); ?></th></tr></thead>
+				<tbody>
+					<tr><td><code>GET</code></td><td><code><?php echo esc_html( $base . '/export/media-manifest' ); ?></code></td></tr>
+					<tr><td><code>GET</code></td><td><code><?php echo esc_html( $base . '/export/recent-changes' ); ?></code></td></tr>
+					<tr><td><code>GET</code></td><td><code><?php echo esc_html( $base . '/export/page/{id}' ); ?></code></td></tr>
+					<tr><td><code>GET</code></td><td><code><?php echo esc_html( $base . '/export/site-manifest' ); ?></code></td></tr>
+				</tbody>
+			</table>
+		</div>
+		<?php
+	}
+
+	/** Helper to render the cache report stored on a flash $extra. */
+	private static function render_cache_report( $report ) {
+		?>
+		<div class="asc-pack">
+			<h4><?php esc_html_e( 'Cache purge report', 'ai-site-connector' ); ?></h4>
+			<table class="asc-kv">
+				<tr><th><?php esc_html_e( 'Purged', 'ai-site-connector' ); ?></th><td><code><?php echo esc_html( implode( ', ', (array) $report['purged'] ) ); ?></code></td></tr>
+				<tr><th><?php esc_html_e( 'Skipped', 'ai-site-connector' ); ?></th><td><code><?php echo esc_html( implode( ', ', (array) $report['skipped'] ) ); ?></code></td></tr>
+				<?php if ( ! empty( $report['warnings'] ) ) : ?>
+					<tr><th><?php esc_html_e( 'Warnings', 'ai-site-connector' ); ?></th><td><pre class="asc-codeblock"><?php echo esc_html( implode( "\n", (array) $report['warnings'] ) ); ?></pre></td></tr>
+				<?php endif; ?>
+			</table>
+		</div>
+		<?php
+	}
+
+	/** Helper to render an export-result link on a flash $extra. */
+	private static function render_export_result( $r ) {
+		?>
+		<div class="asc-pack">
+			<h4><?php esc_html_e( 'Export written', 'ai-site-connector' ); ?></h4>
+			<p>
+				<?php echo esc_html( sprintf( __( 'Kind: %s · Bytes: %d', 'ai-site-connector' ), $r['kind'], (int) $r['bytes'] ) ); ?>
+			</p>
+			<p>
+				<?php esc_html_e( 'Disk path:', 'ai-site-connector' ); ?>
+				<code><?php echo esc_html( (string) $r['path'] ); ?></code>
+			</p>
+			<p>
+				<?php esc_html_e( 'URL:', 'ai-site-connector' ); ?>
+				<a href="<?php echo esc_url( (string) $r['url'] ); ?>" target="_blank" rel="noopener"><?php echo esc_html( (string) $r['url'] ); ?></a>
+			</p>
+			<p class="description">
+				<?php esc_html_e( 'The exports directory is browsable on most hosts. A noindex .htaccess is dropped automatically; commit the file to your repo and delete it from the live server when no longer needed.', 'ai-site-connector' ); ?>
+			</p>
+		</div>
+		<?php
+	}
+
+	public static function handle_export_write() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Insufficient permissions.', 'ai-site-connector' ) );
+		}
+		check_admin_referer( self::NONCE_ACTION, self::NONCE_FIELD );
+
+		$check = AI_Site_Connector_Permissions::require_permission( AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST );
+		if ( is_wp_error( $check ) ) {
+			self::flash( $check->get_error_message(), 'error' );
+			self::redirect_back( 'export' );
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$kind = isset( $_POST['export_kind'] ) ? sanitize_key( wp_unslash( $_POST['export_kind'] ) ) : '';
+		switch ( $kind ) {
+			case 'media-manifest':
+				$data = AI_Site_Connector_Export::media_manifest();
+				break;
+			case 'recent-changes':
+				$data = AI_Site_Connector_Export::recent_changes();
+				break;
+			case 'site-manifest':
+				$data = AI_Site_Connector_Export::site_manifest();
+				break;
+			default:
+				self::flash( __( 'Unknown export kind.', 'ai-site-connector' ), 'error' );
+				self::redirect_back( 'export' );
+		}
+
+		$res = AI_Site_Connector_Export::write_to_disk( $kind, $data );
+		if ( is_wp_error( $res ) ) {
+			self::flash( $res->get_error_message(), 'error' );
+		} else {
+			self::flash(
+				sprintf(
+					/* translators: 1: kind, 2: bytes */
+					__( 'Export written: %1$s (%2$d bytes).', 'ai-site-connector' ),
+					$kind,
+					(int) $res['bytes']
+				),
+				'success',
+				array( 'export_result' => $res )
+			);
+		}
+		self::redirect_back( 'export' );
+	}
+
+	public static function handle_export_audit_csv() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Insufficient permissions.', 'ai-site-connector' ) );
+		}
+		check_admin_referer( self::NONCE_ACTION, self::NONCE_FIELD );
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$filters = array(
+			'action' => isset( $_POST['filter_action'] ) ? sanitize_key( wp_unslash( $_POST['filter_action'] ) ) : '',
+			'tool'   => isset( $_POST['filter_tool'] ) ? sanitize_key( wp_unslash( $_POST['filter_tool'] ) ) : '',
+			'status' => isset( $_POST['filter_status'] ) ? sanitize_key( wp_unslash( $_POST['filter_status'] ) ) : '',
+		);
+
+		$csv = AI_Site_Connector_Audit_Log::export_csv( $filters );
+		$filename = 'ai-site-connector-audit-' . gmdate( 'Ymd-His' ) . '.csv';
+
+		nocache_headers();
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename=' . $filename );
+		echo $csv; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- raw CSV stream.
+		exit;
 	}
 }

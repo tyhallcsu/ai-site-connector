@@ -25,6 +25,11 @@ class AI_Site_Connector_Plugin {
 		AI_Site_Connector_Roles::register_hooks();
 		AI_Site_Connector_Audit_Log::register_hooks();
 		AI_Site_Connector_Audit_Digest::register_hooks();
+		AI_Site_Connector_Permissions::register_hooks();
+		AI_Site_Connector_Diagnostics::register_hooks();
+		AI_Site_Connector_Cache::register_hooks();
+		AI_Site_Connector_Media::register_hooks();
+		AI_Site_Connector_Export::register_hooks();
 		AI_Site_Connector_REST_Controller::register_hooks();
 		AI_Site_Connector_Updater::register_hooks();
 		AI_Site_Connector_Backup_Manager::register_hooks();

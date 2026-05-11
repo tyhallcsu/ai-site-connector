@@ -393,6 +393,7 @@ class AI_Site_Connector_Admin_Page {
 			'wizard'      => __( 'Setup Wizard', 'ai-site-connector' ),
 			'credentials' => __( 'Credentials', 'ai-site-connector' ),
 			'audit'       => __( 'Audit Log', 'ai-site-connector' ),
+			'api'         => __( 'API Explorer', 'ai-site-connector' ),
 			'docs'        => __( 'Docs', 'ai-site-connector' ),
 		);
 		?>
@@ -433,6 +434,9 @@ class AI_Site_Connector_Admin_Page {
 					break;
 				case 'audit':
 					self::render_audit();
+					break;
+				case 'api':
+					self::render_api_explorer();
 					break;
 				case 'docs':
 					self::render_docs();
@@ -743,6 +747,88 @@ class AI_Site_Connector_Admin_Page {
 				?>
 				<p><?php esc_html_e( 'No Application Passwords found for any visible user yet.', 'ai-site-connector' ); ?></p>
 			<?php endif; ?>
+		</div>
+		<?php
+	}
+
+	private static function render_api_explorer() {
+		$routes = AI_Site_Connector_API_Explorer::discoverable_routes();
+		?>
+		<div class="asc-card">
+			<h2><?php esc_html_e( 'REST API Explorer', 'ai-site-connector' ); ?></h2>
+			<p class="description">
+				<?php esc_html_e( 'Browse the REST routes most relevant to AI tools and "Try it" inline. Requests are dispatched in-process via rest_do_request() — no HTTP loopback, so WAF / SSL / Authorization-stripping issues never apply here.', 'ai-site-connector' ); ?>
+			</p>
+			<table class="widefat striped asc-explorer-table">
+				<thead>
+					<tr>
+						<th style="width: 110px;"><?php esc_html_e( 'Namespace', 'ai-site-connector' ); ?></th>
+						<th style="width: 240px;"><?php esc_html_e( 'Methods', 'ai-site-connector' ); ?></th>
+						<th><?php esc_html_e( 'Route', 'ai-site-connector' ); ?></th>
+						<th style="width: 1%; white-space: nowrap;"><?php esc_html_e( 'Action', 'ai-site-connector' ); ?></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ( $routes as $row ) : ?>
+						<tr class="asc-explorer-row" data-route="<?php echo esc_attr( $row['route'] ); ?>" data-methods="<?php echo esc_attr( implode( ',', $row['methods'] ) ); ?>">
+							<td><span class="asc-badge <?php echo 'ai-site-connector' === $row['namespace'] ? 'asc-ok' : ''; ?>"><?php echo esc_html( $row['namespace'] ); ?></span></td>
+							<td><code><?php echo esc_html( implode( ' ', $row['methods'] ) ); ?></code></td>
+							<td><code><?php echo esc_html( $row['route'] ); ?></code><?php if ( ! empty( $row['description'] ) ) : ?><br><span class="description"><?php echo esc_html( $row['description'] ); ?></span><?php endif; ?></td>
+							<td><button type="button" class="button button-secondary asc-try-it"><?php esc_html_e( 'Try it', 'ai-site-connector' ); ?></button></td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+			<div id="asc-try-it-result" class="asc-try-it-result" hidden>
+				<h3><?php esc_html_e( 'Response', 'ai-site-connector' ); ?></h3>
+				<p class="description"><span id="asc-try-it-meta"></span></p>
+				<pre class="asc-codeblock" id="asc-try-it-body"></pre>
+			</div>
+			<script type="text/javascript">
+			(function () {
+				var ajaxUrl = <?php echo wp_json_encode( admin_url( 'admin-ajax.php' ) ); ?>;
+				var nonce   = <?php echo wp_json_encode( wp_create_nonce( AI_Site_Connector_API_Explorer::NONCE ) ); ?>;
+				var action  = <?php echo wp_json_encode( AI_Site_Connector_API_Explorer::AJAX_ACTION ); ?>;
+
+				document.querySelectorAll('.asc-try-it').forEach(function (btn) {
+					btn.addEventListener('click', function () {
+						var row     = btn.closest('.asc-explorer-row');
+						var route   = row.dataset.route;
+						var methods = (row.dataset.methods || 'GET').split(',');
+						var method  = methods.indexOf('GET') !== -1 ? 'GET' : methods[0];
+
+						var meta = document.getElementById('asc-try-it-meta');
+						var body = document.getElementById('asc-try-it-body');
+						var wrap = document.getElementById('asc-try-it-result');
+						wrap.hidden = false;
+						meta.textContent = method + ' ' + route + ' — running…';
+						body.textContent = '';
+
+						var form = new FormData();
+						form.append('action', action);
+						form.append('nonce', nonce);
+						form.append('method', method);
+						form.append('route', route);
+
+						fetch(ajaxUrl, { method: 'POST', body: form, credentials: 'same-origin' })
+							.then(function (r) { return r.json(); })
+							.then(function (j) {
+								if (j && j.success) {
+									meta.textContent = method + ' ' + route + ' — HTTP ' + (j.data && j.data.status);
+									body.textContent = JSON.stringify(j.data && j.data.data, null, 2);
+								} else {
+									meta.textContent = method + ' ' + route + ' — error';
+									body.textContent = JSON.stringify(j, null, 2);
+								}
+							})
+							.catch(function (err) {
+								meta.textContent = method + ' ' + route + ' — network error';
+								body.textContent = String(err);
+							});
+					});
+				});
+			})();
+			</script>
 		</div>
 		<?php
 	}

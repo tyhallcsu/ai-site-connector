@@ -17,6 +17,9 @@
 .ai-site-connector-wrap .asc-rollback { margin-top: 16px; padding-top: 12px; border-top: 1px dashed #c3c4c7; }
 .ai-site-connector-wrap .asc-rollback summary { cursor: pointer; font-weight: 500; color: #2c3338; }
 .ai-site-connector-wrap .asc-rollback-row { display: inline-block; margin: 6px 8px 0 0; }
+.ai-site-connector-wrap .asc-explorer-table { margin: 12px 0; }
+.ai-site-connector-wrap .asc-explorer-table code { font-size: 12px; }
+.ai-site-connector-wrap .asc-try-it-result { margin-top: 16px; }
 .ai-site-connector-wrap .asc-codeblock { background: #1d2327; color: #f0f0f1; padding: 12px; border-radius: 4px; overflow-x: auto; white-space: pre; font-family: Menlo, Consolas, monospace; font-size: 12px; }
 .ai-site-connector-wrap .asc-preflight { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0 12px; }
 .ai-site-connector-wrap .asc-preflight-hint { color: #50575e; font-size: 13px; }

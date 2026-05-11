@@ -20,6 +20,9 @@
  *     Kill switch — when true, the self-updater registers no hooks and makes
  *     no network calls. Useful for managed hosts that handle updates
  *     out-of-band. Default: false.
+ *   AI_SITE_CONNECTOR_MCP_DISABLE (bool)
+ *     When true, the MCP HTTP transport route at
+ *     /wp-json/ai-site-connector/v1/mcp is not registered. Default: false.
  *
  * @package AI_Site_Connector
  */
@@ -49,6 +52,7 @@ require_once AI_SITE_CONNECTOR_DIR . 'includes/class-updater.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-backup-manager.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-api-explorer.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-onboarding.php';
+require_once AI_SITE_CONNECTOR_DIR . 'includes/class-mcp-server.php';
 
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	require_once AI_SITE_CONNECTOR_DIR . 'includes/class-wp-cli.php';

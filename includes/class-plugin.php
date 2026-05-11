@@ -29,6 +29,7 @@ class AI_Site_Connector_Plugin {
 		AI_Site_Connector_Updater::register_hooks();
 		AI_Site_Connector_Backup_Manager::register_hooks();
 		AI_Site_Connector_API_Explorer::register_hooks();
+		AI_Site_Connector_MCP_Server::register_hooks();
 
 		if ( is_admin() ) {
 			AI_Site_Connector_Admin_Page::register_hooks();

@@ -45,6 +45,7 @@ require_once AI_SITE_CONNECTOR_DIR . 'includes/class-user-manager.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-application-passwords.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-app-password-meta.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-app-password-resolver.php';
+require_once AI_SITE_CONNECTOR_DIR . 'includes/class-connection-pack-token.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-audit-log.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-audit-digest.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-permissions.php';

@@ -200,12 +200,22 @@ class AI_Site_Connector_Admin_Page {
 		$pack      = self::build_connection_pack( $user_id, $res );
 		$preflight = self::run_preflight_check( $pack );
 
+		// Mint a one-time download token so the admin can DM a single-use
+		// URL instead of pasting the pack JSON into a chat.
+		$download_url = null;
+		if ( class_exists( 'AI_Site_Connector_Connection_Pack_Token' ) ) {
+			$token        = AI_Site_Connector_Connection_Pack_Token::mint( $user_id, $res['uuid'], $pack );
+			$download_url = AI_Site_Connector_Connection_Pack_Token::build_url( $token );
+		}
+
 		self::flash(
 			__( 'Application Password generated. Copy it now — it will not be shown again.', 'ai-site-connector' ),
 			'success',
 			array(
 				'connection_pack' => $pack,
 				'preflight'       => $preflight,
+				'download_url'    => $download_url,
+				'download_ttl'    => AI_Site_Connector_Connection_Pack_Token::TTL_SECONDS,
 			)
 		);
 
@@ -610,6 +620,9 @@ class AI_Site_Connector_Admin_Page {
 					<p><?php echo esc_html( $flash['msg'] ); ?></p>
 					<?php if ( ! empty( $flash['extra']['preflight'] ) ) : ?>
 						<?php self::render_preflight_result( $flash['extra']['preflight'] ); ?>
+					<?php endif; ?>
+					<?php if ( ! empty( $flash['extra']['download_url'] ) ) : ?>
+						<?php self::render_pack_download_url( $flash['extra']['download_url'], isset( $flash['extra']['download_ttl'] ) ? (int) $flash['extra']['download_ttl'] : 300 ); ?>
 					<?php endif; ?>
 					<?php if ( ! empty( $flash['extra']['connection_pack'] ) ) : ?>
 						<?php self::render_connection_pack( $flash['extra']['connection_pack'] ); ?>
@@ -1163,6 +1176,35 @@ class AI_Site_Connector_Admin_Page {
 					<span class="description"><?php esc_html_e( 'Sends a one-off email covering the last 7 days to the configured recipients.', 'ai-site-connector' ); ?></span>
 				</p>
 			</form>
+		</div>
+		<?php
+	}
+
+	private static function render_pack_download_url( $download_url, $ttl_seconds ) {
+		if ( empty( $download_url ) ) {
+			return;
+		}
+		$minutes = max( 1, (int) round( $ttl_seconds / 60 ) );
+		?>
+		<div class="asc-pack-download" style="margin: 10px 0; padding: 10px 14px; background: #f0f6fc; border: 1px solid #c3d4e0; border-radius: 4px;">
+			<strong><?php esc_html_e( 'One-time-token download:', 'ai-site-connector' ); ?></strong>
+			<?php
+			echo esc_html(
+				sprintf(
+					/* translators: %d: minutes until expiry. */
+					_n(
+						'this signed URL returns the pack JSON exactly once and self-revokes after %d minute. DM it to a teammate without pasting the password into chat.',
+						'this signed URL returns the pack JSON exactly once and self-revokes after %d minutes. DM it to a teammate without pasting the password into chat.',
+						$minutes,
+						'ai-site-connector'
+					),
+					$minutes
+				)
+			);
+			?>
+			<br />
+			<pre class="asc-codeblock" data-copy style="margin-top: 6px;"><?php echo esc_html( $download_url ); ?></pre>
+			<button type="button" class="button" data-asc-copy="prev"><?php esc_html_e( 'Copy download URL', 'ai-site-connector' ); ?></button>
 		</div>
 		<?php
 	}

@@ -339,6 +339,36 @@ class AI_Site_Connector_REST_Controller {
 				),
 			)
 		);
+
+		// One-time-token connection-pack download. Public on purpose: the
+		// token IS the credential. 5-minute single-use TTL enforced by the
+		// transient. Captured tokens that have already been consumed get 410.
+		register_rest_route(
+			$ns,
+			'/connection-pack/(?P<token>[A-Za-z0-9]+)',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'route_consume_pack_token' ),
+				'permission_callback' => '__return_true',
+				'args'                => array(
+					'token' => array( 'type' => 'string', 'required' => true ),
+				),
+			)
+		);
+	}
+
+	public static function route_consume_pack_token( WP_REST_Request $request ) {
+		$token = (string) $request->get_param( 'token' );
+		$pack  = AI_Site_Connector_Connection_Pack_Token::consume( $token );
+		if ( is_wp_error( $pack ) ) {
+			return $pack;
+		}
+		// Force download — this is JSON containing a plaintext password.
+		$response = new WP_REST_Response( $pack, 200 );
+		$response->header( 'Content-Disposition', 'attachment; filename="ai-site-connector-pack.json"' );
+		$response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0' );
+		$response->header( 'Pragma', 'no-cache' );
+		return $response;
 	}
 
 	public static function route_rotate_password( WP_REST_Request $request ) {

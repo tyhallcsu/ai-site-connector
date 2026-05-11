@@ -95,6 +95,9 @@ class AI_Site_Connector_Plugin {
 		if ( class_exists( 'AI_Site_Connector_Updater' ) ) {
 			AI_Site_Connector_Updater::unschedule_cron();
 		}
+		if ( class_exists( 'AI_Site_Connector_App_Password_Meta' ) ) {
+			AI_Site_Connector_App_Password_Meta::unschedule_cron();
+		}
 		AI_Site_Connector_Audit_Log::record(
 			'plugin_deactivated',
 			array(

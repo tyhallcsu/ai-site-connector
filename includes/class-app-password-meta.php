@@ -32,7 +32,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class AI_Site_Connector_App_Password_Meta {
 
-	const META_KEY = 'ai_site_connector_app_password_extras';
+	const META_KEY       = 'ai_site_connector_app_password_extras';
+	const CRON_HOOK      = 'ai_site_connector_app_password_sweep';
+	const REMINDER_DAYS  = 7;
 
 	/* ---------------------------------------------------------------------
 	 * Public API.
@@ -43,6 +45,122 @@ class AI_Site_Connector_App_Password_Meta {
 		// Application_Passwords wrapper fires this action right after the
 		// successful delete in WP core, so we never orphan extras.
 		add_action( 'ai_site_connector_application_password_revoked', array( __CLASS__, 'on_revoked' ), 10, 2 );
+
+		// Daily sweep cron that auto-revokes expired passwords, sends 7-day
+		// reminder emails, and prunes old usage counters.
+		add_action( 'plugins_loaded', array( __CLASS__, 'maybe_schedule_cron' ) );
+		add_action( self::CRON_HOOK, array( __CLASS__, 'run_sweep' ) );
+	}
+
+	public static function maybe_schedule_cron() {
+		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
+			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::CRON_HOOK );
+		}
+	}
+
+	public static function unschedule_cron() {
+		$ts = wp_next_scheduled( self::CRON_HOOK );
+		if ( $ts ) {
+			wp_unschedule_event( $ts, self::CRON_HOOK );
+		}
+		wp_clear_scheduled_hook( self::CRON_HOOK );
+	}
+
+	/**
+	 * Daily sweep: walk every user with extras, revoke any expired passwords,
+	 * send reminder emails for passwords entering the 7-day warning window,
+	 * and prune old usage counters.
+	 *
+	 * Returns a summary array for ease of testing.
+	 *
+	 * @return array{revoked:int, reminded:int, pruned:int}
+	 */
+	public static function run_sweep() {
+		$now           = time();
+		$reminder_secs = self::REMINDER_DAYS * DAY_IN_SECONDS;
+		$revoked       = 0;
+		$reminded      = 0;
+
+		foreach ( self::all_users_with_extras() as $user_id ) {
+			$all = self::all_for_user( $user_id );
+			foreach ( $all as $uuid => $extras ) {
+				if ( empty( $extras['expires_at'] ) ) {
+					continue;
+				}
+				$expires_at = (int) $extras['expires_at'];
+
+				// 1. Past expiry → revoke the underlying App Password.
+				if ( $expires_at <= $now ) {
+					if ( class_exists( 'AI_Site_Connector_Application_Passwords' ) ) {
+						$res = AI_Site_Connector_Application_Passwords::revoke( $user_id, $uuid );
+						// The revoke method fires the revoked action which deletes
+						// this UUID's extras for us, so don't touch $all here.
+						if ( ! is_wp_error( $res ) ) {
+							$revoked++;
+							AI_Site_Connector_Audit_Log::record(
+								'application_password_expired',
+								array(
+									'target_user_id' => $user_id,
+									'message'        => sprintf( 'Auto-revoked expired Application Password (uuid=%s) for user %d.', $uuid, $user_id ),
+								)
+							);
+						}
+					}
+					continue;
+				}
+
+				// 2. Inside the reminder window AND haven't sent one yet.
+				if ( ( $expires_at - $now ) <= $reminder_secs && empty( $extras['reminder_sent'] ) ) {
+					if ( self::send_reminder_email( $user_id, $uuid, $expires_at ) ) {
+						self::mark_reminder_sent( $user_id, $uuid );
+						$reminded++;
+					}
+				}
+			}
+		}
+
+		$retention_days = class_exists( 'AI_Site_Connector_Audit_Log' )
+			? (int) AI_Site_Connector_Audit_Log::retention_days()
+			: 90;
+		$pruned = self::prune_old_usage_counters( $retention_days );
+
+		AI_Site_Connector_Audit_Log::record(
+			'app_password_sweep_run',
+			array(
+				'message' => sprintf( 'Sweep ran: %d revoked, %d reminded, %d usage rows pruned.', $revoked, $reminded, $pruned ),
+				'meta'    => array( 'revoked' => $revoked, 'reminded' => $reminded, 'pruned' => $pruned ),
+			)
+		);
+
+		return array( 'revoked' => $revoked, 'reminded' => $reminded, 'pruned' => $pruned );
+	}
+
+	/**
+	 * Email the user that their Application Password is about to expire.
+	 *
+	 * @return bool wp_mail() result.
+	 */
+	private static function send_reminder_email( $user_id, $uuid, $expires_at ) {
+		$user = get_userdata( $user_id );
+		if ( ! $user || empty( $user->user_email ) ) {
+			return false;
+		}
+		$site    = wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES );
+		$days    = max( 0, (int) ceil( ( $expires_at - time() ) / DAY_IN_SECONDS ) );
+		$subject = sprintf(
+			/* translators: 1: site name. */
+			__( '[%1$s] AI Site Connector: Application Password expires soon', 'ai-site-connector' ),
+			$site
+		);
+		$body  = sprintf(
+			/* translators: 1: site name, 2: days remaining, 3: expiry date, 4: UUID. */
+			__( "Your Application Password on %1\$s will expire in %2\$d day(s) on %3\$s UTC.\n\nUUID: %4\$s\n\nRotate or extend it from Tools → AI Site Connector → Credentials before then. After expiry, REST requests using this password will be rejected and a daily cron will auto-revoke the credential.\n", 'ai-site-connector' ),
+			$site,
+			$days,
+			gmdate( 'Y-m-d H:i:s', $expires_at ),
+			$uuid
+		);
+		return wp_mail( $user->user_email, $subject, $body );
 	}
 
 	/**

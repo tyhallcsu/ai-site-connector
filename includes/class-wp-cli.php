@@ -114,10 +114,63 @@ class AI_Site_Connector_CLI {
 		if ( ! $user ) {
 			WP_CLI::error( 'User not found.' );
 		}
+
+		// Optional extras parsed up front so an invalid expiry refuses to
+		// create the credential.
+		$expires_at = null;
+		if ( ! empty( $assoc['expires'] ) ) {
+			$expires_at = strtotime( (string) $assoc['expires'] );
+			if ( false === $expires_at || $expires_at <= time() ) {
+				WP_CLI::error( '--expires must parse to a future date/time.' );
+			}
+		}
+		$scopes = array();
+		if ( ! empty( $assoc['scopes'] ) ) {
+			foreach ( explode( ',', (string) $assoc['scopes'] ) as $entry ) {
+				$entry = trim( $entry );
+				if ( '' === $entry ) {
+					continue;
+				}
+				if ( false !== strpos( $entry, ':' ) ) {
+					list( $m, $r ) = explode( ':', $entry, 2 );
+					$scopes[] = array( 'method' => strtoupper( trim( $m ) ), 'route' => '/' . ltrim( trim( $r ), '/' ) );
+				} else {
+					$scopes[] = array( 'method' => '*', 'route' => '/' . ltrim( $entry, '/' ) );
+				}
+			}
+		}
+		$ip_allowlist = array();
+		if ( ! empty( $assoc['ip-allowlist'] ) ) {
+			foreach ( explode( ',', (string) $assoc['ip-allowlist'] ) as $cidr ) {
+				$cidr = trim( $cidr );
+				if ( '' !== $cidr ) {
+					$ip_allowlist[] = $cidr;
+				}
+			}
+		}
+
 		$res = AI_Site_Connector_Application_Passwords::create_for_user( $user->ID, $name );
 		if ( is_wp_error( $res ) ) {
 			WP_CLI::error( $res->get_error_message() );
 		}
+
+		// Persist extras now that we have the UUID.
+		if ( class_exists( 'AI_Site_Connector_App_Password_Meta' ) ) {
+			$extras = array( 'created_by' => 0 ); // 0 = CLI/automated.
+			if ( ! empty( $scopes ) ) {
+				$extras['scopes'] = $scopes;
+			}
+			if ( ! empty( $ip_allowlist ) ) {
+				$extras['ip_allowlist'] = $ip_allowlist;
+			}
+			if ( null !== $expires_at ) {
+				$extras['expires_at'] = $expires_at;
+			}
+			if ( count( $extras ) > 1 ) {
+				AI_Site_Connector_App_Password_Meta::set_extras( $user->ID, $res['uuid'], $extras );
+			}
+		}
+
 		$pack = array(
 			'site_url'             => home_url(),
 			'rest_api_base'        => trailingslashit( rest_url() ),
@@ -163,6 +216,61 @@ class AI_Site_Connector_CLI {
 			WP_CLI::error( $res->get_error_message() );
 		}
 		WP_CLI::success( 'Application Password revoked.' );
+	}
+
+	/**
+	 * Atomically rotate an Application Password.
+	 *
+	 * Mints a new password preserving sidecar metadata (scopes, IP allowlist,
+	 * expiry), then revokes the old one. If the revoke fails the new password
+	 * is rolled back so you're never left with two valid credentials.
+	 *
+	 * ## OPTIONS
+	 *
+	 * --username=<username>
+	 * : Login of the WordPress user whose password is being rotated.
+	 *
+	 * --uuid=<uuid>
+	 * : UUID of the existing Application Password to rotate.
+	 *
+	 * [--name=<name>]
+	 * : Optional name for the new password. Defaults to "<old name> (rotated <date>)".
+	 *
+	 * [--format=<format>]
+	 * : json|table|yaml. Default: table.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *   wp ai-connector rotate-password --username=ai-agent --uuid=abc-123
+	 *   wp ai-connector rotate-password --username=ai-agent --uuid=abc-123 --format=json
+	 */
+	public function rotate_password( $args, $assoc ) {
+		$username = isset( $assoc['username'] ) ? $assoc['username'] : '';
+		$uuid     = isset( $assoc['uuid'] ) ? $assoc['uuid'] : '';
+		$new_name = isset( $assoc['name'] ) ? $assoc['name'] : null;
+		$user     = $username ? get_user_by( 'login', $username ) : null;
+		if ( ! $user ) {
+			WP_CLI::error( 'User not found.' );
+		}
+		$res = AI_Site_Connector_Application_Passwords::rotate( $user->ID, $uuid, $new_name );
+		if ( is_wp_error( $res ) ) {
+			WP_CLI::error( $res->get_error_message() );
+		}
+		$pack = array(
+			'site_url'             => home_url(),
+			'rest_api_base'        => trailingslashit( rest_url() ),
+			'username'             => $user->user_login,
+			'application_password' => $res['password'],
+			'app_password_uuid'    => $res['uuid'],
+			'app_password_name'    => $res['name'],
+		);
+		$format = isset( $assoc['format'] ) ? $assoc['format'] : 'table';
+		if ( 'json' === $format ) {
+			WP_CLI::log( wp_json_encode( $pack, JSON_PRETTY_PRINT ) );
+		} else {
+			\WP_CLI\Utils\format_items( $format, array( $pack ), array_keys( $pack ) );
+		}
+		WP_CLI::success( sprintf( 'Application Password rotated for %s. Save the new password — it will not be shown again.', $user->user_login ) );
 	}
 
 	/**

@@ -23,6 +23,8 @@ class AI_Site_Connector_Plugin {
 
 	private function boot() {
 		AI_Site_Connector_Roles::register_hooks();
+		AI_Site_Connector_App_Password_Meta::register_hooks();
+		AI_Site_Connector_App_Password_Resolver::register_hooks();
 		AI_Site_Connector_Audit_Log::register_hooks();
 		AI_Site_Connector_Audit_Digest::register_hooks();
 		AI_Site_Connector_Permissions::register_hooks();
@@ -58,6 +60,7 @@ class AI_Site_Connector_Plugin {
 			WP_CLI::add_command( 'ai-connector create-user', array( 'AI_Site_Connector_CLI', 'create_user' ) );
 			WP_CLI::add_command( 'ai-connector generate-password', array( 'AI_Site_Connector_CLI', 'generate_password' ) );
 			WP_CLI::add_command( 'ai-connector revoke-password', array( 'AI_Site_Connector_CLI', 'revoke_password' ) );
+			WP_CLI::add_command( 'ai-connector rotate-password', array( 'AI_Site_Connector_CLI', 'rotate_password' ) );
 		}
 	}
 
@@ -91,6 +94,9 @@ class AI_Site_Connector_Plugin {
 		AI_Site_Connector_Audit_Digest::unschedule_cron();
 		if ( class_exists( 'AI_Site_Connector_Updater' ) ) {
 			AI_Site_Connector_Updater::unschedule_cron();
+		}
+		if ( class_exists( 'AI_Site_Connector_App_Password_Meta' ) ) {
+			AI_Site_Connector_App_Password_Meta::unschedule_cron();
 		}
 		AI_Site_Connector_Audit_Log::record(
 			'plugin_deactivated',

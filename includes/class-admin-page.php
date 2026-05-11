@@ -21,6 +21,7 @@ class AI_Site_Connector_Admin_Page {
 		add_action( 'admin_post_ai_site_connector_create_user', array( __CLASS__, 'handle_create_user' ) );
 		add_action( 'admin_post_ai_site_connector_generate_password', array( __CLASS__, 'handle_generate_password' ) );
 		add_action( 'admin_post_ai_site_connector_revoke_password', array( __CLASS__, 'handle_revoke_password' ) );
+		add_action( 'admin_post_ai_site_connector_rotate_password', array( __CLASS__, 'handle_rotate_password' ) );
 		add_action( 'admin_post_ai_site_connector_test_rest', array( __CLASS__, 'handle_test_rest' ) );
 		add_action( 'admin_post_ai_site_connector_prune_log', array( __CLASS__, 'handle_prune_log' ) );
 		add_action( 'admin_post_ai_site_connector_save_uninstall_pref', array( __CLASS__, 'handle_save_uninstall_pref' ) );
@@ -159,14 +160,57 @@ class AI_Site_Connector_Admin_Page {
 		$user_id  = isset( $_POST['ai_user_id'] ) ? (int) $_POST['ai_user_id'] : 0;
 		$app_name = isset( $_POST['ai_app_name'] ) ? sanitize_text_field( wp_unslash( $_POST['ai_app_name'] ) ) : AI_Site_Connector_Application_Passwords::suggested_name();
 
+		// Optional extras: scopes (checkbox tree), IP allowlist (textarea),
+		// expiry (datetime-local input). Parsed before mint so we can refuse
+		// past-expiry values without creating an unusable credential. Sanitization
+		// happens inside the parse_* helpers — each accepts an unsanitized array
+		// or string and emits a strictly-shaped output.
+		// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- See parse_* helpers below.
+		$scopes_raw  = isset( $_POST['ai_scopes'] ) ? wp_unslash( $_POST['ai_scopes'] ) : array();
+		$ip_raw      = isset( $_POST['ai_ip_allowlist'] ) ? (string) wp_unslash( $_POST['ai_ip_allowlist'] ) : '';
+		$expires_raw = isset( $_POST['ai_expires_at'] ) ? trim( (string) wp_unslash( $_POST['ai_expires_at'] ) ) : '';
+		// phpcs:enable
+		$scopes_parsed  = self::parse_scopes_input( is_array( $scopes_raw ) ? $scopes_raw : array() );
+		$ip_parsed      = self::parse_ip_allowlist_input( $ip_raw );
+		$expires_parsed = self::parse_expires_input( $expires_raw );
+		if ( is_wp_error( $expires_parsed ) ) {
+			self::flash( $expires_parsed->get_error_message(), 'error' );
+			self::redirect_back( 'credentials' );
+		}
+
 		$res = AI_Site_Connector_Application_Passwords::create_for_user( $user_id, $app_name );
 		if ( is_wp_error( $res ) ) {
 			self::flash( $res->get_error_message(), 'error' );
 			self::redirect_back( 'credentials' );
 		}
 
+		// Persist extras now that we have the new UUID.
+		if ( class_exists( 'AI_Site_Connector_App_Password_Meta' ) ) {
+			$extras = array( 'created_by' => get_current_user_id() );
+			if ( ! empty( $scopes_parsed ) ) {
+				$extras['scopes'] = $scopes_parsed;
+			}
+			if ( ! empty( $ip_parsed ) ) {
+				$extras['ip_allowlist'] = $ip_parsed;
+			}
+			if ( null !== $expires_parsed ) {
+				$extras['expires_at'] = $expires_parsed;
+			}
+			if ( count( $extras ) > 1 ) { // more than just created_by
+				AI_Site_Connector_App_Password_Meta::set_extras( $user_id, $res['uuid'], $extras );
+			}
+		}
+
 		$pack      = self::build_connection_pack( $user_id, $res );
 		$preflight = self::run_preflight_check( $pack );
+
+		// Mint a one-time download token so the admin can DM a single-use
+		// URL instead of pasting the pack JSON into a chat.
+		$download_url = null;
+		if ( class_exists( 'AI_Site_Connector_Connection_Pack_Token' ) ) {
+			$token        = AI_Site_Connector_Connection_Pack_Token::mint( $user_id, $res['uuid'], $pack );
+			$download_url = AI_Site_Connector_Connection_Pack_Token::build_url( $token );
+		}
 
 		self::flash(
 			__( 'Application Password generated. Copy it now — it will not be shown again.', 'ai-site-connector' ),
@@ -174,6 +218,8 @@ class AI_Site_Connector_Admin_Page {
 			array(
 				'connection_pack' => $pack,
 				'preflight'       => $preflight,
+				'download_url'    => $download_url,
+				'download_ttl'    => AI_Site_Connector_Connection_Pack_Token::TTL_SECONDS,
 			)
 		);
 
@@ -202,6 +248,118 @@ class AI_Site_Connector_Admin_Page {
 		}
 
 		self::redirect_back( 'credentials' );
+	}
+
+	/**
+	 * Default scope presets shown as checkboxes on the Credentials form.
+	 * Mirrors the AI Site Operator role's natural capability surface so the
+	 * defaults are sensible for the typical AI agent. Filterable.
+	 *
+	 * @return array<int, array{method:string, route:string, label:string}>
+	 */
+	private static function scope_presets() {
+		$presets = array(
+			array( 'method' => 'GET',  'route' => '/wp/v2/posts',     'label' => __( 'Read posts', 'ai-site-connector' ) ),
+			array( 'method' => 'POST', 'route' => '/wp/v2/posts',     'label' => __( 'Create/update posts', 'ai-site-connector' ) ),
+			array( 'method' => 'GET',  'route' => '/wp/v2/pages',     'label' => __( 'Read pages', 'ai-site-connector' ) ),
+			array( 'method' => 'POST', 'route' => '/wp/v2/pages',     'label' => __( 'Create/update pages', 'ai-site-connector' ) ),
+			array( 'method' => 'GET',  'route' => '/wp/v2/media',     'label' => __( 'Read media library', 'ai-site-connector' ) ),
+			array( 'method' => 'POST', 'route' => '/wp/v2/media',     'label' => __( 'Upload media', 'ai-site-connector' ) ),
+			array( 'method' => 'GET',  'route' => '/wp/v2/users/me',  'label' => __( 'Read self', 'ai-site-connector' ) ),
+			array( 'method' => '*',    'route' => '/ai-site-connector/v1/*', 'label' => __( 'All plugin routes', 'ai-site-connector' ) ),
+		);
+		/**
+		 * Filter the scope presets shown on the Credentials tab.
+		 *
+		 * @param array $presets
+		 */
+		return (array) apply_filters( 'ai_site_connector_scope_presets', $presets );
+	}
+
+	/**
+	 * Parse the scope checkbox/textarea input from the Credentials form.
+	 *
+	 * Accepts either an array of strings shaped like "METHOD:/route" (from
+	 * checkboxes) OR a JSON blob (from the advanced textarea).
+	 *
+	 * @param array|string $raw
+	 * @return array Array of { method, route } scope entries; empty = no restriction.
+	 */
+	private static function parse_scopes_input( $raw ) {
+		$out = array();
+		if ( is_string( $raw ) ) {
+			$decoded = json_decode( $raw, true );
+			if ( is_array( $decoded ) ) {
+				$raw = $decoded;
+			} else {
+				$raw = array_filter( array_map( 'trim', explode( "\n", $raw ) ) );
+			}
+		}
+		if ( ! is_array( $raw ) ) {
+			return $out;
+		}
+		foreach ( $raw as $item ) {
+			if ( is_array( $item ) && isset( $item['route'] ) ) {
+				$out[] = array(
+					'method' => isset( $item['method'] ) ? strtoupper( sanitize_text_field( $item['method'] ) ) : '*',
+					'route'  => '/' . ltrim( sanitize_text_field( $item['route'] ), '/' ),
+				);
+				continue;
+			}
+			$item = trim( (string) $item );
+			if ( '' === $item ) {
+				continue;
+			}
+			if ( false !== strpos( $item, ':' ) ) {
+				list( $method, $route ) = explode( ':', $item, 2 );
+				$out[] = array(
+					'method' => strtoupper( sanitize_text_field( $method ) ),
+					'route'  => '/' . ltrim( sanitize_text_field( $route ), '/' ),
+				);
+			} else {
+				$out[] = array(
+					'method' => '*',
+					'route'  => '/' . ltrim( sanitize_text_field( $item ), '/' ),
+				);
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Parse a textarea of CIDR ranges (one per line). Returns array of valid CIDRs.
+	 */
+	private static function parse_ip_allowlist_input( $raw ) {
+		$out = array();
+		foreach ( preg_split( '/[\r\n,]+/', (string) $raw ) as $line ) {
+			$line = trim( $line );
+			if ( '' === $line ) {
+				continue;
+			}
+			$out[] = $line;
+		}
+		return $out;
+	}
+
+	/**
+	 * Parse the datetime-local input. Returns:
+	 *   - null     if blank (no expiry — current behavior)
+	 *   - int      Unix timestamp if valid
+	 *   - WP_Error if invalid or in the past
+	 */
+	private static function parse_expires_input( $raw ) {
+		$raw = trim( (string) $raw );
+		if ( '' === $raw ) {
+			return null;
+		}
+		$ts = strtotime( $raw );
+		if ( false === $ts ) {
+			return new WP_Error( 'invalid_expires', __( 'Expiration date is not a valid date/time.', 'ai-site-connector' ) );
+		}
+		if ( $ts <= time() ) {
+			return new WP_Error( 'invalid_expires', __( 'Expiration date must be in the future.', 'ai-site-connector' ) );
+		}
+		return $ts;
 	}
 
 	/**
@@ -299,6 +457,38 @@ class AI_Site_Connector_Admin_Page {
 		} else {
 			self::flash( __( 'Application Password revoked.', 'ai-site-connector' ), 'success' );
 		}
+		self::redirect_back( 'credentials' );
+	}
+
+	public static function handle_rotate_password() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Insufficient permissions.', 'ai-site-connector' ) );
+		}
+		check_admin_referer( self::NONCE_ACTION, self::NONCE_FIELD );
+
+		$user_id = isset( $_POST['ai_user_id'] ) ? (int) $_POST['ai_user_id'] : 0;
+		$uuid    = isset( $_POST['ai_uuid'] ) ? sanitize_text_field( wp_unslash( $_POST['ai_uuid'] ) ) : '';
+
+		$res = AI_Site_Connector_Application_Passwords::rotate( $user_id, $uuid );
+		if ( is_wp_error( $res ) ) {
+			self::flash( $res->get_error_message(), 'error' );
+			self::redirect_back( 'credentials' );
+		}
+
+		// Re-emit a full connection pack for the new password so the operator
+		// sees the same format-picker UI they got on initial creation.
+		$pack = self::build_connection_pack( $user_id, $res );
+		self::flash(
+			sprintf(
+				/* translators: %s: new UUID. */
+				__( 'Application Password rotated. New UUID: %s. Copy the new password now — it will not be shown again.', 'ai-site-connector' ),
+				$res['uuid']
+			),
+			'success',
+			array(
+				'connection_pack' => $pack,
+			)
+		);
 		self::redirect_back( 'credentials' );
 	}
 
@@ -434,6 +624,9 @@ class AI_Site_Connector_Admin_Page {
 					<p><?php echo esc_html( $flash['msg'] ); ?></p>
 					<?php if ( ! empty( $flash['extra']['preflight'] ) ) : ?>
 						<?php self::render_preflight_result( $flash['extra']['preflight'] ); ?>
+					<?php endif; ?>
+					<?php if ( ! empty( $flash['extra']['download_url'] ) ) : ?>
+						<?php self::render_pack_download_url( $flash['extra']['download_url'], isset( $flash['extra']['download_ttl'] ) ? (int) $flash['extra']['download_ttl'] : 300 ); ?>
 					<?php endif; ?>
 					<?php if ( ! empty( $flash['extra']['connection_pack'] ) ) : ?>
 						<?php self::render_connection_pack( $flash['extra']['connection_pack'] ); ?>
@@ -765,6 +958,34 @@ class AI_Site_Connector_Admin_Page {
 						</td></tr>
 					<tr><th><label for="ai_app_name"><?php esc_html_e( 'App Password name', 'ai-site-connector' ); ?></label></th>
 						<td><input type="text" id="ai_app_name" name="ai_app_name" value="<?php echo esc_attr( AI_Site_Connector_Application_Passwords::suggested_name() ); ?>" class="regular-text" required /></td></tr>
+					<tr><th><label for="ai_expires_at"><?php esc_html_e( 'Expires (optional)', 'ai-site-connector' ); ?></label></th>
+						<td>
+							<input type="datetime-local" id="ai_expires_at" name="ai_expires_at" value="" />
+							<p class="description"><?php esc_html_e( 'When set, the password is auto-revoked on this date by a daily cron. A reminder email is sent 7 days before expiry. Leave blank for no expiry.', 'ai-site-connector' ); ?></p>
+						</td></tr>
+					<tr><th><label for="ai_ip_allowlist"><?php esc_html_e( 'IP allowlist (optional)', 'ai-site-connector' ); ?></label></th>
+						<td>
+							<textarea id="ai_ip_allowlist" name="ai_ip_allowlist" rows="3" class="regular-text" placeholder="<?php echo esc_attr__( 'One CIDR per line, e.g. 192.0.2.0/24 or 2001:db8::/32', 'ai-site-connector' ); ?>"></textarea>
+							<p class="description"><?php esc_html_e( 'Requests from non-matching IPs are rejected at REST auth. Leave blank to allow any IP. IPv4 + IPv6 supported.', 'ai-site-connector' ); ?></p>
+						</td></tr>
+					<tr><th><?php esc_html_e( 'REST scopes (optional)', 'ai-site-connector' ); ?></th>
+						<td>
+							<fieldset>
+								<legend class="screen-reader-text"><?php esc_html_e( 'Allowed REST routes for this password', 'ai-site-connector' ); ?></legend>
+								<?php
+								$scope_presets = self::scope_presets();
+								foreach ( $scope_presets as $preset ) :
+									$value = $preset['method'] . ':' . $preset['route'];
+									?>
+									<label style="display:block; margin: 2px 0;">
+										<input type="checkbox" name="ai_scopes[]" value="<?php echo esc_attr( $value ); ?>" />
+										<code><?php echo esc_html( $preset['method'] . ' ' . $preset['route'] ); ?></code>
+										<span class="description">— <?php echo esc_html( $preset['label'] ); ?></span>
+									</label>
+								<?php endforeach; ?>
+							</fieldset>
+							<p class="description"><?php esc_html_e( 'Leave all unchecked = no scope restriction (password works on any route the user can access). Check one or more to limit this password to only those routes.', 'ai-site-connector' ); ?></p>
+						</td></tr>
 				</table>
 				<p><button type="submit" class="button button-primary"><?php esc_html_e( 'Generate Connection Pack', 'ai-site-connector' ); ?></button></p>
 			</form>
@@ -792,6 +1013,13 @@ class AI_Site_Connector_Admin_Page {
 							<td><?php echo esc_html( isset( $p['created'] ) ? gmdate( 'Y-m-d H:i:s', (int) $p['created'] ) : '' ); ?></td>
 							<td><?php echo esc_html( ! empty( $p['last_used'] ) ? gmdate( 'Y-m-d H:i:s', (int) $p['last_used'] ) : '—' ); ?></td>
 							<td>
+								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline; margin-right: 6px;">
+									<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+									<input type="hidden" name="action" value="ai_site_connector_rotate_password" />
+									<input type="hidden" name="ai_user_id" value="<?php echo (int) $u->ID; ?>" />
+									<input type="hidden" name="ai_uuid" value="<?php echo esc_attr( isset( $p['uuid'] ) ? $p['uuid'] : '' ); ?>" />
+									<button type="submit" class="button" onclick="return confirm('<?php echo esc_js( __( 'Rotate this Application Password? A new one will be minted with the same scopes/IP/expiry; AI tools must use the new password going forward.', 'ai-site-connector' ) ); ?>');"><?php esc_html_e( 'Rotate', 'ai-site-connector' ); ?></button>
+								</form>
 								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline">
 									<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
 									<input type="hidden" name="action" value="ai_site_connector_revoke_password" />
@@ -952,6 +1180,35 @@ class AI_Site_Connector_Admin_Page {
 					<span class="description"><?php esc_html_e( 'Sends a one-off email covering the last 7 days to the configured recipients.', 'ai-site-connector' ); ?></span>
 				</p>
 			</form>
+		</div>
+		<?php
+	}
+
+	private static function render_pack_download_url( $download_url, $ttl_seconds ) {
+		if ( empty( $download_url ) ) {
+			return;
+		}
+		$minutes = max( 1, (int) round( $ttl_seconds / 60 ) );
+		?>
+		<div class="asc-pack-download" style="margin: 10px 0; padding: 10px 14px; background: #f0f6fc; border: 1px solid #c3d4e0; border-radius: 4px;">
+			<strong><?php esc_html_e( 'One-time-token download:', 'ai-site-connector' ); ?></strong>
+			<?php
+			echo esc_html(
+				sprintf(
+					/* translators: %d: minutes until expiry. */
+					_n(
+						'this signed URL returns the pack JSON exactly once and self-revokes after %d minute. DM it to a teammate without pasting the password into chat.',
+						'this signed URL returns the pack JSON exactly once and self-revokes after %d minutes. DM it to a teammate without pasting the password into chat.',
+						$minutes,
+						'ai-site-connector'
+					),
+					$minutes
+				)
+			);
+			?>
+			<br />
+			<pre class="asc-codeblock" data-copy style="margin-top: 6px;"><?php echo esc_html( $download_url ); ?></pre>
+			<button type="button" class="button" data-asc-copy="prev"><?php esc_html_e( 'Copy download URL', 'ai-site-connector' ); ?></button>
 		</div>
 		<?php
 	}

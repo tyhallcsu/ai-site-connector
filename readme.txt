@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.5.2
+Stable tag: 0.6.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,15 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.6.0 =
+* Hardening release — per-Application-Password security controls.
+* Atomic password rotation (closes #4): `wp ai-connector rotate-password` + admin "Rotate" button + `POST /credentials/rotate-password` REST route. Mints a new password preserving scopes/IP/expiry, revokes the old in one atomic step, rolls back on failure.
+* One-time-token connection-pack download (closes #6): generate a single-use signed URL the admin can DM. Returns the pack JSON exactly once with `Content-Disposition: attachment`, then 410s. 5-minute TTL.
+* Per-password REST scopes (closes #12): allow-list of method+route entries per Application Password. Enforced at `rest_pre_dispatch` priority 9 with 403 `scope_off`. UI checkbox tree on the Credentials tab.
+* Application Password expiration (closes #13): optional `expires_at` per password. Same-day expiries refused at REST auth with 401 `expired`. Daily WP-Cron auto-revokes expired credentials and sends a reminder email 7 days before expiry.
+* Per-password IP allowlist (closes #15): CIDR ranges (IPv4 + IPv6) per password. Enforced at REST auth with 403 `ip_off`. Reverse-proxy aware via `WP_TRUSTED_PROXIES` constant + `ai_site_connector_request_ip` filter.
+* New shared infrastructure: `AI_Site_Connector_App_Password_Meta` (sidecar metadata for scopes/IP/expiry/usage counters), `AI_Site_Connector_App_Password_Resolver` (per-request UUID resolver hooking the WP 5.7+ `application_password_did_authenticate` action).
+
 = 0.5.2 =
 * Fix: self-updater Updates card now auto-populates on first visit instead of showing "Not checked yet" until WordPress's own update_plugins schedule fires. New `AI_Site_Connector_Updater::ensure_check()` does a synchronous GitHub fetch when the cache is empty.
 * New: daily WP-Cron `ai_site_connector_update_check` pre-warms the release cache so fleet operators who never open the admin still get fresh status.

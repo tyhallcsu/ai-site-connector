@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.3.0
+Stable tag: 0.4.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,15 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.4.0 =
+* First-run onboarding wizard with a 5-step "Get Started" tab + welcome notice (closes #31).
+* Backup-before-update + one-click rollback. Each self-update snapshots the previous plugin folder to `wp-content/upgrade-backups/ai-site-connector/{version}/`. Keeps the last 3, never deletes the currently-installed version (closes #32).
+* Pre-flight verification on Application Password generation. Server-side probe of `/wp/v2/users/me` with the new credentials, with per-status hints (401 = Authorization-header stripping, 403 = caps/WAF, 404 = REST off, 5xx = server error) (closes #33).
+* Sample agent code in `examples/{python,node,bash}/` — three runnable reference clients demonstrating the full flow (health, list, create, upload) (closes #34).
+* MCP HTTP transport endpoint at `/wp-json/ai-site-connector/v1/mcp` speaking JSON-RPC 2.0. Supports `initialize`, `tools/list`, `tools/call`, `ping`. 9 tools wrap the plugin's REST endpoints + core WP post operations via internal `rest_do_request`. New `AI_SITE_CONNECTOR_MCP_DISABLE` constant (closes #35).
+* Daily / weekly audit-log email digest. Configurable cadence, recipients, "Send test digest now". Empty windows skipped on auto-runs (closes #36).
+* In-admin REST endpoint explorer ("API Explorer" tab). Lists the plugin's REST routes plus a curated set of `wp/v2/*` routes with an inline "Try it" button. Internal dispatch via `rest_do_request` — no HTTP loopback (closes #37).
+
 = 0.3.0 =
 * Tool-specific connection packs. The credential flash now shows a tabbed picker with ready-to-paste snippets for Claude Desktop (MCP), Cursor / VS Code (MCP), n8n / Make.com / Zapier, curl, Python (requests), Node.js (fetch), the generic connection-pack JSON, and plain-text agent instructions. New `AI_Site_Connector_Connection_Formats` class so the same builders can be reused later from WP-CLI or REST.
 * CSS-only tabbed UI (no JS framework) using `:checked` sibling selectors.

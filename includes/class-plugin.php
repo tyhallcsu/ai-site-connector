@@ -65,6 +65,13 @@ class AI_Site_Connector_Plugin {
 		AI_Site_Connector_Roles::ensure_role();
 		AI_Site_Connector_Audit_Log::install_table();
 		AI_Site_Connector_Audit_Log::maybe_schedule_cron();
+		// Clear stale update transients so the Updates card on the very first
+		// admin visit shows the current state of GitHub releases, not whatever
+		// was cached before activation (or stale data from a prior version).
+		if ( class_exists( 'AI_Site_Connector_Updater' ) ) {
+			delete_site_transient( AI_Site_Connector_Updater::TRANSIENT_KEY );
+		}
+		delete_site_transient( 'update_plugins' );
 		// Default new installs to "onboarding not yet completed" so the welcome notice shows.
 		if ( false === get_option( AI_Site_Connector_Onboarding::OPTION, false )
 			&& false === get_option( AI_Site_Connector_Onboarding::OPTION ) ) {
@@ -82,6 +89,9 @@ class AI_Site_Connector_Plugin {
 	public static function deactivate() {
 		AI_Site_Connector_Audit_Log::unschedule_cron();
 		AI_Site_Connector_Audit_Digest::unschedule_cron();
+		if ( class_exists( 'AI_Site_Connector_Updater' ) ) {
+			AI_Site_Connector_Updater::unschedule_cron();
+		}
 		AI_Site_Connector_Audit_Log::record(
 			'plugin_deactivated',
 			array(

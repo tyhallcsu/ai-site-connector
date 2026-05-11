@@ -552,6 +552,21 @@ class AI_Site_Connector_Admin_Page {
 	}
 
 	private static function render_updates_card() {
+		// Defensive: bail cleanly if the updater class isn't loaded (e.g. an upgrade
+		// in flight, or a host that surgically disables the file).
+		if ( ! class_exists( 'AI_Site_Connector_Updater' ) ) {
+			?>
+			<div class="asc-card">
+				<h3><?php esc_html_e( 'Updates', 'ai-site-connector' ); ?></h3>
+				<p class="description"><?php esc_html_e( 'Update checker is not loaded. Reinstall the plugin if this persists.', 'ai-site-connector' ); ?></p>
+			</div>
+			<?php
+			return;
+		}
+		// First-visit auto-populate: if the transient is empty (no cached release,
+		// no recent error), trigger a synchronous check now so the card shows real
+		// status instead of "Not checked yet" until WP's update_plugins cron fires.
+		AI_Site_Connector_Updater::ensure_check();
 		$remote      = AI_Site_Connector_Updater::cached_release();
 		$error       = AI_Site_Connector_Updater::cached_error();
 		$disabled    = AI_Site_Connector_Updater::is_disabled();

@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 0.5.0
+Stable tag: 0.5.2
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,12 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.5.2 =
+* Fix: self-updater Updates card now auto-populates on first visit instead of showing "Not checked yet" until WordPress's own update_plugins schedule fires. New `AI_Site_Connector_Updater::ensure_check()` does a synchronous GitHub fetch when the cache is empty.
+* New: daily WP-Cron `ai_site_connector_update_check` pre-warms the release cache so fleet operators who never open the admin still get fresh status.
+* Activation now clears the update_plugins and AI Site Connector release transients so newly-activated installs immediately check fresh.
+* Defensive `class_exists()` guard around the Updates card render — if the updater file is ever missing or surgically disabled, the card now degrades gracefully instead of throwing.
+
 = 0.5.0 =
 * First-run onboarding wizard with a 5-step "Get Started" tab + welcome notice (closes #31).
 * Backup-before-update + one-click rollback. Each self-update snapshots the previous plugin folder to `wp-content/upgrade-backups/ai-site-connector/{version}/`. Keeps the last 3, never deletes the currently-installed version (closes #32).

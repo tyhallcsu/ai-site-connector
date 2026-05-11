@@ -2,9 +2,9 @@
 Contributors: sharmanhall
 Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
-Tested up to: 6.5
+Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 0.9.0
+Stable tag: 0.9.1
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,11 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.9.1 =
+* Compatibility patch — no functional changes.
+* `Tested up to:` raised from 6.5 to 6.9 after the green `wordpress-runtime` CI job (which exercises `WP_VERSION=latest` = 6.9.x) confirmed v0.9.0 boots and passes smoke against current WordPress stable (closes #55).
+* CI: `wordpress-version-compat` matrix gains 6.8 and 6.9 rows (continue-on-error preserved). The plugin's compat coverage now spans 5.6 → 6.9 by name, plus `latest`.
+
 = 0.9.0 =
 * Audit-approved batch release closing 12 issues from the v0.8.1 post-release audit.
 * Security: SSRF guard (`AI_Site_Connector_Url_Guard`) applied to `POST /media/sideload` and audit-log webhook delivery (closes #56, #57). Internal/loopback/link-local/metadata hosts (169.254.169.254 etc.) are refused at both save time (admin notice) and send time (DNS-rebinding defense). Operators can opt-in per host via the `ai_site_connector_url_guard_allow_host` filter.

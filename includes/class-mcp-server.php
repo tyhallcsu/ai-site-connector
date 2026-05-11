@@ -317,7 +317,7 @@ class AI_Site_Connector_MCP_Server {
 				}
 				return self::dispatch( 'POST', '/wp/v2/' . self::pt_rest_base( $pt ) . '/' . $id, $body );
 			default:
-				throw new InvalidArgumentException( 'Unknown tool: ' . $name );
+				throw new InvalidArgumentException( 'Unknown tool: ' . esc_html( $name ) );
 		}
 	}
 

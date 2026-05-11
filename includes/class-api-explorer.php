@@ -111,7 +111,10 @@ class AI_Site_Connector_API_Explorer {
 
 		$method = isset( $_POST['method'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_POST['method'] ) ) ) : 'GET';
 		$route  = isset( $_POST['route'] ) ? sanitize_text_field( wp_unslash( $_POST['route'] ) ) : '';
-		$body   = isset( $_POST['body'] ) ? wp_unslash( $_POST['body'] ) : '';
+		// JSON body is intentionally raw — it's parsed via json_decode below and we feed only the
+		// structured result into WP_REST_Request, never echoing the raw bytes back.
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$body = isset( $_POST['body'] ) ? wp_unslash( $_POST['body'] ) : '';
 
 		if ( '' === $route || '/' !== substr( $route, 0, 1 ) ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid route.', 'ai-site-connector' ) ), 400 );

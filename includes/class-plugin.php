@@ -32,6 +32,7 @@ class AI_Site_Connector_Plugin {
 
 		if ( is_admin() ) {
 			AI_Site_Connector_Admin_Page::register_hooks();
+			AI_Site_Connector_Onboarding::register_hooks();
 		}
 
 		if ( defined( 'WP_CLI' ) && WP_CLI && class_exists( 'AI_Site_Connector_CLI' ) ) {
@@ -58,6 +59,11 @@ class AI_Site_Connector_Plugin {
 		AI_Site_Connector_Roles::ensure_role();
 		AI_Site_Connector_Audit_Log::install_table();
 		AI_Site_Connector_Audit_Log::maybe_schedule_cron();
+		// Default new installs to "onboarding not yet completed" so the welcome notice shows.
+		if ( false === get_option( AI_Site_Connector_Onboarding::OPTION, false )
+			&& false === get_option( AI_Site_Connector_Onboarding::OPTION ) ) {
+			add_option( AI_Site_Connector_Onboarding::OPTION, 0, '', false );
+		}
 		AI_Site_Connector_Audit_Log::record(
 			'plugin_activated',
 			array(

@@ -388,14 +388,17 @@ class AI_Site_Connector_Admin_Page {
 		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'overview';
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 		$flash = self::consume_flash();
-		$tabs  = array(
-			'overview'    => __( 'Overview', 'ai-site-connector' ),
-			'wizard'      => __( 'Setup Wizard', 'ai-site-connector' ),
-			'credentials' => __( 'Credentials', 'ai-site-connector' ),
-			'audit'       => __( 'Audit Log', 'ai-site-connector' ),
-			'api'         => __( 'API Explorer', 'ai-site-connector' ),
-			'docs'        => __( 'Docs', 'ai-site-connector' ),
-		);
+		$tabs  = array();
+		// Onboarding tab is only present until the operator dismisses it.
+		if ( class_exists( 'AI_Site_Connector_Onboarding' ) && ! AI_Site_Connector_Onboarding::is_completed() ) {
+			$tabs['onboarding'] = __( 'Get Started', 'ai-site-connector' );
+		}
+		$tabs['overview']    = __( 'Overview', 'ai-site-connector' );
+		$tabs['wizard']      = __( 'Setup Wizard', 'ai-site-connector' );
+		$tabs['credentials'] = __( 'Credentials', 'ai-site-connector' );
+		$tabs['audit']       = __( 'Audit Log', 'ai-site-connector' );
+		$tabs['api']         = __( 'API Explorer', 'ai-site-connector' );
+		$tabs['docs']        = __( 'Docs', 'ai-site-connector' );
 		?>
 		<div class="wrap ai-site-connector-wrap">
 			<div class="asc-page-header">
@@ -426,6 +429,13 @@ class AI_Site_Connector_Admin_Page {
 
 			<?php
 			switch ( $tab ) {
+				case 'onboarding':
+					if ( class_exists( 'AI_Site_Connector_Onboarding' ) ) {
+						AI_Site_Connector_Onboarding::render_view();
+					} else {
+						self::render_overview();
+					}
+					break;
 				case 'wizard':
 					self::render_wizard();
 					break;

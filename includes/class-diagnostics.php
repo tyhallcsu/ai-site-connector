@@ -444,6 +444,17 @@ class AI_Site_Connector_Diagnostics {
 			return array( 'routes' => array(), 'route_count' => 0, 'namespaces' => array() );
 		}
 
+		// WP REST namespaces are multi-segment ("wp/v2", "ai-site-connector/v1");
+		// the first path segment alone ("wp", "ai-site-connector") is NOT the
+		// real namespace. Read the registered namespace list and match each
+		// route's prefix against it, preferring the longest match so "wp/v2"
+		// wins over "wp" when both are registered.
+		$registered = method_exists( $server, 'get_namespaces' ) ? (array) $server->get_namespaces() : array();
+		// Longest-first match preference.
+		usort( $registered, static function ( $a, $b ) {
+			return strlen( (string) $b ) - strlen( (string) $a );
+		} );
+
 		$out         = array();
 		$namespaces  = array();
 		$routes_data = $server->get_routes();
@@ -473,13 +484,25 @@ class AI_Site_Connector_Diagnostics {
 				}
 			}
 
+			$bare      = ltrim( (string) $route, '/' );
 			$namespace = '';
-			if ( '/' === substr( (string) $route, 0, 1 ) ) {
-				$parts     = explode( '/', ltrim( (string) $route, '/' ), 2 );
-				$namespace = isset( $parts[0] ) ? (string) $parts[0] : '';
-				if ( '' !== $namespace ) {
-					$namespaces[ $namespace ] = true;
+			foreach ( $registered as $ns ) {
+				if ( '' === $ns ) {
+					continue;
 				}
+				if ( $bare === $ns || 0 === strpos( $bare, $ns . '/' ) ) {
+					$namespace = $ns;
+					break;
+				}
+			}
+			if ( '' === $namespace && '' !== $bare ) {
+				// Fallback for routes registered outside get_namespaces() — keep
+				// the first segment so the output is never empty.
+				$parts     = explode( '/', $bare, 2 );
+				$namespace = isset( $parts[0] ) ? (string) $parts[0] : '';
+			}
+			if ( '' !== $namespace ) {
+				$namespaces[ $namespace ] = true;
 			}
 
 			$out[] = array(

@@ -103,57 +103,226 @@ class AI_Site_Connector_REST_Controller {
 	/**
 	 * Catalog of MCP-style tools this plugin exposes. Drives the
 	 * `/tools` route and the Connection Test admin page.
+	 *
+	 * Each entry carries the original (name, permission, method, route,
+	 * description) plus tool-metadata layer (risk_level, read_only,
+	 * supports_dry_run, input_schema, output_schema) so callers can plan
+	 * before invoking. `risk_level` ∈ {read, low, medium, high, destructive}.
 	 */
 	public static function tools_catalog() {
 		return array(
 			array(
-				'name'       => 'site_capability_report',
-				'permission' => AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS,
-				'method'     => 'GET',
-				'route'      => '/diagnostics/site-report',
-				'description' => 'Return a structured capability report: WP/PHP versions, plugins, builders, SEO/cache detection, REST status, user caps, env limits, cron.',
+				'name'             => 'site_capability_report',
+				'permission'       => AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS,
+				'method'           => 'GET',
+				'route'            => '/diagnostics/site-report',
+				'description'      => 'Return a structured capability report: WP/PHP versions, plugins, builders, SEO/cache detection, REST status, user caps, env limits, cron.',
+				'risk_level'       => 'read',
+				'read_only'        => true,
+				'supports_dry_run' => false,
+				'input_schema'     => array(),
+				'output_schema'    => array( 'type' => 'object' ),
 			),
 			array(
-				'name'       => 'purge_cache',
-				'permission' => AI_Site_Connector_Permissions::TOOL_PURGE_CACHE,
-				'method'     => 'POST',
-				'route'      => '/cache/purge',
-				'description' => 'Purge supported cache layers and return a structured report. Layers: object, WP Rocket, LiteSpeed, W3TC, Elementor, Cloudflare.',
+				'name'             => 'purge_cache',
+				'permission'       => AI_Site_Connector_Permissions::TOOL_PURGE_CACHE,
+				'method'           => 'POST',
+				'route'            => '/cache/purge',
+				'description'      => 'Purge supported cache layers and return a structured report. Layers: object, WP Rocket, LiteSpeed, W3TC, Elementor, Cloudflare.',
+				'risk_level'       => 'medium',
+				'read_only'        => false,
+				'supports_dry_run' => false,
+				'input_schema'     => array(
+					'type'       => 'object',
+					'properties' => array(
+						'object'     => array( 'type' => 'boolean' ),
+						'rocket'     => array( 'type' => 'boolean' ),
+						'litespeed'  => array( 'type' => 'boolean' ),
+						'w3tc'       => array( 'type' => 'boolean' ),
+						'elementor'  => array( 'type' => 'boolean' ),
+						'cloudflare' => array( 'type' => 'boolean' ),
+					),
+				),
+				'output_schema'    => array( 'type' => 'object' ),
 			),
 			array(
-				'name'       => 'upload_media',
-				'permission' => AI_Site_Connector_Permissions::TOOL_UPLOAD_MEDIA,
-				'method'     => 'POST',
-				'route'      => '/media/sideload',
-				'description' => 'Sideload a URL into the Media Library with title/alt/caption/description; optionally set featured image and social-image SEO meta.',
+				'name'             => 'upload_media',
+				'permission'       => AI_Site_Connector_Permissions::TOOL_UPLOAD_MEDIA,
+				'method'           => 'POST',
+				'route'            => '/media/sideload',
+				'description'      => 'Sideload a URL into the Media Library with title/alt/caption/description; optionally set featured image and social-image SEO meta.',
+				'risk_level'       => 'medium',
+				'read_only'        => false,
+				'supports_dry_run' => false,
+				'input_schema'     => array(
+					'type'       => 'object',
+					'required'   => array( 'url' ),
+					'properties' => array(
+						'url'                => array( 'type' => 'string' ),
+						'title'              => array( 'type' => 'string' ),
+						'alt_text'           => array( 'type' => 'string' ),
+						'caption'            => array( 'type' => 'string' ),
+						'description'        => array( 'type' => 'string' ),
+						'post_id'            => array( 'type' => 'integer' ),
+						'set_featured_image' => array( 'type' => 'boolean' ),
+						'seo_social_image'   => array( 'type' => 'boolean' ),
+						'filename_override'  => array( 'type' => 'string' ),
+					),
+				),
+				'output_schema'    => array( 'type' => 'object' ),
 			),
 			array(
-				'name'       => 'export_media_manifest',
-				'permission' => AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST,
-				'method'     => 'GET',
-				'route'      => '/export/media-manifest',
-				'description' => 'Return a JSON manifest of all attachments with metadata (id, url, alt, caption, sha256, etc.) for downstream repo sync.',
+				'name'             => 'export_media_manifest',
+				'permission'       => AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST,
+				'method'           => 'GET',
+				'route'            => '/export/media-manifest',
+				'description'      => 'Return a JSON manifest of all attachments with metadata (id, url, alt, caption, sha256, etc.) for downstream repo sync.',
+				'risk_level'       => 'read',
+				'read_only'        => true,
+				'supports_dry_run' => false,
+				'input_schema'     => array(
+					'type'       => 'object',
+					'properties' => array(
+						'limit'          => array( 'type' => 'integer' ),
+						'offset'         => array( 'type' => 'integer' ),
+						'include_sha256' => array( 'type' => 'boolean' ),
+					),
+				),
+				'output_schema'    => array( 'type' => 'object' ),
 			),
 			array(
-				'name'       => 'export_recent_changes',
-				'permission' => AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST,
-				'method'     => 'GET',
-				'route'      => '/export/recent-changes',
-				'description' => 'Return posts/pages modified since the given UTC datetime, with content hash for diffing.',
+				'name'             => 'export_recent_changes',
+				'permission'       => AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST,
+				'method'           => 'GET',
+				'route'            => '/export/recent-changes',
+				'description'      => 'Return posts/pages modified since the given UTC datetime, with content hash for diffing.',
+				'risk_level'       => 'read',
+				'read_only'        => true,
+				'supports_dry_run' => false,
+				'input_schema'     => array(
+					'type'       => 'object',
+					'properties' => array(
+						'limit'      => array( 'type' => 'integer' ),
+						'since'      => array( 'type' => 'string' ),
+						'post_types' => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+					),
+				),
+				'output_schema'    => array( 'type' => 'object' ),
 			),
 			array(
-				'name'       => 'export_page_content',
-				'permission' => AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST,
-				'method'     => 'GET',
-				'route'      => '/export/page/<id>',
-				'description' => 'Return a single page/post body, status, slug, modified timestamp, and featured image reference.',
+				'name'             => 'export_page_content',
+				'permission'       => AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST,
+				'method'           => 'GET',
+				'route'            => '/export/page/<id>',
+				'description'      => 'Return a single page/post body, status, slug, modified timestamp, and featured image reference.',
+				'risk_level'       => 'read',
+				'read_only'        => true,
+				'supports_dry_run' => false,
+				'input_schema'     => array(
+					'type'       => 'object',
+					'required'   => array( 'id' ),
+					'properties' => array(
+						'id' => array( 'type' => 'integer' ),
+					),
+				),
+				'output_schema'    => array( 'type' => 'object' ),
 			),
 			array(
-				'name'       => 'export_site_manifest',
-				'permission' => AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST,
-				'method'     => 'GET',
-				'route'      => '/export/site-manifest',
-				'description' => 'Aggregate manifest: counts + recent changes + detected plugins for a one-call overview.',
+				'name'             => 'export_site_manifest',
+				'permission'       => AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST,
+				'method'           => 'GET',
+				'route'            => '/export/site-manifest',
+				'description'      => 'Aggregate manifest: counts + recent changes + detected plugins for a one-call overview.',
+				'risk_level'       => 'read',
+				'read_only'        => true,
+				'supports_dry_run' => false,
+				'input_schema'     => array(),
+				'output_schema'    => array( 'type' => 'object' ),
+			),
+			array(
+				'name'             => 'mcp_self_test',
+				'permission'       => AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS,
+				'method'           => 'GET',
+				'route'            => '/diagnostics/self-test',
+				'description'      => 'Structured pass/warn/fail self-test of the MCP surface — plugin loaded, REST reachable, MCP route registered, uploads writable, SEO/page-builder detected, audit log present, SEO dry-run invariant.',
+				'risk_level'       => 'read',
+				'read_only'        => true,
+				'supports_dry_run' => false,
+				'input_schema'     => array(),
+				'output_schema'    => array(
+					'type'       => 'object',
+					'properties' => array(
+						'checks'  => array( 'type' => 'array' ),
+						'summary' => array( 'type' => 'object' ),
+					),
+				),
+			),
+			array(
+				'name'             => 'rest_route_inventory',
+				'permission'       => AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS,
+				'method'           => 'GET',
+				'route'            => '/diagnostics/rest-routes',
+				'description'      => 'Live REST route inventory via rest_get_server()->get_routes(). Never serialises callables — only echoes has_permission_callback boolean. Read-only.',
+				'risk_level'       => 'read',
+				'read_only'        => true,
+				'supports_dry_run' => false,
+				'input_schema'     => array(),
+				'output_schema'    => array(
+					'type'       => 'object',
+					'properties' => array(
+						'route_count' => array( 'type' => 'integer' ),
+						'namespaces'  => array( 'type' => 'array' ),
+						'routes'      => array( 'type' => 'array' ),
+					),
+				),
+			),
+			array(
+				'name'             => 'page_builder_detect',
+				'permission'       => AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS,
+				'method'           => 'GET',
+				'route'            => '/diagnostics/page-builder',
+				'description'      => 'Page builder detection: site-level always, per-post optional via ?post_ids=. Read-only.',
+				'risk_level'       => 'read',
+				'read_only'        => true,
+				'supports_dry_run' => false,
+				'input_schema'     => array(
+					'type'       => 'object',
+					'properties' => array(
+						'post_ids' => array( 'type' => 'array', 'items' => array( 'type' => 'integer' ) ),
+					),
+				),
+				'output_schema'    => array(
+					'type'       => 'object',
+					'properties' => array(
+						'site'     => array( 'type' => 'object' ),
+						'per_post' => array( 'type' => 'object' ),
+					),
+				),
+			),
+			array(
+				'name'             => 'redirect_export',
+				'permission'       => AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS,
+				'method'           => 'GET',
+				'route'            => '/diagnostics/redirects',
+				'description'      => 'Detect redirect plugins (Rank Math, Redirection, AIOSEO, Yoast Premium) and export existing redirects. Read-only; falls back to plugin_detected="none" gracefully.',
+				'risk_level'       => 'read',
+				'read_only'        => true,
+				'supports_dry_run' => false,
+				'input_schema'     => array(
+					'type'       => 'object',
+					'properties' => array(
+						'limit'  => array( 'type' => 'integer' ),
+						'offset' => array( 'type' => 'integer' ),
+					),
+				),
+				'output_schema'    => array(
+					'type'       => 'object',
+					'properties' => array(
+						'plugin_detected' => array( 'type' => 'string' ),
+						'count'           => array( 'type' => 'integer' ),
+						'redirects'       => array( 'type' => 'array' ),
+					),
+				),
 			),
 		);
 	}
@@ -375,6 +544,59 @@ class AI_Site_Connector_REST_Controller {
 				),
 			)
 		);
+
+		// === Diagnostics tool surface (queue batch) ==============================
+
+		register_rest_route(
+			$ns,
+			'/diagnostics/self-test',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'route_self_test' ),
+				'permission_callback' => array( __CLASS__, 'auth_admin' ),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/diagnostics/rest-routes',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'route_rest_routes' ),
+				'permission_callback' => array( __CLASS__, 'auth_admin' ),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/diagnostics/page-builder',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'route_page_builder' ),
+				'permission_callback' => array( __CLASS__, 'auth_admin' ),
+				'args'                => array(
+					'post_ids' => array(
+						'type'    => 'array',
+						'items'   => array( 'type' => 'integer' ),
+						'default' => array(),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/diagnostics/redirects',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'route_redirects' ),
+				'permission_callback' => array( __CLASS__, 'auth_admin' ),
+				'args'                => array(
+					'limit'  => array( 'type' => 'integer', 'default' => 500 ),
+					'offset' => array( 'type' => 'integer', 'default' => 0 ),
+				),
+			)
+		);
 	}
 
 	public static function route_consume_pack_token( WP_REST_Request $request ) {
@@ -543,6 +765,61 @@ class AI_Site_Connector_REST_Controller {
 			return $check;
 		}
 		return rest_ensure_response( AI_Site_Connector_Export::site_manifest() );
+	}
+
+	// === Diagnostics tool surface (queue batch) ==============================
+
+	public static function route_self_test( WP_REST_Request $request ) {
+		$check = AI_Site_Connector_Permissions::require_permission( AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS );
+		if ( is_wp_error( $check ) ) {
+			return $check;
+		}
+		$result = AI_Site_Connector_Diagnostics::self_test();
+		AI_Site_Connector_Audit_Log::record(
+			'mcp_self_test',
+			array(
+				'tool'    => AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS,
+				'status'  => AI_Site_Connector_Audit_Log::STATUS_SUCCESS,
+				'summary' => sprintf(
+					'MCP self-test: %d pass / %d warn / %d fail.',
+					isset( $result['summary']['pass'] ) ? (int) $result['summary']['pass'] : 0,
+					isset( $result['summary']['warn'] ) ? (int) $result['summary']['warn'] : 0,
+					isset( $result['summary']['fail'] ) ? (int) $result['summary']['fail'] : 0
+				),
+			)
+		);
+		return rest_ensure_response( $result );
+	}
+
+	public static function route_rest_routes( WP_REST_Request $request ) {
+		$check = AI_Site_Connector_Permissions::require_permission( AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS );
+		if ( is_wp_error( $check ) ) {
+			return $check;
+		}
+		return rest_ensure_response( AI_Site_Connector_Diagnostics::rest_routes() );
+	}
+
+	public static function route_page_builder( WP_REST_Request $request ) {
+		$check = AI_Site_Connector_Permissions::require_permission( AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS );
+		if ( is_wp_error( $check ) ) {
+			return $check;
+		}
+		$args = array(
+			'post_ids' => (array) $request->get_param( 'post_ids' ),
+		);
+		return rest_ensure_response( AI_Site_Connector_Diagnostics::page_builder( $args ) );
+	}
+
+	public static function route_redirects( WP_REST_Request $request ) {
+		$check = AI_Site_Connector_Permissions::require_permission( AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS );
+		if ( is_wp_error( $check ) ) {
+			return $check;
+		}
+		$args = array(
+			'limit'  => (int) $request->get_param( 'limit' ),
+			'offset' => (int) $request->get_param( 'offset' ),
+		);
+		return rest_ensure_response( AI_Site_Connector_Diagnostics::redirects( $args ) );
 	}
 
 	public static function auth_admin() {

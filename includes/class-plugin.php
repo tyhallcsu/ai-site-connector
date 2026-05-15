@@ -31,6 +31,7 @@ class AI_Site_Connector_Plugin {
 		AI_Site_Connector_Audit_Webhook::register_hooks();
 		AI_Site_Connector_Permissions::register_hooks();
 		AI_Site_Connector_Diagnostics::register_hooks();
+		AI_Site_Connector_SEO::register_hooks();
 		AI_Site_Connector_Cache::register_hooks();
 		AI_Site_Connector_Media::register_hooks();
 		AI_Site_Connector_Export::register_hooks();

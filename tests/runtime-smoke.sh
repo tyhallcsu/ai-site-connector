@@ -373,8 +373,12 @@ if ( ! in_array( "wp/v2", $ns, true ) || ! in_array( "ai-site-connector/v1", $ns
 	exit( 1 );
 }
 $json = wp_json_encode( $res );
-if ( preg_match( "/Closure|callback.*:\s*\\[/", $json ) ) {
-	fwrite( STDERR, "rest_routes() may have leaked a callable\n" );
+// PHP serialises a callable array as ["ClassName","method_name"]. The route
+// inventory must never contain that shape. We deliberately do NOT regex on
+// the word "callback" — has_permission_callback is a normal boolean field
+// in our schema and matching it would false-positive.
+if ( preg_match( "/\\[\\s*\"AI_Site_Connector[^\"]+\"\\s*,\\s*\"route_[^\"]+\"\\s*\\]/", $json ) ) {
+	fwrite( STDERR, "rest_routes() leaked a callable array\n" );
 	exit( 1 );
 }
 

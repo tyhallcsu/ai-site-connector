@@ -278,4 +278,520 @@ class AI_Site_Connector_Diagnostics {
 				return $val;
 		}
 	}
+
+	// === MCP self-test (Issue 18) =============================================
+
+	/**
+	 * Structured pass/warn/fail check list tailored to the MCP surface.
+	 * Read-only. Complements generate() (which is a broader snapshot).
+	 *
+	 * @return array {
+	 *   @type array $checks  Each entry: { name, status: 'pass'|'warn'|'fail', message }.
+	 *   @type array $summary Counts keyed by status.
+	 * }
+	 */
+	public static function self_test() {
+		$checks = array();
+
+		// Plugin loaded.
+		$checks[] = array(
+			'name'    => 'plugin_loaded',
+			'status'  => defined( 'AI_SITE_CONNECTOR_VERSION' ) ? 'pass' : 'fail',
+			'message' => defined( 'AI_SITE_CONNECTOR_VERSION' )
+				? sprintf( 'AI Site Connector v%s', AI_SITE_CONNECTOR_VERSION )
+				: 'AI_SITE_CONNECTOR_VERSION constant missing.',
+		);
+
+		// REST server available.
+		$rest_ok  = (bool) rest_get_server();
+		$checks[] = array(
+			'name'    => 'rest_server_available',
+			'status'  => $rest_ok ? 'pass' : 'fail',
+			'message' => $rest_ok ? 'rest_get_server() returns server.' : 'rest_get_server() unavailable.',
+		);
+
+		// MCP route registered (v0.5.0+).
+		$mcp_route_present = false;
+		if ( $rest_ok ) {
+			$routes            = rest_get_server()->get_routes();
+			$mcp_route_present = isset( $routes[ '/' . AI_SITE_CONNECTOR_REST_NAMESPACE . '/mcp' ] );
+		}
+		if ( defined( 'AI_SITE_CONNECTOR_MCP_DISABLE' ) && AI_SITE_CONNECTOR_MCP_DISABLE ) {
+			$checks[] = array(
+				'name'    => 'mcp_route_registered',
+				'status'  => 'warn',
+				'message' => 'MCP route intentionally disabled via AI_SITE_CONNECTOR_MCP_DISABLE.',
+			);
+		} else {
+			$checks[] = array(
+				'name'    => 'mcp_route_registered',
+				'status'  => $mcp_route_present ? 'pass' : 'warn',
+				'message' => $mcp_route_present
+					? '/' . AI_SITE_CONNECTOR_REST_NAMESPACE . '/mcp present.'
+					: 'MCP route not registered (class-mcp-server.php may be unloaded).',
+			);
+		}
+
+		// Authenticated user + capabilities.
+		$user      = wp_get_current_user();
+		$logged_in = $user && $user->ID > 0;
+		$checks[]  = array(
+			'name'    => 'authenticated_user',
+			'status'  => $logged_in ? 'pass' : 'warn',
+			'message' => $logged_in
+				? sprintf( 'Authenticated as %s (id=%d, roles=%s).', $user->user_login, $user->ID, implode( ',', (array) $user->roles ) )
+				: 'Self-test called without authentication.',
+		);
+
+		// Upload directory writable.
+		$uploads        = wp_upload_dir();
+		$uploads_dir    = isset( $uploads['basedir'] ) ? (string) $uploads['basedir'] : '';
+		$uploads_okwrite = '' !== $uploads_dir && wp_is_writable( $uploads_dir );
+		$checks[]       = array(
+			'name'    => 'uploads_writable',
+			'status'  => $uploads_okwrite ? 'pass' : 'fail',
+			'message' => $uploads_okwrite
+				? sprintf( 'Uploads directory writable: %s', $uploads_dir )
+				: sprintf( 'Uploads directory not writable: %s', $uploads_dir ),
+		);
+
+		// SEO plugin detected.
+		$seo_plugin = class_exists( 'AI_Site_Connector_SEO' )
+			? AI_Site_Connector_SEO::detect_seo_plugin()
+			: 'unknown';
+		$checks[] = array(
+			'name'    => 'seo_plugin_detected',
+			'status'  => 'none' === $seo_plugin || 'unknown' === $seo_plugin ? 'warn' : 'pass',
+			'message' => 'unknown' === $seo_plugin
+				? 'SEO abstraction class missing.'
+				: ( 'none' === $seo_plugin ? 'No SEO plugin active.' : sprintf( 'Detected SEO plugin: %s.', $seo_plugin ) ),
+		);
+
+		// Page builder detected.
+		$active_plugins = (array) get_option( 'active_plugins', array() );
+		$builders       = self::detect_page_builders( $active_plugins, wp_get_theme() );
+		$builder_names  = array_keys( array_filter( $builders ) );
+		$checks[]       = array(
+			'name'    => 'page_builder_detected',
+			'status'  => empty( $builder_names ) ? 'warn' : 'pass',
+			'message' => empty( $builder_names )
+				? 'No page builder evidence at the site level.'
+				: sprintf( 'Detected page builders: %s.', implode( ',', $builder_names ) ),
+		);
+
+		// Audit log writable.
+		$audit_table_ok = class_exists( 'AI_Site_Connector_Audit_Log' )
+			&& self::audit_log_table_exists();
+		$checks[] = array(
+			'name'    => 'audit_log_table_present',
+			'status'  => $audit_table_ok ? 'pass' : 'warn',
+			'message' => $audit_table_ok
+				? sprintf( 'Audit log table %s present.', AI_Site_Connector_Audit_Log::table_name() )
+				: 'Audit log table missing — install or upgrade may not have completed.',
+		);
+
+		// SEO dry-run sim — confirms zero mutation invariant of the abstraction.
+		$sim_ok = false;
+		if ( class_exists( 'AI_Site_Connector_SEO' ) ) {
+			// Generate a synthetic post ID that will not exist (max+1) to avoid
+			// any real-post side effect. Treat post_not_found as expected.
+			$sim    = AI_Site_Connector_SEO::update_seo_meta( 0, array( 'title' => 'self-test' ), true );
+			$sim_ok = isset( $sim['applied'] ) && false === $sim['applied'];
+		}
+		$checks[] = array(
+			'name'    => 'seo_dry_run_invariant',
+			'status'  => $sim_ok ? 'pass' : 'warn',
+			'message' => $sim_ok
+				? 'SEO update_seo_meta dry-run returned applied=false (zero mutation).'
+				: 'SEO abstraction could not confirm dry-run invariant.',
+		);
+
+		$summary = array( 'pass' => 0, 'warn' => 0, 'fail' => 0 );
+		foreach ( $checks as $c ) {
+			if ( isset( $summary[ $c['status'] ] ) ) {
+				$summary[ $c['status'] ]++;
+			}
+		}
+
+		return array(
+			'generated_at' => gmdate( 'c' ),
+			'checks'       => $checks,
+			'summary'      => $summary,
+		);
+	}
+
+	private static function audit_log_table_exists() {
+		global $wpdb;
+		$name = AI_Site_Connector_Audit_Log::table_name();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $name ) );
+		return (string) $found === (string) $name;
+	}
+
+	// === REST route inventory (Issue 17) =====================================
+
+	/**
+	 * Live REST route inventory walked from rest_get_server()->get_routes().
+	 * Never serialises callables — only echoes whether each route declares a
+	 * permission_callback. Safe for unauthenticated reads of route shape only
+	 * when wrapped by a permission gate; we still require view_diagnostics.
+	 *
+	 * @return array { routes: array<int, array>, route_count: int, namespaces: string[] }
+	 */
+	public static function rest_routes() {
+		$server = rest_get_server();
+		if ( ! $server ) {
+			return array( 'routes' => array(), 'route_count' => 0, 'namespaces' => array() );
+		}
+
+		// WP REST namespaces are multi-segment ("wp/v2", "ai-site-connector/v1");
+		// the first path segment alone ("wp", "ai-site-connector") is NOT the
+		// real namespace. Read the registered namespace list and match each
+		// route's prefix against it, preferring the longest match so "wp/v2"
+		// wins over "wp" when both are registered.
+		$registered = method_exists( $server, 'get_namespaces' ) ? (array) $server->get_namespaces() : array();
+		// Longest-first match preference.
+		usort( $registered, static function ( $a, $b ) {
+			return strlen( (string) $b ) - strlen( (string) $a );
+		} );
+
+		$out         = array();
+		$namespaces  = array();
+		$routes_data = $server->get_routes();
+		foreach ( $routes_data as $route => $handlers ) {
+			$methods                  = array();
+			$args_summary             = array();
+			$has_permission_callback  = false;
+			foreach ( (array) $handlers as $handler ) {
+				if ( isset( $handler['methods'] ) ) {
+					foreach ( (array) $handler['methods'] as $m => $on ) {
+						if ( $on ) {
+							$methods[ $m ] = true;
+						}
+					}
+				}
+				if ( isset( $handler['args'] ) && is_array( $handler['args'] ) ) {
+					foreach ( $handler['args'] as $arg_name => $arg_spec ) {
+						$type = '';
+						if ( is_array( $arg_spec ) && isset( $arg_spec['type'] ) ) {
+							$type = is_array( $arg_spec['type'] ) ? implode( '|', (array) $arg_spec['type'] ) : (string) $arg_spec['type'];
+						}
+						$args_summary[ (string) $arg_name ] = $type;
+					}
+				}
+				if ( ! empty( $handler['permission_callback'] ) ) {
+					$has_permission_callback = true;
+				}
+			}
+
+			$bare      = ltrim( (string) $route, '/' );
+			$namespace = '';
+			foreach ( $registered as $ns ) {
+				if ( '' === $ns ) {
+					continue;
+				}
+				if ( $bare === $ns || 0 === strpos( $bare, $ns . '/' ) ) {
+					$namespace = $ns;
+					break;
+				}
+			}
+			if ( '' === $namespace && '' !== $bare ) {
+				// Fallback for routes registered outside get_namespaces() — keep
+				// the first segment so the output is never empty.
+				$parts     = explode( '/', $bare, 2 );
+				$namespace = isset( $parts[0] ) ? (string) $parts[0] : '';
+			}
+			if ( '' !== $namespace ) {
+				$namespaces[ $namespace ] = true;
+			}
+
+			$out[] = array(
+				'namespace'               => $namespace,
+				'route'                   => (string) $route,
+				'methods'                 => array_keys( $methods ),
+				'args_summary'            => $args_summary,
+				'has_permission_callback' => (bool) $has_permission_callback,
+			);
+		}
+
+		// Sort deterministically — route name asc — so the manifest output is
+		// stable between runs even when WP returns routes in registration order.
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return strcmp( (string) $a['route'], (string) $b['route'] );
+			}
+		);
+
+		$ns_list = array_keys( $namespaces );
+		sort( $ns_list );
+
+		return array(
+			'generated_at' => gmdate( 'c' ),
+			'route_count'  => count( $out ),
+			'namespaces'   => $ns_list,
+			'routes'       => $out,
+		);
+	}
+
+	// === Page builder detector (Issue 13) =====================================
+
+	/**
+	 * Page builder detection — site-level always, per-post optional.
+	 *
+	 * @param array $args { post_ids?: int[] }
+	 * @return array
+	 */
+	public static function page_builder( $args = array() ) {
+		$theme            = wp_get_theme();
+		$active_plugins   = (array) get_option( 'active_plugins', array() );
+		$site_builders    = self::detect_page_builders( $active_plugins, $theme );
+		$by_slug          = array_flip( array_map( array( __CLASS__, 'slug_from_file' ), $active_plugins ) );
+
+		// Extend the existing detection with builders generate() doesn't surface
+		// in detail. Conservative — only flags presence, not version.
+		$site_builders['fusion_builder'] = isset( $by_slug['fusion-builder'] )
+			|| isset( $by_slug['fusion-core'] )
+			|| ( $theme && in_array( $theme->get( 'Template' ), array( 'Avada', 'avada' ), true ) );
+		$site_builders['wpbakery']       = isset( $by_slug['js_composer'] ) || defined( 'WPB_VC_VERSION' );
+		$site_builders['bricks']         = $site_builders['bricks_theme'];
+
+		$out = array(
+			'generated_at' => gmdate( 'c' ),
+			'site'         => array(
+				'detected'      => $site_builders,
+				'active_theme'  => $theme ? array(
+					'name'     => (string) $theme->get( 'Name' ),
+					'template' => (string) $theme->get_template(),
+					'is_block' => method_exists( $theme, 'is_block_theme' ) && $theme->is_block_theme(),
+				) : null,
+			),
+		);
+
+		$post_ids = isset( $args['post_ids'] ) && is_array( $args['post_ids'] )
+			? array_filter( array_map( 'intval', $args['post_ids'] ) )
+			: array();
+		if ( empty( $post_ids ) ) {
+			return $out;
+		}
+
+		$per_post = array();
+		foreach ( $post_ids as $post_id ) {
+			$post = get_post( $post_id );
+			if ( ! $post ) {
+				$per_post[ (string) $post_id ] = array( 'error' => 'post_not_found' );
+				continue;
+			}
+
+			$evidence = array();
+			if ( '' !== (string) get_post_meta( $post_id, '_elementor_data', true ) ) {
+				$evidence['elementor'] = true;
+			}
+			if ( '' !== (string) get_post_meta( $post_id, '_fl_builder_data', true )
+				|| 'enabled' === (string) get_post_meta( $post_id, '_fl_builder_enabled', true ) ) {
+				$evidence['beaver_builder'] = true;
+			}
+			if ( 'on' === (string) get_post_meta( $post_id, '_et_pb_use_builder', true ) ) {
+				$evidence['divi'] = true;
+			}
+			if ( '' !== (string) get_post_meta( $post_id, '_fusion_builder_status', true )
+				|| '' !== (string) get_post_meta( $post_id, 'fusion_builder_status', true ) ) {
+				$evidence['fusion_builder'] = true;
+			}
+			if ( '' !== (string) get_post_meta( $post_id, '_wpb_vc_js_status', true )
+				|| false !== strpos( (string) $post->post_content, '[vc_row' ) ) {
+				$evidence['wpbakery'] = true;
+			}
+			if ( '' !== (string) get_post_meta( $post_id, 'ct_builder_shortcodes', true )
+				|| '' !== (string) get_post_meta( $post_id, 'ct_other_template', true ) ) {
+				$evidence['oxygen'] = true;
+			}
+			if ( '' !== (string) get_post_meta( $post_id, '_bricks_page_content_2', true ) ) {
+				$evidence['bricks'] = true;
+			}
+			if ( function_exists( 'has_blocks' ) && has_blocks( $post->post_content ) ) {
+				$evidence['gutenberg_blocks'] = true;
+			}
+
+			$per_post[ (string) $post_id ] = array(
+				'post_type' => (string) $post->post_type,
+				'evidence'  => $evidence,
+			);
+		}
+
+		$out['per_post'] = $per_post;
+		return $out;
+	}
+
+	// === Redirect manager helper (Issue 11) ===================================
+
+	/**
+	 * Detect installed redirect plugins and export existing redirects.
+	 * Read-only. Returns an empty list and plugin_detected='none' when no
+	 * redirect plugin is present.
+	 *
+	 * @param array $args { limit?: int, offset?: int }
+	 * @return array
+	 */
+	public static function redirects( $args = array() ) {
+		global $wpdb;
+
+		$limit  = isset( $args['limit'] ) ? max( 0, min( 5000, (int) $args['limit'] ) ) : 500;
+		$offset = isset( $args['offset'] ) ? max( 0, (int) $args['offset'] ) : 0;
+
+		$by_slug = array_flip( array_map( array( __CLASS__, 'slug_from_file' ), (array) get_option( 'active_plugins', array() ) ) );
+
+		// Each detector returns array|null. First non-null wins.
+		$detected = 'none';
+		$rows     = array();
+
+		if ( isset( $by_slug['seo-by-rank-math'] ) || isset( $by_slug['seo-by-rank-math-pro'] ) ) {
+			$res = self::redirects_rankmath( $wpdb, $limit, $offset );
+			if ( null !== $res ) {
+				$detected = 'rankmath';
+				$rows     = $res;
+			}
+		} elseif ( isset( $by_slug['redirection'] ) ) {
+			$res = self::redirects_redirection( $wpdb, $limit, $offset );
+			if ( null !== $res ) {
+				$detected = 'redirection';
+				$rows     = $res;
+			}
+		} elseif ( isset( $by_slug['all-in-one-seo-pack'] ) || isset( $by_slug['all-in-one-seo-pack-pro'] ) ) {
+			$res = self::redirects_aioseo( $wpdb, $limit, $offset );
+			if ( null !== $res ) {
+				$detected = 'aioseo';
+				$rows     = $res;
+			}
+		} elseif ( isset( $by_slug['wordpress-seo-premium'] ) ) {
+			$res = self::redirects_yoast_premium();
+			if ( null !== $res ) {
+				$detected = 'yoast_premium';
+				$rows     = $res;
+			}
+		}
+
+		return array(
+			'generated_at'    => gmdate( 'c' ),
+			'plugin_detected' => $detected,
+			'count'           => count( $rows ),
+			'limit'           => $limit,
+			'offset'          => $offset,
+			'redirects'       => $rows,
+		);
+	}
+
+	private static function redirects_rankmath( $wpdb, $limit, $offset ) {
+		$table = $wpdb->prefix . 'rank_math_redirections';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		if ( (string) $exists !== (string) $table ) {
+			return null;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT id, sources, url_to, header_code, status FROM {$table} ORDER BY id ASC LIMIT %d OFFSET %d",
+				$limit,
+				$offset
+			),
+			ARRAY_A
+		);
+		$out = array();
+		foreach ( (array) $rows as $row ) {
+			$src = '';
+			if ( ! empty( $row['sources'] ) ) {
+				$decoded = maybe_unserialize( $row['sources'] );
+				if ( is_array( $decoded ) && isset( $decoded[0]['pattern'] ) ) {
+					$src = (string) $decoded[0]['pattern'];
+				}
+			}
+			$out[] = array(
+				'source'      => $src,
+				'target'      => (string) ( isset( $row['url_to'] ) ? $row['url_to'] : '' ),
+				'status_code' => (int) ( isset( $row['header_code'] ) ? $row['header_code'] : 0 ),
+				'match_type'  => 'rankmath:' . (string) ( isset( $row['status'] ) ? $row['status'] : 'active' ),
+			);
+		}
+		return $out;
+	}
+
+	private static function redirects_redirection( $wpdb, $limit, $offset ) {
+		$table = $wpdb->prefix . 'redirection_items';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		if ( (string) $exists !== (string) $table ) {
+			return null;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT id, url, action_data, action_code, match_type FROM {$table} ORDER BY id ASC LIMIT %d OFFSET %d",
+				$limit,
+				$offset
+			),
+			ARRAY_A
+		);
+		$out = array();
+		foreach ( (array) $rows as $row ) {
+			$out[] = array(
+				'source'      => (string) ( isset( $row['url'] ) ? $row['url'] : '' ),
+				'target'      => (string) ( isset( $row['action_data'] ) ? $row['action_data'] : '' ),
+				'status_code' => (int) ( isset( $row['action_code'] ) ? $row['action_code'] : 0 ),
+				'match_type'  => 'redirection:' . (string) ( isset( $row['match_type'] ) ? $row['match_type'] : 'url' ),
+			);
+		}
+		return $out;
+	}
+
+	private static function redirects_aioseo( $wpdb, $limit, $offset ) {
+		$table = $wpdb->prefix . 'aioseo_redirects';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		if ( (string) $exists !== (string) $table ) {
+			return null;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT id, source_url, target_url, type, regex FROM {$table} ORDER BY id ASC LIMIT %d OFFSET %d",
+				$limit,
+				$offset
+			),
+			ARRAY_A
+		);
+		$out = array();
+		foreach ( (array) $rows as $row ) {
+			$out[] = array(
+				'source'      => (string) ( isset( $row['source_url'] ) ? $row['source_url'] : '' ),
+				'target'      => (string) ( isset( $row['target_url'] ) ? $row['target_url'] : '' ),
+				'status_code' => (int) ( isset( $row['type'] ) ? $row['type'] : 0 ),
+				'match_type'  => 'aioseo:' . ( ! empty( $row['regex'] ) ? 'regex' : 'exact' ),
+			);
+		}
+		return $out;
+	}
+
+	private static function redirects_yoast_premium() {
+		// Yoast Premium serialises redirects into wp_options. Best-effort,
+		// schema not officially documented and varies by version. Return null
+		// rather than misrepresent if the option shape isn't recognisable.
+		$raw = get_option( 'wpseo-premium-redirects-base', null );
+		if ( ! is_array( $raw ) ) {
+			return null;
+		}
+		$out = array();
+		foreach ( $raw as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$out[] = array(
+				'source'      => isset( $row['origin'] ) ? (string) $row['origin'] : '',
+				'target'      => isset( $row['url'] ) ? (string) $row['url'] : '',
+				'status_code' => isset( $row['type'] ) ? (int) $row['type'] : 0,
+				'match_type'  => 'yoast_premium:' . ( isset( $row['format'] ) ? (string) $row['format'] : 'plain' ),
+			);
+		}
+		return $out;
+	}
 }

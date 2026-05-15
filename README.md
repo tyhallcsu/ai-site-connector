@@ -268,6 +268,26 @@ All endpoints under `/wp-json/ai-site-connector/v1/`. Every write path requires 
 
 A separate public discovery file is served at `/.well-known/ai-site-connector.json` — see [docs/DISCOVERY.md](docs/DISCOVERY.md). The OpenAPI spec is the source of truth for shapes.
 
+### Diagnostics tool surface
+
+Read-only diagnostic endpoints, all gated by `manage_options` + the `view_diagnostics` tool permission (default-on). All four return structured JSON; none mutate the site.
+
+| Endpoint                          | Returns |
+| --------------------------------- | ------- |
+| `/diagnostics/site-report`        | Broad capability snapshot (WP/PHP, plugins, builders, SEO/cache detection, REST status, caps, ini limits, cron). |
+| `/diagnostics/self-test`          | Pass/warn/fail checks tailored to the MCP surface: plugin loaded, REST reachable, MCP route registered, uploads writable, SEO/page-builder detected, audit log present, SEO dry-run invariant. Returns `{checks:[…], summary:{pass,warn,fail}}`. |
+| `/diagnostics/rest-routes`        | Live REST route inventory via `rest_get_server()->get_routes()`. Each entry has `namespace`, `route`, `methods[]`, `args_summary`, `has_permission_callback`. **Never serialises callables.** |
+| `/diagnostics/page-builder`       | Site-level builder evidence (Elementor, Beaver Builder, Divi, Gutenberg block themes, Fusion/Avada, WPBakery, Oxygen, Bricks) plus optional per-post probes via `?post_ids=1,2,3`. |
+| `/diagnostics/redirects`          | Detects Rank Math, Redirection, AIOSEO, Yoast Premium redirect plugins and exports existing redirects (source / target / status_code / match_type). Pagination via `?limit` and `?offset`. Falls back to `plugin_detected:"none"` gracefully. |
+
+### SEO plugin abstraction (`AI_Site_Connector_SEO`)
+
+Internal class — not a REST endpoint. Provides a plugin-neutral surface for reading and (guarded) writing SEO metadata. Detects Rank Math, Yoast, AIOSEO, SEOPress, or `none`.
+
+- `AI_Site_Connector_SEO::detect_seo_plugin()`
+- `AI_Site_Connector_SEO::get_seo_meta($post_id)` — pure read; returns plugin-neutral fields (title, description, canonical, og_*, noindex).
+- `AI_Site_Connector_SEO::update_seo_meta($post_id, $data, $dry_run = true)` — **defaults to dry-run**. Real writes require both `$dry_run = false` AND the `update_seo` tool permission enabled (default-OFF). When blocked, returns `{blocked:true, reason:"permission_denied"}` without mutating.
+
 ---
 
 ## Security best practices

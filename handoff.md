@@ -1,20 +1,20 @@
 # Handoff — AI Site Connector
 
-**Updated:** 2026-10-05 ~20:45 UTC (14:45 America/Denver) · **State: PAUSED** — all merges blocked by a GitHub Actions incident; peer budget note: weekly usage 74% (resets 2026-10-07) · **Mode:** owner add-on "continuous low-usage" (single agent, no subagents; new features stay in backlog) · **Session:** `asc-dev-audit-ship` (dev audit + ship)
+**Updated:** 2026-10-05 ~21:22 UTC (15:22 America/Denver) · **State:** #100 and #107 merged on the owner's instruction (local CI; GitHub Actions in major outage), dev redeployed and verified; paused for the owner · **Mode:** owner add-on "continuous low-usage" (single agent; new features stay in backlog) · **Session:** `asc-dev-audit-ship`
 **Repo:** tyhallcsu/ai-site-connector (public, standalone — the parent `ess-custom-plugins` dir is not a repo)
 **Primary checkout:** `/Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector` (on `main` @ `16f5816`, 1 behind origin — fast-forward it before use)
-**Session worktree:** `.claude/worktrees/asc-dev-audit-ship` · branches `feature/dev-site` (PR #100) and `fix/admin-ui-audit` (PR #107), both owned by this session
+**Session worktree:** `.claude/worktrees/asc-dev-audit-ship` · branch `docs/checkpoint-dev-deploy` (this checkpoint); no other open branches on origin
 **Rules:** `docs/development/OPERATING_BRIEF.md` · **Dev site:** `docs/development/DEV_SITE.md` · **Plan:** `docs/development/ROADMAP.md` · **Log:** `docs/development/WORK_LOG.md`
 
 ## Verified state
 
 | Item | Value | Evidence |
 |------|-------|----------|
-| `origin/main` | `9112f8e` — design: new plugin icon (#96, Codex session) | `git fetch`; post-merge CI run 37366878299 still queued during a GitHub Actions incident |
+| `origin/main` | `72b70fe` — #107 admin fixes, on `80a887a` (#100 dev site) and `9112f8e` (#96) | `gh pr view` merge commits |
 | Latest release | **v0.12.1** → `450fdcd`; ZIP sha256 `768b7064…e021` | `gh release view` digest |
-| Unreleased on main | #95 docs, #96 brand assets (no PHP change) | `git log v0.12.1..origin/main` |
-| Dev site | http://localhost:8790 — local Docker, **deployed `9112f8e`** (origin/main; rolled back after a labelled #107 candidate check), 70 files verified | `bin/dev-site.sh status` 20:34 UTC |
-| CI | every run since 19:58 UTC still `queued` (GitHub Actions incident, githubstatus.com) — nothing can merge until it clears | `gh run list` |
+| Unreleased on main | #95/#96 docs+assets, #100 dev tooling (not shipped in the ZIP), **#107 user-facing admin fixes** → candidate v0.12.2 patch | commits since tag v0.12.1 |
+| Dev site | http://localhost:8790 — **deployed `72b70fe`** (origin/main), ZIP sha256 `00680619…a295`, 70 files verified; `audit` 22/22 tab views clean | `bin/dev-site.sh status` / `audit` 21:18 UTC |
+| CI | GitHub Actions **major outage**: no GitHub CI has run on `9112f8e`, `80a887a` or `72b70fe`. Merges used local CI: security-grep, PHPCS (whole repo), php -l (59 files), package smoke, check-version, runtime smoke 91/91 | githubstatus.com; `gh run list` |
 | Remote dev target | none exists — owner decision tracked in #97 | config/registry search |
 
 ## Startup reconciliation (2026-10-05)
@@ -29,13 +29,13 @@
 | # | Type | Title | State |
 |---|------|-------|-------|
 | #97 | environment | No development WordPress target configured | open — owner decision (remote dev site?) |
-| #98 | enhancement | Persistent local dev site with exact-SHA deploy/rollback | PR #100 (draft) |
+| #98 | enhancement | Persistent local dev site with exact-SHA deploy/rollback | closed by #100 (`80a887a`) |
 | #99 | investigation | main has no required checks; #96 merged before CI ran | open — needs owner (admin setting) |
 | #101 | enhancement | Byte-reproducible release ZIP | backlog (not auto-implemented in low-usage mode) |
-| #102 | bug | Permission checkboxes lack accessible names (+ duplicate nonce ids) | PR #107 |
-| #103 | bug | Wide tables overflow on phones (5 tabs) | PR #107 |
-| #104 | bug | Connection Test REST self-test returns to Overview | PR #107 |
-| #105 | bug | Notices render inside the page header | PR #107 |
+| #102 | bug | Permission checkboxes lack accessible names (+ duplicate nonce ids) | closed by #107 (`72b70fe`), verified on dev |
+| #103 | bug | Wide tables overflow on phones (5 tabs) | closed by #107 (`72b70fe`), verified on dev |
+| #104 | bug | Connection Test REST self-test returns to Overview | closed by #107 (`72b70fe`), verified on dev |
+| #105 | bug | Notices render inside the page header | closed by #107 (`72b70fe`), verified on dev |
 | #106 | enhancement | Live sign-in check in wp-admin (CLI self-test parity) | backlog |
 | #108 | enhancement | WP-CLI safe content update + rollback | backlog |
 | #109 | investigation | Steer MCP agents to wp_update_content (no removal) | backlog |
@@ -44,8 +44,8 @@
 
 | PR | Branch | State |
 |----|--------|-------|
-| #100 | `feature/dev-site` | draft, head `a4d151f`+handoff; implements #98; local runs pass (up, deploy release/main, refusal, rollback, audit); CI queued |
-| #107 | `fix/admin-ui-audit` | draft, head `30c544f`; fixes #102–#105; local: integration 91/91, PHPCS clean, dev audit 0/22 findings (main 10/22); CI queued |
+| #100 | `feature/dev-site` | merged 21:17 UTC → `80a887a` (local CI; Actions outage) |
+| #107 | `fix/admin-ui-audit` | merged 21:17 UTC → `72b70fe` (local CI; Actions outage); dev evidence posted |
 
 ## Audit coverage
 
@@ -62,9 +62,9 @@
 
 ## Next three actions
 
-1. When Actions recovers: confirm main CI on `9112f8e`, then CI on #100 and #107 heads (19 checks each); mark ready; squash-merge #100 then #107 (rebase #107 if handoff conflicts).
-2. After #107 merges: `bin/dev-site.sh deploy` (merge SHA), `bin/dev-site.sh audit` → expect 0 findings; comment evidence on #102–#105.
-3. Next uncovered audit (only when budget allows): content-update dry-run/rollback via REST on the `asc-fixture-*` posts; inventory + export bundle.
+1. When Actions recovers: confirm the first GitHub CI run on main (`72b70fe`, 19 checks incl. WP 5.6–7.0 compat) is green; if red, fix through a PR before anything else.
+2. Release decision (owner go-ahead, after step 1): v0.12.2 patch for the #107 admin fixes via `docs/RELEASE_CHECKLIST.md` (the publisher runs on Actions, so not possible during the outage).
+3. Owner decisions #97 (remote dev site?) and #99 (required checks); backlog #101 #106 #108 #109; next audit when budget allows: content-update dry-run/rollback on the `asc-fixture-*` posts.
 
 Resume: `cd <worktree> && git fetch && gh pr list -R tyhallcsu/ai-site-connector && bin/dev-site.sh status`
 

@@ -135,6 +135,7 @@ asc_it(
 		$args = (array) $redir['args'];
 		asc_assert_same( 'integer', $args['limit']['type'], 'arg type' );
 		asc_assert_same( true, $redir['has_permission_callback'], 'permission callback' );
+		asc_assert_same( false, $redir['public'], 'gated route not public' );
 
 		$json = wp_json_encode( $res );
 		asc_assert( false === strpos( $json, '"callback"' ), 'callback key leaked' );
@@ -172,6 +173,7 @@ asc_it(
 		$odd = $res['routes'][1];
 		asc_assert_same( array( 'GET', 'POST' ), $odd['methods'], 'string methods parsed' );
 		asc_assert_same( false, $odd['has_permission_callback'], 'missing permission callback reported' );
+		asc_assert_same( true, $odd['public'], 'route without permission callback is public' );
 		asc_assert_same( '', ( (array) $odd['args'] )['weird']['type'], 'non-array spec summarised' );
 	}
 );
@@ -271,9 +273,9 @@ asc_it(
 		global $wpdb;
 		$table = $wpdb->prefix . 'redirection_items';
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$wpdb->query( "CREATE TABLE {$table} (id int unsigned NOT NULL AUTO_INCREMENT, url mediumtext, action_data mediumtext, action_code int, match_type varchar(20), status varchar(20) DEFAULT 'enabled', PRIMARY KEY (id))" );
+		$wpdb->query( "CREATE TABLE {$table} (id int unsigned NOT NULL AUTO_INCREMENT, url mediumtext, regex int unsigned NOT NULL DEFAULT 0, action_data mediumtext, action_code int, match_type varchar(20), status varchar(20) DEFAULT 'enabled', PRIMARY KEY (id))" );
 		for ( $i = 1; $i <= 3; $i++ ) {
-			$wpdb->insert( $table, array( 'url' => "/old-{$i}", 'action_data' => "/new-{$i}", 'action_code' => 301, 'match_type' => 'url', 'status' => 3 === $i ? 'disabled' : 'enabled' ) );
+			$wpdb->insert( $table, array( 'url' => 3 === $i ? '^/old-(.*)$' : "/old-{$i}", 'regex' => 3 === $i ? 1 : 0, 'action_data' => "/new-{$i}", 'action_code' => 301, 'match_type' => 'url', 'status' => 3 === $i ? 'disabled' : 'enabled' ) );
 		}
 		try {
 			$res = asc_it_with_redirect_plugins(
@@ -287,10 +289,49 @@ asc_it(
 			asc_assert_same( 3, $res['total'], 'total' );
 			asc_assert_same( 2, $res['count'], 'page size' );
 			asc_assert_same( '/old-2', $res['redirects'][0]['source'], 'offset applied' );
-			asc_assert_same( array( 'id', 'source', 'target', 'status_code', 'match_type', 'enabled', 'plugin' ), array_keys( $res['redirects'][0] ), 'row schema' );
+			asc_assert_same( array( 'id', 'source', 'target', 'status_code', 'match_type', 'enabled', 'plugin', 'additional_sources' ), array_keys( $res['redirects'][0] ), 'row schema' );
 			asc_assert_same( false, $res['redirects'][1]['enabled'], 'disabled flag' );
+			asc_assert_same( 'regex', $res['redirects'][1]['match_type'], 'regex column honoured' );
+			asc_assert_same( 'url', $res['redirects'][0]['match_type'], 'plain url match' );
+			asc_assert_same( null, $res['next_offset'], 'last page next_offset' );
 		} finally {
 			$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
+			// phpcs:enable
+		}
+	}
+);
+
+asc_it(
+	'redirects: empty rank math table does not hide redirection data',
+	function () {
+		global $wpdb;
+		$rm = $wpdb->prefix . 'rank_math_redirections';
+		$rd = $wpdb->prefix . 'redirection_items';
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "CREATE TABLE {$rm} (id bigint unsigned NOT NULL AUTO_INCREMENT, sources text, url_to text, header_code smallint, status varchar(25), PRIMARY KEY (id))" );
+		$wpdb->query( "CREATE TABLE {$rd} (id int unsigned NOT NULL AUTO_INCREMENT, url mediumtext, regex int unsigned NOT NULL DEFAULT 0, action_data mediumtext, action_code int, match_type varchar(20), status varchar(20) DEFAULT 'enabled', PRIMARY KEY (id))" );
+		$wpdb->insert( $rd, array( 'url' => '/x', 'action_data' => '/y', 'action_code' => 301, 'match_type' => 'url' ) );
+		try {
+			$res = asc_it_with_redirect_plugins(
+				array( 'rankmath', 'redirection' ),
+				function () {
+					return AI_Site_Connector_Diagnostics::redirects();
+				}
+			);
+			asc_assert_same( 'redirection', $res['plugin_detected'], 'plugin' );
+			asc_assert_same( 1, $res['total'], 'total' );
+
+			$only_rm = asc_it_with_redirect_plugins(
+				array( 'rankmath' ),
+				function () {
+					return AI_Site_Connector_Diagnostics::redirects();
+				}
+			);
+			asc_assert_same( 'rankmath', $only_rm['plugin_detected'], 'empty table still reported as detected' );
+			asc_assert_same( 0, $only_rm['total'], 'empty total' );
+		} finally {
+			$wpdb->query( "DROP TABLE IF EXISTS {$rm}" );
+			$wpdb->query( "DROP TABLE IF EXISTS {$rd}" );
 			// phpcs:enable
 		}
 	}
@@ -322,10 +363,19 @@ asc_it(
 			);
 			asc_assert_same( 'rankmath', $res['plugin_detected'], 'plugin' );
 			asc_assert_same( 2, $res['total'], 'total redirects' );
-			asc_assert_same( 3, $res['count'], 'expanded rows' );
-			asc_assert_same( 'regex', $res['redirects'][1]['match_type'], 'second source comparison' );
-			asc_assert_same( '', $res['redirects'][2]['source'], 'malformed sources handled' );
-			asc_assert_same( false, $res['redirects'][2]['enabled'], 'inactive' );
+			asc_assert_same( 2, $res['count'], 'one row per stored redirect' );
+			asc_assert_same( 'a', $res['redirects'][0]['source'], 'primary source' );
+			asc_assert_same( array( array( 'source' => 'b', 'match_type' => 'regex' ) ), $res['redirects'][0]['additional_sources'], 'additional sources' );
+			asc_assert_same( '', $res['redirects'][1]['source'], 'malformed sources handled' );
+			asc_assert_same( false, $res['redirects'][1]['enabled'], 'inactive' );
+
+			$page = asc_it_with_redirect_plugins(
+				array( 'rankmath' ),
+				function () {
+					return AI_Site_Connector_Diagnostics::redirects( array( 'limit' => 1 ) );
+				}
+			);
+			asc_assert_same( 1, $page['next_offset'], 'next_offset counts stored redirects' );
 		} finally {
 			$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
 			// phpcs:enable

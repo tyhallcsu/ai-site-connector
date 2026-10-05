@@ -555,6 +555,7 @@ class AI_Site_Connector_Diagnostics {
 			$args_out  = array();
 			$endpoints = 0;
 			$with_perm = 0;
+			$public    = 0;
 			foreach ( (array) $handlers as $handler ) {
 				if ( ! is_array( $handler ) ) {
 					continue;
@@ -571,6 +572,9 @@ class AI_Site_Connector_Diagnostics {
 				}
 				if ( ! empty( $handler['permission_callback'] ) ) {
 					++$with_perm;
+					if ( '__return_true' === $handler['permission_callback'] ) {
+						++$public;
+					}
 				}
 				if ( isset( $handler['args'] ) && is_array( $handler['args'] ) ) {
 					foreach ( $handler['args'] as $arg_name => $spec ) {
@@ -588,6 +592,9 @@ class AI_Site_Connector_Diagnostics {
 				'methods'                 => $methods,
 				'args'                    => (object) $args_out,
 				'has_permission_callback' => $endpoints > 0 && $with_perm === $endpoints,
+				// True when any endpoint is explicitly open (__return_true) or
+				// has no permission callback at all.
+				'public'                  => $public > 0 || $with_perm < $endpoints,
 			);
 		}
 
@@ -773,8 +780,10 @@ class AI_Site_Connector_Diagnostics {
 	 * `plugins_present`; the first one with a readable data source supplies
 	 * the redirects (`plugin_detected`). Falls back to 'none'.
 	 *
-	 * Row schema (stable across plugins):
-	 *   { id, source, target, status_code, match_type, enabled, plugin }
+	 * Row schema (stable across plugins), one row per stored redirect:
+	 *   { id, source, target, status_code, match_type, enabled, plugin,
+	 *     additional_sources: [{ source, match_type }] }
+	 * `total`, `limit`, `offset`, `next_offset` all count stored redirects.
 	 *
 	 * @param array $args { limit?: int (1..1000, default 500), offset?: int }
 	 * @return array
@@ -805,6 +814,7 @@ class AI_Site_Connector_Diagnostics {
 		$rows        = array();
 		$total       = 0;
 		$unavailable = array();
+		$fallback    = null;
 		foreach ( $present as $plugin ) {
 			switch ( $plugin ) {
 				case 'rankmath':
@@ -826,10 +836,20 @@ class AI_Site_Connector_Diagnostics {
 				$unavailable[] = $plugin;
 				continue;
 			}
-			$detected = $plugin;
-			$rows     = $res['rows'];
-			$total    = $res['total'];
+			if ( 0 === $res['total'] ) {
+				// An empty leftover table must not hide another plugin's data.
+				if ( null === $fallback ) {
+					$fallback = array( $plugin, $res );
+				}
+				continue;
+			}
+			$fallback = array( $plugin, $res );
 			break;
+		}
+		if ( null !== $fallback ) {
+			list( $detected, $res ) = $fallback;
+			$rows                   = $res['rows'];
+			$total                  = $res['total'];
 		}
 
 		return array(
@@ -841,6 +861,7 @@ class AI_Site_Connector_Diagnostics {
 			'count'            => count( $rows ),
 			'limit'            => $limit,
 			'offset'           => $offset,
+			'next_offset'      => $offset + count( $rows ) < $total ? $offset + count( $rows ) : null,
 			'redirects'        => $rows,
 		);
 	}
@@ -850,15 +871,16 @@ class AI_Site_Connector_Diagnostics {
 		return (string) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) === (string) $table;
 	}
 
-	private static function redirect_row( $id, $source, $target, $code, $match, $enabled, $plugin ) {
+	private static function redirect_row( $id, $source, $target, $code, $match, $enabled, $plugin, $additional = array() ) {
 		return array(
-			'id'          => (int) $id,
-			'source'      => (string) $source,
-			'target'      => (string) $target,
-			'status_code' => (int) $code,
-			'match_type'  => (string) $match,
-			'enabled'     => (bool) $enabled,
-			'plugin'      => $plugin,
+			'id'                 => (int) $id,
+			'source'             => (string) $source,
+			'target'             => (string) $target,
+			'status_code'        => (int) $code,
+			'match_type'         => (string) $match,
+			'enabled'            => (bool) $enabled,
+			'plugin'             => $plugin,
+			'additional_sources' => $additional,
 		);
 	}
 
@@ -876,25 +898,33 @@ class AI_Site_Connector_Diagnostics {
 		// phpcs:enable
 		$out = array();
 		foreach ( (array) $rows as $row ) {
-			// `sources` is a serialized list of { pattern, comparison }. Emit
-			// one row per source so multi-source redirects are not truncated.
-			$sources = maybe_unserialize( isset( $row['sources'] ) ? $row['sources'] : '' );
-			if ( ! is_array( $sources ) || empty( $sources ) ) {
-				$sources = array( array() );
-			}
-			foreach ( $sources as $src ) {
-				$pattern    = is_array( $src ) && isset( $src['pattern'] ) && is_scalar( $src['pattern'] ) ? (string) $src['pattern'] : '';
-				$comparison = is_array( $src ) && isset( $src['comparison'] ) && is_scalar( $src['comparison'] ) ? (string) $src['comparison'] : 'exact';
-				$out[]      = self::redirect_row(
-					$row['id'],
-					$pattern,
-					isset( $row['url_to'] ) ? $row['url_to'] : '',
-					isset( $row['header_code'] ) ? $row['header_code'] : 0,
-					$comparison,
-					isset( $row['status'] ) && 'active' === $row['status'],
-					'rankmath'
+			// `sources` is a serialized list of { pattern, comparison }. The
+			// first is the primary source; the rest go in additional_sources
+			// so one stored redirect stays one row (pagination stays exact).
+			// Never unserialize objects from a third-party table.
+			$raw     = isset( $row['sources'] ) ? (string) $row['sources'] : '';
+			$sources = is_serialized( $raw ) ? @unserialize( $raw, array( 'allowed_classes' => false ) ) : null; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize
+			$parsed  = array();
+			foreach ( is_array( $sources ) ? $sources : array() as $src ) {
+				$parsed[] = array(
+					'source'     => is_array( $src ) && isset( $src['pattern'] ) && is_scalar( $src['pattern'] ) ? (string) $src['pattern'] : '',
+					'match_type' => is_array( $src ) && isset( $src['comparison'] ) && is_scalar( $src['comparison'] ) ? (string) $src['comparison'] : 'exact',
 				);
 			}
+			$primary = $parsed ? array_shift( $parsed ) : array(
+				'source'     => '',
+				'match_type' => 'exact',
+			);
+			$out[]   = self::redirect_row(
+				$row['id'],
+				$primary['source'],
+				isset( $row['url_to'] ) ? $row['url_to'] : '',
+				isset( $row['header_code'] ) ? $row['header_code'] : 0,
+				$primary['match_type'],
+				isset( $row['status'] ) && 'active' === $row['status'],
+				'rankmath',
+				$parsed
+			);
 		}
 		return array(
 			'rows'  => $out,
@@ -910,7 +940,7 @@ class AI_Site_Connector_Diagnostics {
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
 		$rows  = $wpdb->get_results(
-			$wpdb->prepare( "SELECT id, url, action_data, action_code, match_type, status FROM {$table} ORDER BY id ASC LIMIT %d OFFSET %d", $limit, $offset ),
+			$wpdb->prepare( "SELECT * FROM {$table} ORDER BY id ASC LIMIT %d OFFSET %d", $limit, $offset ),
 			ARRAY_A
 		);
 		// phpcs:enable
@@ -921,7 +951,9 @@ class AI_Site_Connector_Diagnostics {
 				isset( $row['url'] ) ? $row['url'] : '',
 				isset( $row['action_data'] ) ? $row['action_data'] : '',
 				isset( $row['action_code'] ) ? $row['action_code'] : 0,
-				isset( $row['match_type'] ) ? $row['match_type'] : 'url',
+				// Redirection keeps regex-ness in its own column; match_type
+				// stays 'url' for regex redirects.
+				! empty( $row['regex'] ) ? 'regex' : ( isset( $row['match_type'] ) ? $row['match_type'] : 'url' ),
 				! isset( $row['status'] ) || 'enabled' === $row['status'],
 				'redirection'
 			);

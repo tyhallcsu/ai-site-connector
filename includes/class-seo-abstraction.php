@@ -191,8 +191,10 @@ class AI_Site_Connector_SEO {
 	 *   @type bool   $dry_run     Echoed back.
 	 *   @type bool   $blocked     true when a gate refused.
 	 *   @type string $reason      'dry_run' | 'permission_denied' | 'forbidden_post' |
-	 *                             'post_not_found' | 'no_op' | 'ok'.
-	 *   @type array  $would_write field => { meta_key, old, new } for every field that changes.
+	 *                             'post_not_found' | 'no_op' | 'write_failed' | 'ok'.
+	 *   @type array  $would_write field => { meta_key, old, new } for every key that changes
+	 *                             (an og_image change also lists the paired `og_image_id`).
+	 *   On 'write_failed' also: failed[], rolled_back[], rollback_failed[] (field names).
 	 *   @type array  $skipped     field => reason ('unknown_field' | 'unsupported_field' | 'invalid_url').
 	 *   @type string $plugin      Detected SEO plugin.
 	 * }
@@ -249,6 +251,21 @@ class AI_Site_Connector_SEO {
 					'old'      => $old,
 					'new'      => $new,
 				);
+				// The plugins render the attachment ID in preference to the
+				// URL, so a URL change must move the paired ID with it.
+				$id_key = self::image_id_key( $plugin );
+				if ( 'og_image' === $field && '' !== $id_key ) {
+					$old_id = self::scalar( get_post_meta( $post_id, $id_key, true ) );
+					$new_id = '' === $new ? '' : (string) (int) attachment_url_to_postid( $new );
+					$new_id = '0' === $new_id ? '' : $new_id;
+					if ( $old_id !== $new_id ) {
+						$response['would_write']['og_image_id'] = array(
+							'meta_key' => $id_key,
+							'old'      => $old_id,
+							'new'      => $new_id,
+						);
+					}
+				}
 			}
 		}
 
@@ -271,17 +288,65 @@ class AI_Site_Connector_SEO {
 			return $response;
 		}
 
-		foreach ( $response['would_write'] as $row ) {
-			if ( '' === $row['new'] ) {
-				delete_post_meta( $post_id, $row['meta_key'] );
+		// Apply, verify each key by reading it back, and roll every applied
+		// key back to its old value if any write fails, so a partially
+		// applied update is never reported (or left) as success.
+		$written = array();
+		$failed  = array();
+		foreach ( $response['would_write'] as $field => $row ) {
+			if ( self::write_meta( $post_id, $row['meta_key'], $row['new'] ) ) {
+				$written[ $field ] = $row;
 			} else {
-				// wp_slash: update_post_meta() unslashes its input.
-				update_post_meta( $post_id, $row['meta_key'], wp_slash( $row['new'] ) );
+				$failed[] = $field;
+				break;
 			}
 		}
+		if ( ! empty( $failed ) ) {
+			$rollback_failed = array();
+			foreach ( $written as $field => $row ) {
+				if ( ! self::write_meta( $post_id, $row['meta_key'], $row['old'] ) ) {
+					$rollback_failed[] = $field;
+				}
+			}
+			$response['blocked']         = true;
+			$response['reason']          = 'write_failed';
+			$response['failed']          = $failed;
+			$response['rolled_back']     = array_values( array_diff( array_keys( $written ), $rollback_failed ) );
+			$response['rollback_failed'] = $rollback_failed;
+			return $response;
+		}
+
 		$response['applied'] = true;
 		$response['reason']  = 'ok';
 		return $response;
+	}
+
+	/**
+	 * Set ('' deletes) one meta value and confirm it reads back as intended.
+	 */
+	private static function write_meta( $post_id, $meta_key, $value ) {
+		if ( '' === $value ) {
+			delete_post_meta( $post_id, $meta_key );
+		} else {
+			// wp_slash: update_post_meta() unslashes its input.
+			update_post_meta( $post_id, $meta_key, wp_slash( $value ) );
+		}
+		wp_cache_delete( $post_id, 'post_meta' );
+		return self::scalar( get_post_meta( $post_id, $meta_key, true ) ) === $value;
+	}
+
+	/**
+	 * Post-meta key holding the social image's attachment ID, if any.
+	 */
+	private static function image_id_key( $plugin ) {
+		switch ( $plugin ) {
+			case 'rankmath':
+				return 'rank_math_facebook_image_id';
+			case 'yoast':
+				return '_yoast_wpseo_opengraph-image-id';
+			default:
+				return '';
+		}
 	}
 
 	/**
@@ -392,7 +457,11 @@ class AI_Site_Connector_SEO {
 			$url = esc_url_raw( $value, array( 'http', 'https' ) );
 			return '' === $url ? null : $url;
 		}
-		return sanitize_text_field( $value );
+		// Not sanitize_text_field(): it strips %XX octets, which mangles SEO
+		// template variables such as %category% or %%sitename%%.
+		$value = wp_check_invalid_utf8( $value );
+		$value = wp_strip_all_tags( $value, true );
+		return trim( preg_replace( '/\s+/u', ' ', $value ) );
 	}
 
 	/**

@@ -335,9 +335,9 @@ Read-only diagnostics, gated by `manage_options` + the `view_diagnostics` tool p
 | --- | --- | --- | --- |
 | `/diagnostics/site-report` | — | — | Broad capability snapshot (WP/PHP, plugins, builders, SEO/cache detection, REST status, caps, ini limits, cron). |
 | `/diagnostics/self-test` | `wp_self_test` | `wp ai-connector mcp-self-test` | Pass/warn/fail checks: plugin loaded, REST reachable, MCP route registered, caller capabilities, uploads/export/temp dirs writable, SEO/page-builder detection, audit log, SEO dry-run invariant. `{overall, checks:[…], summary:{pass,warn,fail}}`. Records one audit-log row per REST/MCP call. |
-| `/diagnostics/rest-routes` | `wp_rest_routes` | `wp ai-connector routes` | Route inventory: `namespace`, `route`, `methods[]`, `args` (type/required/enum/description), `has_permission_callback`. Optional `?namespace=wp/v2`. Never serialises callables or arg defaults. |
+| `/diagnostics/rest-routes` | `wp_rest_routes` | `wp ai-connector routes` | Route inventory: `namespace`, `route`, `methods[]`, `args` (type/required/enum/description), `has_permission_callback`, `public` (open or ungated endpoint). Optional `?namespace=wp/v2`. Never serialises callables or arg defaults. |
 | `/diagnostics/page-builder` | `wp_page_builder` | `wp ai-connector page-builder` | Site-level evidence (Elementor, Beaver Builder, Divi, Avada/Fusion, WPBakery, Oxygen, Bricks, block editor) plus per-post evidence for up to 100 `?post_ids=1,2,3`. |
-| `/diagnostics/redirects` | `wp_redirects` | `wp ai-connector redirects` | Exports redirects from Rank Math, Redirection, AIOSEO, or Yoast Premium (`id, source, target, status_code, match_type, enabled, plugin`). `?limit=1..1000&offset=`; `total` for paging; falls back to `plugin_detected:"none"`. |
+| `/diagnostics/redirects` | `wp_redirects` | `wp ai-connector redirects` | Exports redirects from Rank Math, Redirection, AIOSEO, or Yoast Premium — one row per stored redirect (`id, source, target, status_code, match_type, enabled, plugin, additional_sources[]`). `?limit=1..1000&offset=`; `total`/`next_offset` count stored redirects. An empty plugin table never hides another plugin's data; falls back to `plugin_detected:"none"`. |
 
 MCP tool errors (denied, invalid input) are returned as `isError: true` results with `{status, code, message}`.
 

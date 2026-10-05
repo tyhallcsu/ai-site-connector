@@ -253,3 +253,100 @@ asc_it(
 		asc_assert_same( 'post_not_found', $meta['error'], 'read error' );
 	}
 );
+
+asc_it(
+	'seo: template variables and percent signs survive sanitisation',
+	function () {
+		$post = asc_it_post();
+		try {
+			asc_it_as_seo_plugin(
+				'rankmath',
+				function () use ( $post ) {
+					$res = asc_it_with_permissions(
+						array( 'update_seo' => true ),
+						function () use ( $post ) {
+							return AI_Site_Connector_SEO::update_seo_meta( $post, array( 'title' => '%title% - %category% | 100%', 'description' => "Line one\nline <em>two</em>" ), false );
+						}
+					);
+					asc_assert_same( true, $res['applied'], 'applied' );
+					asc_assert_same( '%title% - %category% | 100%', get_post_meta( $post, 'rank_math_title', true ), 'template vars preserved' );
+					asc_assert_same( 'Line one line two', get_post_meta( $post, 'rank_math_description', true ), 'tags and newlines stripped' );
+					$again = AI_Site_Connector_SEO::update_seo_meta( $post, array( 'title' => '%title% - %category% | 100%' ) );
+					asc_assert_same( 'no_op', $again['reason'], 'unchanged template value is a no-op' );
+				}
+			);
+		} finally {
+			wp_delete_post( $post, true );
+		}
+	}
+);
+
+asc_it(
+	'seo: og_image change moves the paired attachment-id meta',
+	function () {
+		$post = asc_it_post();
+		update_post_meta( $post, 'rank_math_facebook_image', 'https://example.test/old.jpg' );
+		update_post_meta( $post, 'rank_math_facebook_image_id', '55' );
+		try {
+			asc_it_as_seo_plugin(
+				'rankmath',
+				function () use ( $post ) {
+					$dry = AI_Site_Connector_SEO::update_seo_meta( $post, array( 'og_image' => 'https://example.test/new.jpg' ) );
+					asc_assert_same( '55', $dry['would_write']['og_image_id']['old'], 'paired id in diff' );
+					asc_assert_same( '', $dry['would_write']['og_image_id']['new'], 'non-attachment URL clears id' );
+					asc_it_with_permissions(
+						array( 'update_seo' => true ),
+						function () use ( $post ) {
+							return AI_Site_Connector_SEO::update_seo_meta( $post, array( 'og_image' => 'https://example.test/new.jpg' ), false );
+						}
+					);
+					asc_assert_same( 'https://example.test/new.jpg', get_post_meta( $post, 'rank_math_facebook_image', true ), 'url written' );
+					asc_assert_same( '', (string) get_post_meta( $post, 'rank_math_facebook_image_id', true ), 'stale id removed' );
+				}
+			);
+		} finally {
+			wp_delete_post( $post, true );
+		}
+	}
+);
+
+asc_it(
+	'seo: a failing key rolls back earlier writes and reports write_failed',
+	function () {
+		$post = asc_it_post();
+		update_post_meta( $post, '_yoast_wpseo_title', 'Original title' );
+		update_post_meta( $post, '_yoast_wpseo_metadesc', 'Original desc' );
+		$block = static function ( $check, $object_id, $meta_key ) {
+			return '_yoast_wpseo_metadesc' === $meta_key ? false : $check;
+		};
+		try {
+			asc_it_as_seo_plugin(
+				'yoast',
+				function () use ( $post, $block ) {
+					$res = asc_it_with_filter(
+						'update_post_metadata',
+						$block,
+						function () use ( $post ) {
+							return asc_it_with_permissions(
+								array( 'update_seo' => true ),
+								function () use ( $post ) {
+									return AI_Site_Connector_SEO::update_seo_meta( $post, array( 'title' => 'New title', 'description' => 'New desc' ), false );
+								}
+							);
+						},
+						10,
+						3
+					);
+					asc_assert_same( false, $res['applied'], 'applied' );
+					asc_assert_same( 'write_failed', $res['reason'], 'reason' );
+					asc_assert_same( array( 'description' ), $res['failed'], 'failed fields' );
+					asc_assert_same( array( 'title' ), $res['rolled_back'], 'rolled back' );
+					asc_assert_same( 'Original title', get_post_meta( $post, '_yoast_wpseo_title', true ), 'title restored' );
+					asc_assert_same( 'Original desc', get_post_meta( $post, '_yoast_wpseo_metadesc', true ), 'desc untouched' );
+				}
+			);
+		} finally {
+			wp_delete_post( $post, true );
+		}
+	}
+);

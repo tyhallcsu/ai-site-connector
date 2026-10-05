@@ -338,8 +338,8 @@ log "Checking diagnostics tool surface — anonymous 401 + admin internal-dispat
 # Anonymous calls to the four new admin-gated diagnostic routes must NOT be 200.
 for route in diagnostics/self-test diagnostics/rest-routes diagnostics/page-builder diagnostics/redirects; do
 	status="$(curl -sS -o /dev/null -w '%{http_code}' "$WP_URL/wp-json/ai-site-connector/v1/$route")"
-	if [ "$status" = "200" ]; then
-		echo "Expected anonymous /$route to be denied (got 200, which leaks data)." >&2
+	if [ "$status" != "401" ]; then
+		echo "Expected anonymous /$route to return 401, got $status." >&2
 		exit 1
 	fi
 done

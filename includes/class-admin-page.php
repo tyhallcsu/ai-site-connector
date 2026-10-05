@@ -603,6 +603,7 @@ class AI_Site_Connector_Admin_Page {
 			'site_name'           => get_bloginfo( 'name' ),
 			'site_url'            => home_url(),
 			'rest_api_base'       => trailingslashit( rest_url() ),
+			'mcp_endpoint'        => rest_url( AI_SITE_CONNECTOR_REST_NAMESPACE . '/mcp' ),
 			'auth_method'         => 'basic_auth_application_password',
 			'username'            => $user ? $user->user_login : '',
 			'application_password' => isset( $cred['password'] ) ? $cred['password'] : '',

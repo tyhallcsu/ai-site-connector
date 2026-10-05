@@ -2,6 +2,26 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-05 — v0.12.3 released (P1 fixes #114, #119)
+
+- PR #135 → `4bef824`; PR CI run 37380234124 19/19 (ZIP install + upgrade
+  v0.12.2 → v0.12.3; integration 97/97 on 6 WordPress builds); main CI run
+  37380505933 19/19. Tag `v0.12.3` → `4bef824`; release run 37380756899
+  succeeded; stable; `releases/latest` = v0.12.3. Asset
+  `ai-site-connector-v0.12.3.zip`: 1,135,602 B, sha256
+  `01b973c29c426b6f366d34e7a22a042f1fdb020c45b4aeaba63ee5d2db594afe`;
+  checksum OK, embeds 0.12.3, 70 files, no dev paths, both fixes present.
+- Dev site, published asset: upgrade v0.12.2 → v0.12.3 (70 files verified).
+  #114: an empty 0.12.0 backup dir was hidden from the list. The UI
+  Rollback to 0.12.2 ran through the real handler, producing
+  byte-identical files and audit started → roll-away backup → completed.
+  The dev site was then restored to v0.12.3. #119: the generated Claude
+  Desktop snippet URL `…/ai-site-connector/v1/mcp` answered HTTP
+  `initialize` with 200.
+- The first headless UI attempt timed out because the rollback forms sit
+  in a collapsed `<details>` panel: a test-script issue, not a plugin
+  defect. Evidence comments are on #114 and #119.
+
 ## 2026-10-05 — P1 fixes #114 and #119 (0.12.3 prep)
 
 - PR #134 → `422f953` (closes #114, #119). PR CI run 37379827867 on

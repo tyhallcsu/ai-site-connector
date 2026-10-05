@@ -1,6 +1,6 @@
 # Handoff — AI Site Connector
 
-**Updated:** 2026-10-05 ~22:15 UTC (16:15 America/Denver) · **State: PAUSED at 95% usage** — v0.12.3 released and asset verified; dev UI rollback check interrupted (see Dev site) · **Session:** `asc-dev-audit-ship`
+**Updated:** 2026-10-05 ~23:25 UTC (17:25 America/Denver) · **State:** v0.12.3 released and verified on dev; queue closed out; paused for the owner · **Mode:** continuous low-usage (single agent; new features stay in backlog) · **Session:** `asc-dev-audit-ship`
 **Repo:** tyhallcsu/ai-site-connector (public, standalone — the parent `ess-custom-plugins` dir is not a repo)
 **Primary checkout:** `/Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector`. Its local `main` is at `16f5816`, 5 commits behind `origin/main` (read from its refs 21:48 UTC; not modified by this session; fast-forward before use)
 **Session worktree:** `.claude/worktrees/asc-dev-audit-ship` · branch `docs/handoff-0.12.3` (this checkpoint)
@@ -13,7 +13,7 @@
 | `origin/main` | `4bef824` — chore(release): v0.12.3 (#135), on `422f953` (#134 P1 fixes) | `gh pr view 135` merge commit |
 | Latest release | **v0.12.3** → tag on `4bef824`; stable; `releases/latest`; ZIP 1,135,602 B, sha256 `01b973c2…94afe`; checksum, embedded 0.12.3, 70 files, no dev paths and both fixes present all verified | release run 37380756899 |
 | Unreleased on main | nothing | commits since tag v0.12.3 |
-| Dev site | http://localhost:8790. Deployed **published v0.12.3** (upgrade from v0.12.2; 70 files verified). Created a verified 0.12.2 backup plus an empty 0.12.0 dir: only 0.12.2 is offered (OK). **UNVERIFIED:** the headless UI rollback round trip timed out (`waitForNavigation` 30 s) after clicking "Rollback to 0.12.2", so dev may now be on 0.12.2 or 0.12.3. Installed-files hash before the click: `19cc32ac…` | `bin/dev-site.sh status` |
+| Dev site | http://localhost:8790 — **published v0.12.3** (`4bef824`), 70 files verified. #114: a verified 0.12.2 backup plus an empty 0.12.0 dir present, only 0.12.2 offered. UI Rollback to 0.12.2 via the admin-post handler gave byte-identical files and audit started → roll-away backup → completed; then restored to v0.12.3. #119: the generated snippet URL `…/wp-json/ai-site-connector/v1/mcp`, HTTP `initialize` with the snippet's header → 200 | `bin/dev-site.sh status`; audit ids 17–19 |
 | CI | #134 run 37379827867 19/19 (integration 97/97 × 6 WP builds); #135 run 37380234124 19/19 (upgrade v0.12.2 → v0.12.3); main `4bef824` run 37380505933 19/19 | `gh run view` |
 | Remote dev target | none exists — owner decision tracked in #97 | config/registry search |
 
@@ -64,9 +64,9 @@
 
 ## Next three actions
 
-1. `bin/dev-site.sh status`. If the plugin is not 0.12.3, run `bin/dev-site.sh deploy --release v0.12.3`. Then rerun the UI rollback round trip (Overview → Updates → "Rollback to 0.12.2", accept the confirm, then roll back to 0.12.3) and find out why the click never navigated; it may be a real handler bug. File an issue if so.
-2. Comment v0.12.3 availability on #114 and #119. Over HTTP: generate a pack and POST `initialize` to the Claude Desktop snippet URL with its header (not yet done on dev; covered in-process by CI).
-3. Add the v0.12.3 release entry to WORK_LOG. Owner decisions #97, #99. Backlog: #101 #106 #108 #109 #125 and the other session's P2/P3 issues.
+1. Owner decisions #97 (remote dev site?) and #99 (required checks on `main`).
+2. Next fixes from the other session's audit (P2): #111 #113 #116 #117 #118 #120 #121, after checking with that session; features #112 #122–#124 stay in the backlog.
+3. Backlog: #101 #106 #108 #109 #125. Dev site holds fixture data plus extra `ai-agent` Application Passwords from verification runs (dev only).
 
 Resume: `cd <worktree> && git fetch && gh pr list -R tyhallcsu/ai-site-connector && bin/dev-site.sh status`
 

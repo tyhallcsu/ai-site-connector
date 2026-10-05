@@ -111,6 +111,10 @@ class AI_Site_Connector_Export_Bundle {
 					'items'     => (int) $res['items'],
 					'sha256'    => hash( 'sha256', self::encode( $data ) ),
 				);
+				// A successful export is not proof of a complete audit: say
+				// what this file covers and what it could not check.
+				$coverage       = self::coverage( $file, $res['data'], (bool) $res['truncated'] );
+				$index[ $file ] = array_merge( $index[ $file ], $coverage );
 			} catch ( Throwable $e ) {
 				$index[ $file ] = array(
 					'ok'        => false,
@@ -304,6 +308,81 @@ class AI_Site_Connector_Export_Bundle {
 			'data'      => $data,
 			'truncated' => $truncated,
 			'items'     => count( $items ),
+		);
+	}
+
+	/**
+	 * Coverage of one manifest: { complete, scope, limitations[] }.
+	 *
+	 * complete is false whenever any limitation applies; scope states what
+	 * the file is meant to cover even when complete.
+	 */
+	private static function coverage( $file, $data, $truncated ) {
+		$limits = array();
+		if ( $truncated ) {
+			$limits[] = 'truncated';
+		}
+		$scope = '';
+		switch ( $file ) {
+			case 'site-inventory.json':
+				$scope = 'Published posts, pages and public custom post types only; drafts, pending, private and scheduled content are excluded.';
+				break;
+			case 'media-seo-audit.json':
+				$scope = 'Attachments only, offline checks against stored metadata and files.';
+				break;
+			case 'duplicate-media.json':
+				$scope = sprintf( 'One scan window of up to %d attachments in ID order; duplicates are only paired within the window (see issue #88).', AI_Site_Connector_Media_Audit::DUP_DEFAULT_SCAN );
+				if ( ! empty( $data['hash_budget_exhausted'] ) ) {
+					$limits[] = 'hash_budget_exhausted';
+				}
+				if ( ! empty( $data['unhashed'] ) ) {
+					$limits[] = 'unhashed_files';
+				}
+				if ( ! empty( $data['skipped_large'] ) ) {
+					$limits[] = 'skipped_large_files';
+				}
+				if ( ! empty( $data['unreadable'] ) ) {
+					$limits[] = 'unreadable_files';
+				}
+				if ( $truncated ) {
+					$limits[] = 'pairs_within_scan_window_only';
+				}
+				break;
+			case 'broken-links.json':
+				$scope = 'Internal links in published content, resolved offline; external links are not checked and links needing a live request are reported as skipped.';
+				if ( ! empty( $data['partial_posts'] ) ) {
+					$limits[] = 'partial_posts';
+				}
+				if ( ! empty( $data['summary']['skipped'] ) ) {
+					$limits[] = 'unverifiable_links_skipped';
+				}
+				break;
+			case 'redirects.json':
+				$scope = 'Redirects from the first supported redirect plugin that has data.';
+				if ( ! empty( $data['data_unavailable'] ) ) {
+					$limits[] = 'redirect_plugin_data_unavailable';
+				}
+				break;
+			case 'mcp-self-test.json':
+				$scope = 'Checks that do not depend on the caller or PHP process user; run /diagnostics/self-test for the full live report.';
+				$limits[] = 'context_checks_omitted';
+				break;
+			case 'rest-routes.json':
+				$scope = 'Routes registered at export time.';
+				break;
+			case 'plugin-builder-detection.json':
+				$scope = 'Detection from active plugins and theme; not proof that a builder is used on any page.';
+				break;
+		}
+		if ( isset( $data['omitted_forbidden'] ) && (int) $data['omitted_forbidden'] > 0 ) {
+			$limits[] = 'items_omitted_for_access';
+		}
+		$limits = array_values( array_unique( $limits ) );
+		sort( $limits );
+		return array(
+			'complete'    => empty( $limits ),
+			'scope'       => $scope,
+			'limitations' => $limits,
 		);
 	}
 

@@ -998,8 +998,8 @@ class AI_Site_Connector_CLI {
 		self::remove_dir( $stage );
 
 		foreach ( $bundle['index'] as $name => $info ) {
-			if ( ! empty( $info['ok'] ) && ! empty( $info['truncated'] ) ) {
-				WP_CLI::warning( sprintf( '%s truncated at --max_items.', $name ) );
+			if ( ! empty( $info['ok'] ) && empty( $info['complete'] ) ) {
+				WP_CLI::warning( sprintf( '%s is incomplete: %s.', $name, implode( ', ', $info['limitations'] ) ) );
 			}
 		}
 		if ( $failed ) {

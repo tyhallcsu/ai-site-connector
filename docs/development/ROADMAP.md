@@ -13,9 +13,10 @@ acceptance gates, and release grouping. Operating rules:
 | M2 | Content inventory (JSON + CSV) + CLI | #63 (+#75 partial) | M1 (SEO read) | merged #79 (`2949c89`); export consistency #80 (`4d948e0`) |
 | M3 | Media SEO audit + duplicate media + CLI | #64 #65 (+#75 partial) | M0 | merged #82 (`4f44c85`) |
 | M4 | Broken internal link scanner + CLI | #66 (+#75 partial) | M0 | merged #83 (`c270434`) |
-| M5 | Export bundle + deterministic manifests + CLI `export` | #73 #74 (+#75 partial) | M1–M4 | merged #84 (`8dbb1d0`) |
-| M6 | WP-CLI remainder (`status`, `enable`/`disable` guards) — close #75 | #75 | M1–M5 | in review |
-| M7 | Safe content update (dry-run, snapshot, rollback) | #70 | M1 (SEO write), backup manager | queued |
+| M5 | Export bundle + deterministic manifests + CLI `export` | #73 #74 (+#75 partial) | M1–M4 | merged #84 (`8dbb1d0`); coverage reporting follow-up |
+| M6 | WP-CLI remainder (`status`, `enable`/`disable` guards) — close #75 | #75 | M1–M5 | merged #85 (`d81b62d`) |
+| M7 | Safe content update (dry-run, snapshot, rollback) | #70 | M1 (SEO write), backup manager | draft #87; review-2 items open |
+| M9 | Cross-window duplicate detection | #88 | M3 | queued |
 | M8 | Superseded branch cleanup | #59 | — | done (branch deleted, #59 closed) |
 
 ## Acceptance gates (every milestone)
@@ -33,7 +34,8 @@ acceptance gates, and release grouping. Operating rules:
 
 - **0.10.0** — shipped 2026-10-05: M0–M2 + export consistency + release
   pipeline (tag `v0.10.0` → `9c07f10`).
-- **0.10.x / 0.11.0** — M3 + M4 (media audit/duplicates, broken links).
+- **0.11.0** — shipped 2026-10-05: M3–M6 (tag `v0.11.0` → `6645155`).
+- **0.12.0** — M7 safe content update (+ export coverage reporting).
 - **0.11.0** — M5 + M6 (export bundle/manifests, CLI completion).
 - **0.12.0** — M7 (first new write surface; default-off).
 

@@ -15,7 +15,7 @@
  * @return string
  */
 function asc_it_render_admin_tab( $tab ) {
-	$previous    = isset( $_GET['tab'] ) ? $_GET['tab'] : null; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	$previous    = isset( $_GET['tab'] ) ? $_GET['tab'] : null; // phpcs:ignore WordPress.Security.NonceVerification.Recommended,WordPress.Security.ValidatedSanitizedInput -- Test helper saves and restores the raw value.
 	$_GET['tab'] = $tab;
 	ob_start();
 	try {

@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.12.0
+Stable tag: 0.12.1
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,12 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.12.1 =
+* Fixed: MCP wp_create_post and wp_update_post now require the write_content permission and honour read-only mode, like every other write path. Clients relying on them must enable write_content (or use wp_update_content).
+* Fixed: WP-CLI content-inventory, broken-links, media-audit and media-duplicates require --user instead of printing an empty result.
+* Fixed: discovery file reports status "disabled" while the site-wide switch is off; snapshots route also requires read_content.
+* Docs: security model, README fixes.
+
 = 0.12.0 =
 * New: safe content update and rollback (REST + MCP). Dry-run by default; real writes need the default-off write_content permission (SEO fields also update_seo). Validates permissions, status transitions, slugs, terms and images; shows exactly what would be stored; snapshots before writing; restores on detected failure; rollback refuses to overwrite later edits.
 * Changed: duplicate media detection is library-wide and resumable (scan_id / complete); after_id is no longer supported.

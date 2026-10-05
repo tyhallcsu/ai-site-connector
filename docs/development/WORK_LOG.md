@@ -2,6 +2,23 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-05 — v0.12.0 released; final audit; 0.12.1 prep
+
+- PR #91 → `441df7f`; main CI 19/19; tag `v0.12.0` → `441df7f`; release run
+  37356331709 success. Published asset verified: sha256 `66391168…e23f` OK,
+  versions 0.12.0, includes content-update class, no dev files; published
+  ZIP clean install + upgrade from published v0.11.0 (exit 0). Comments on
+  #70 #88.
+- Final cross-cutting audit (read-only reviewer): no P1. Pre-existing gap:
+  MCP `wp_create_post` / `wp_update_post` bypassed `write_content` and
+  read-only mode (red-before-green verified). Fixed with the other findings
+  in #92 → `94169ad` (CI 88/88 on all WP rows). Process slip: `835e201` was
+  pushed without re-running PHPUnit; CI failed (discovery unit test lacked
+  the Permissions class); fixed in `72550fe`.
+- 0.12.1 local gates (WP 7.1.2): PHPUnit OK (40), phpcs 0, security-grep,
+  package smoke, actionlint, integration 88/88, upgrade v0.12.0 → v0.12.1
+  via v0.12.0's updater (exit 0).
+
 ## 2026-10-05 — #89, #90, #87 merged; 0.12.0 release prep
 
 - #89 (export coverage) → `1098ee4`; #90 (library-wide duplicate scan,

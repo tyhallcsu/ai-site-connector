@@ -77,7 +77,7 @@ Read and write through the standard WordPress REST API under `/wp-json/wp/v2/`, 
 | -------------------------------------- | ------------------------------------ |
 | List/read posts, pages                 | `read`                               |
 | Create / edit your own posts and pages | `edit_posts`, `edit_pages`           |
-| Edit other users' published content    | `edit_others_posts`, `edit_others_pages` (granted to AI Site Operator by default) |
+| Edit other users' published content    | `edit_others_posts`, `edit_others_pages` (not granted to AI Site Operator by default) |
 | Upload media                           | `upload_files`                       |
 | Moderate comments                      | `moderate_comments`                  |
 | List users                             | `list_users`                         |

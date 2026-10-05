@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.12.2
+Stable tag: 0.12.3
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,10 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.12.3 =
+* Fixed: rollback only offers verified, complete backups and checks everything before touching the installed plugin; an interrupted backup can no longer turn a rollback into a missing plugin.
+* Fixed: Claude Desktop and Cursor snippets in connection packs point mcp-remote at /wp-json/ai-site-connector/v1/mcp (was /wp-json/mcp). Re-generate packs made with 0.12.2 or earlier, or fix the URL by hand.
+
 = 0.12.2 =
 * Fixed: Permissions tab checkboxes are labelled by tool name for screen readers; admin pages no longer repeat nonce ids.
 * Fixed: admin tables no longer force sideways page scrolling on phones; settings tables stack.
@@ -130,7 +134,7 @@ Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter
 
 = 0.5.0 =
 * First-run onboarding wizard with a 5-step "Get Started" tab + welcome notice (closes #31).
-* Backup-before-update + one-click rollback. Each self-update snapshots the previous plugin folder to `wp-content/upgrade-backups/ai-site-connector/{version}/`. Keeps the last 3, never deletes the currently-installed version (closes #32).
+* Backup-before-update + one-click rollback. Each self-update snapshots the previous plugin folder to `wp-content/upgrade-backups/ai-site-connector/{version}/`. Keeps the last 3, never deletes the currently-installed version (closes #32). Since 0.12.3 every backup is verified against a sha256 manifest before it is offered, and rollback stages and verifies the replacement before swapping (#114).
 * Pre-flight verification on Application Password generation. Server-side probe of `/wp/v2/users/me` with the new credentials, with per-status hints (401 = Authorization-header stripping, 403 = caps/WAF, 404 = REST off, 5xx = server error) (closes #33).
 * Sample agent code in `examples/{python,node,bash}/` — three runnable reference clients demonstrating the full flow (health, list, create, upload) (closes #34).
 * MCP HTTP transport endpoint at `/wp-json/ai-site-connector/v1/mcp` speaking JSON-RPC 2.0. Supports `initialize`, `tools/list`, `tools/call`, `ping`. 9 tools wrap the plugin's REST endpoints + core WP post operations via internal `rest_do_request`. New `AI_SITE_CONNECTOR_MCP_DISABLE` constant (closes #35).

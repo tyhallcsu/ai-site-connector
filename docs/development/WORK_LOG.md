@@ -2,6 +2,24 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-05 — M6 merged; 0.11.0 release prep; M7 redesign under review
+
+- PR #85 (M6, #75) squash-merged → `d81b62d`; CI run 37349217489 on
+  `f634b91`: integration 71/71 on WP 5.6–7.1.2. #75 closed. The WP 5.6 row
+  exposed that WordPress < 5.7 returns `rest_pre_dispatch` errors from
+  `dispatch()` unconverted; MCP `dispatch_checked()` would fatal on them —
+  fixed, and the test harness normalises the same way.
+- 0.11.0 local gates (WP 7.1.2): check-version OK, PHPUnit OK (40), phpcs 0,
+  security-grep clean, package smoke OK, actionlint OK, integration 71/71,
+  ZIP clean install + v0.10.0 → v0.11.0 via v0.10.0's own updater OK.
+- M7 (#70): first draft review found 2 P1 + 6 P2 + 3 P3; redesigned (single
+  wp_update_post after meta/terms, sanitize-db pre-computation and
+  untouched-column refusal, column guard with exact `$wpdb` restore,
+  rollback re-validation and interrupted-snapshot recovery, option-per-
+  snapshot storage, strict typing, public REST-enabled targets). Mutation
+  checks confirmed the safety tests fail when guards are removed. Worktree
+  suite 79/79; second-pass review of the redesign running.
+
 ## 2026-10-05 — M5 merged; M6 (#75 disable/enable) in review
 
 - PR #84 (M5) squash-merged → `8dbb1d0`; CI run 37346467734 on `3c65437`:

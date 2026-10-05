@@ -6,6 +6,15 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-05
+
+Media audit, duplicate media, offline broken-link scanning, a deterministic
+GitHub-ready manifest bundle and a site-wide disable switch — each as a REST
+route, an MCP tool and a WP-CLI command. Additive; the only behaviour change
+for existing routes is that callers who cannot edit others' posts now see
+inventory totals for their own posts only. Tested on WordPress 5.6 through
+7.1.2.
+
 ### Added
 
 - Media SEO audit (#64): `GET /media/audit`, MCP `wp_media_audit`,
@@ -32,6 +41,11 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Content inventory and the link scanner scope their queries to the caller's
   own posts when the caller cannot edit others' posts, so totals no longer
   count other users' drafts/private posts.
+
+### Fixed
+
+- MCP `dispatch_checked()` no longer fatals on WordPress < 5.7, where
+  `rest_pre_dispatch` errors are returned unconverted.
 
 ## [0.10.0] - 2026-10-05
 

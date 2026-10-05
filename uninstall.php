@@ -51,6 +51,7 @@ remove_role( 'ai_site_operator' );
 delete_option( 'ai_site_connector_db_version' );
 delete_option( 'ai_site_connector_log_retention_days' );
 delete_option( 'ai_site_connector_wipe_on_uninstall' );
+delete_option( 'ai_site_connector_disabled' );
 
 // 4. Unschedule the daily prune (deactivation already did this, but if
 // uninstall is called without prior deactivation — possible via wp-cli's

@@ -36,6 +36,10 @@ on_error() {
 }
 
 cleanup() {
+	# Never leave a reused (WP_DIR supplied) site disabled after a failure.
+	if [ -n "${WP_DIR:-}" ] && [ -f "$WP_DIR/wp-config.php" ]; then
+		wp_cli ai-connector enable --yes --user=admin --path="$WP_DIR" >/dev/null 2>&1 || true
+	fi
 	if [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
 		kill "$SERVER_PID"
 		wait "$SERVER_PID" 2>/dev/null || true
@@ -401,6 +405,24 @@ if ls -a "$EXPORT_B" | grep -q '^\.ai-connector-export-'; then
 	exit 1
 fi
 rm -rf "$EXPORT_A" "$EXPORT_B"
+# disable/enable: admin context required; real HTTP clients get 503 while
+# disabled (health stays up and reports it); enable restores access.
+if wp_cli ai-connector disable --yes --path="$WP_DIR" >/dev/null 2>&1; then
+	echo "disable succeeded without an administrator --user" >&2
+	exit 1
+fi
+wp_cli ai-connector disable --yes --user=admin --path="$WP_DIR" >/dev/null
+status="$(curl -sS -o /dev/null -w '%{http_code}' --user "$AI_USER:$APP_PASSWORD" "$WP_URL/wp-json/ai-site-connector/v1/site-info")"
+[ "$status" = "503" ] || { echo "site-info while disabled returned $status, expected 503" >&2; exit 1; }
+status="$(curl -sS -o /dev/null -w '%{http_code}' --user "$AI_USER:$APP_PASSWORD" -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' "$WP_URL/?rest_route=/AI-Site-Connector/v1/mcp")"
+[ "$status" = "503" ] || { echo "mixed-case MCP route while disabled returned $status, expected 503" >&2; exit 1; }
+curl -sS "$WP_URL/wp-json/ai-site-connector/v1/health" | jq -e '.enabled == false' >/dev/null \
+	|| { echo "health does not report disabled" >&2; exit 1; }
+wp_cli ai-connector status --user=admin --path="$WP_DIR" | grep -Eq 'connector[[:space:]]+disabled' \
+	|| { echo "status does not show disabled" >&2; exit 1; }
+wp_cli ai-connector enable --yes --user=admin --path="$WP_DIR" >/dev/null
+status="$(curl -sS -o /dev/null -w '%{http_code}' --user "$AI_USER:$APP_PASSWORD" "$WP_URL/wp-json/ai-site-connector/v1/site-info")"
+[ "$status" = "200" ] || { echo "site-info after enable returned $status, expected 200" >&2; exit 1; }
 if wp_cli ai-connector content-inventory --user=admin --post_type=attachment --path="$WP_DIR" >/dev/null 2>&1; then
 	echo "content-inventory accepted post_type=attachment" >&2
 	exit 1

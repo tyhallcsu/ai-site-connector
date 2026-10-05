@@ -91,6 +91,10 @@ class AI_Site_Connector_REST_Controller {
 	}
 
 	public static function maybe_stamp_last_request( $result, $server, $request ) {
+		if ( null !== $result ) {
+			// Denied or short-circuited (e.g. disabled switch): not a successful request.
+			return $result;
+		}
 		if ( is_user_logged_in() && $request instanceof WP_REST_Request ) {
 			$route = (string) $request->get_route();
 			if ( 0 === strpos( $route, '/' . AI_SITE_CONNECTOR_REST_NAMESPACE . '/' ) ) {
@@ -1456,6 +1460,7 @@ class AI_Site_Connector_REST_Controller {
 			'rest_url'       => rest_url(),
 			'https'          => AI_Site_Connector_Plugin::is_https(),
 			'authenticated'  => (bool) $is_auth,
+			'enabled'        => ! AI_Site_Connector_Permissions::is_disabled(),
 			'timestamp'      => gmdate( 'c' ),
 		);
 

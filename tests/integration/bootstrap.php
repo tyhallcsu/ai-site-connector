@@ -66,7 +66,29 @@ function asc_it_rest( $method, $route, $params = array() ) {
 	} else {
 		$req->set_body_params( $params );
 	}
-	return rest_do_request( $req );
+	return asc_it_response( rest_do_request( $req ) );
+}
+
+/**
+ * WordPress < 5.7 returns a rest_pre_dispatch WP_Error from dispatch()
+ * unconverted; normalise to a WP_REST_Response like newer versions.
+ *
+ * @return WP_REST_Response
+ */
+function asc_it_response( $res ) {
+	if ( is_wp_error( $res ) ) {
+		$data   = $res->get_error_data();
+		$status = is_array( $data ) && isset( $data['status'] ) ? (int) $data['status'] : 500;
+		return new WP_REST_Response(
+			array(
+				'code'    => $res->get_error_code(),
+				'message' => $res->get_error_message(),
+				'data'    => $data,
+			),
+			$status
+		);
+	}
+	return $res;
 }
 
 /**
@@ -171,7 +193,7 @@ function asc_it_mcp( $method, $params = array() ) {
 			)
 		)
 	);
-	return (array) rest_do_request( $req )->get_data();
+	return (array) asc_it_response( rest_do_request( $req ) )->get_data();
 }
 
 /**

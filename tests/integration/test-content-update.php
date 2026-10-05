@@ -751,3 +751,54 @@ asc_it(
 		}
 	}
 );
+
+asc_it(
+	'content-update review 4: failing restore of a side field is reported and left recoverable',
+	function () {
+		$cat  = term_exists( 'asc-it-r4-cat', 'category' );
+		$cat  = $cat ? $cat : wp_insert_term( 'ASC IT R4 cat', 'category', array( 'slug' => 'asc-it-r4-cat' ) );
+		$tag  = term_exists( 'asc-it-r4-tag', 'post_tag' );
+		$tag  = $tag ? $tag : wp_insert_term( 'ASC IT R4 tag', 'post_tag', array( 'slug' => 'asc-it-r4-tag' ) );
+		$post = asc_it_post( array( 'post_title' => 'R4' ) );
+		$calls = 0;
+		// Every set after the first (post_tag forward, then the category restore) gets an intruder term.
+		$sabotage = static function ( $object_id, $terms, $tt_ids, $taxonomy ) use ( $post, &$calls, &$sabotage ) {
+			if ( (int) $object_id !== (int) $post ) {
+				return;
+			}
+			if ( ++$calls >= 2 ) {
+				remove_action( 'set_object_terms', $sabotage, 10 );
+				wp_set_object_terms( $object_id, array( 'asc-it-r4-intruder' ), $taxonomy, true );
+				add_action( 'set_object_terms', $sabotage, 10, 4 );
+			}
+		};
+		add_action( 'set_object_terms', $sabotage, 10, 4 );
+		try {
+			$r = asc_it_with_write(
+				function () use ( $post, $cat, $tag ) {
+					return asc_it_cu( $post, array( 'terms' => array( 'category' => array( (int) $cat['term_id'] ), 'post_tag' => array( (int) $tag['term_id'] ) ) ), array( 'dry_run' => false ) );
+				}
+			);
+		} finally {
+			remove_action( 'set_object_terms', $sabotage, 10 );
+		}
+		try {
+			asc_assert_same( 'write_failed', $r['reason'], 'reason' );
+			asc_assert( in_array( 'terms', $r['restore_failed'], true ), 'failed restore reported as success: ' . wp_json_encode( $r ) );
+			asc_assert( ! in_array( 'terms', $r['restored'], true ), 'terms listed as restored' );
+			$snap = get_option( AI_Site_Connector_Content_Update::OPTION_PREFIX . $r['snapshot_id'] );
+			asc_assert_same( 'revert_incomplete', $snap['state'], 'snapshot not left recoverable' );
+		} finally {
+			wp_delete_post( $post, true );
+			foreach ( array( array( $cat, 'category' ), array( $tag, 'post_tag' ) ) as $t ) {
+				wp_delete_term( (int) $t[0]['term_id'], $t[1] );
+			}
+			foreach ( array( 'category', 'post_tag' ) as $tax ) {
+				$i = get_term_by( 'slug', 'asc-it-r4-intruder', $tax );
+				if ( $i ) {
+					wp_delete_term( $i->term_id, $tax );
+				}
+			}
+		}
+	}
+);

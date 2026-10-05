@@ -45,6 +45,18 @@ Status values: **fixed** (code + regression test on the PR head),
 | 3.6 | P3 | A `pending` snapshot whose update is still running was treated as interrupted | fixed: `pending` is recoverable only after a 300 s grace period (`asc_snapshot_in_progress`) | `content-update review 3: …` (fresh pending) |
 | 3.7 | P3 | A successful guard row restore leaves traces (revision, `post_modified`, `_wp_old_slug`, plugin `save_post` side effects) | accepted: documented below | — |
 
+## Review 4 — verification of review-3 fixes on `41144f1`
+
+Review-3 tests confirmed non-vacuous (each fails without its fix).
+
+| # | Sev | Finding | Disposition | Test |
+|---|-----|---------|-------------|------|
+| 4.1 | P1 | Regression from 3.1: a side field whose own restore failed was still reported restored; snapshot marked `reverted` and unrecoverable | fixed: the failed field is excluded from "restored" | `review 4: failing restore of a side field is reported` |
+| 4.2 | P2 | Re-apply after a failed recovery rollback used `after_raw = null` (deleted featured image, claimed success) | fixed: re-apply uses `planned_raw` for interrupted snapshots, skips fields with no known value | covered by code path; see test note in 4.1 |
+| 4.3 | P3 | Docs overclaimed interrupted-publish recovery | fixed: docs state it is never automatic | — |
+| 4.4 | P3 | Docs overclaimed "never overwritten" | fixed: limits listed | — |
+| 4.5 | P3 | Empty `post_name` in the guard WHERE caused false dirty reports | fixed: skipped when empty | — |
+
 ## Guarantees (and non-guarantees)
 
 What the implementation guarantees, and what it does not:
@@ -61,9 +73,14 @@ What the implementation guarantees, and what it does not:
   transaction: hooks fired by `wp_update_post` (e.g. `save_post`, publish
   notifications by other plugins) cannot be undone, and a PHP fatal mid-update
   leaves the snapshot `pending` — recoverable via rollback, not automatic.
-- **Later edits are never overwritten** by rollback (field-level conflict
-  check incl. publish-generated slug/date) or by the guard's row restore
-  (conditional on every guarded column still holding the value this call wrote).
+- **Later edits detected through WordPress APIs are not overwritten** by
+  rollback (field-level conflict check incl. publish-generated slug/date) or
+  by the guard's row restore (conditional on every guarded column still
+  holding the value this call wrote). Limits: there is no lock between a
+  rollback's conflict check and its write, so an edit landing in that window
+  can be overwritten; restoring a failed side field resets all of its
+  taxonomies/meta keys to their plan-time values; the guard compares text
+  under the table collation (case/trailing-space-only changes match).
 - **No silent side effects on untouched columns** from the caller's save
   filters: such updates and rollbacks are refused up front.
 
@@ -73,6 +90,6 @@ creating terms; concurrent writers that bypass WordPress APIs.
 Known traces after a detected-and-restored failure (3.7): the revision
 created by the failed save, the bumped `post_modified`, `_wp_old_slug` /
 `_wp_old_date` meta and any changes other plugins made in their own
-`save_post` hooks remain. Interrupted publishes cannot restore the generated
-slug/date automatically when they have been edited since (reported as a
-conflict). A `pending` snapshot is treated as interrupted only after 300 s.
+`save_post` hooks remain. Interrupted publishes that made WordPress generate a
+slug or date are never recovered automatically (always reported as a
+`status` conflict); other fields of such snapshots still recover. A `pending` snapshot is treated as interrupted only after 300 s.

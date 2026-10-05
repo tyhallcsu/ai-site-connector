@@ -292,7 +292,15 @@ class AI_Site_Connector_Content_Update {
 			// Put back the update for fields already rolled back.
 			$reapply = array();
 			foreach ( $applied['written'] as $field ) {
-				$reapply[ $field ] = $restore[ $field ];
+				$row = $restore[ $field ];
+				if ( null === $row['after_raw'] ) {
+					// Interrupted snapshot: the value the update was writing.
+					$row['after_raw'] = isset( $row['planned_raw'] ) ? $row['planned_raw'] : null;
+				}
+				if ( null === $row['after_raw'] ) {
+					continue;
+				}
+				$reapply[ $field ] = $row;
 			}
 			$again = true === self::apply_plan( $post->ID, $reapply, 'after_raw' );
 			if ( ! empty( $applied['columns_dirty'] ) ) {
@@ -779,6 +787,10 @@ class AI_Site_Connector_Content_Update {
 							'post_modified_gmt' => (string) $written_row['post_modified_gmt'],
 						);
 						foreach ( self::GUARDED_COLUMNS as $col ) {
+							// WordPress fills an empty post_name after the filter.
+							if ( 'post_name' === $col && '' === (string) $written_row[ $col ] ) {
+								continue;
+							}
 							if ( array_key_exists( $col, $written_row ) ) {
 								$where[ $col ] = (string) $written_row[ $col ];
 							}
@@ -872,7 +884,10 @@ class AI_Site_Connector_Content_Update {
 		if ( true === $res ) {
 			return array();
 		}
-		return array_values( array_diff( array_keys( $subset ), $res['written'], array( '_status_side' ) ) );
+		// The failed field is listed in `written` (it may be partly applied)
+		// but was not restored.
+		$done = array_diff( $res['written'], array( $res['failed'] ) );
+		return array_values( array_diff( array_keys( $subset ), $done, array( '_status_side' ) ) );
 	}
 
 	private static function current_terms( $post_id, $tax ) {

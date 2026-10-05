@@ -372,6 +372,12 @@ wp_cli ai-connector content-inventory --user=admin --all --format=json --path="$
 INVENTORY_CSV="$(wp_cli ai-connector content-inventory --user=admin --format=csv --path="$WP_DIR")"
 printf '%s\n' "$INVENTORY_CSV" | sed -n 1p | grep -q '^"id","post_type","title"' \
 	|| { echo "content-inventory --format=csv missing header" >&2; exit 1; }
+wp_cli ai-connector media-audit --user=admin --format=json --path="$WP_DIR" \
+	| jq -e '(.summary | has("missing_alt")) and (.items | type == "array")' >/dev/null \
+	|| { echo "media-audit --format=json unexpected output" >&2; exit 1; }
+wp_cli ai-connector media-duplicates --user=admin --format=json --path="$WP_DIR" \
+	| jq -e '(.by_filename | type == "array") and (.by_hash | type == "array")' >/dev/null \
+	|| { echo "media-duplicates --format=json unexpected output" >&2; exit 1; }
 if wp_cli ai-connector content-inventory --user=admin --post_type=attachment --path="$WP_DIR" >/dev/null 2>&1; then
 	echo "content-inventory accepted post_type=attachment" >&2
 	exit 1

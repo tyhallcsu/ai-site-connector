@@ -67,6 +67,7 @@ require_once AI_SITE_CONNECTOR_DIR . 'includes/class-permissions.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-diagnostics.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-seo-abstraction.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-content-inventory.php';
+require_once AI_SITE_CONNECTOR_DIR . 'includes/class-media-audit.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-cache.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-media.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-export.php';

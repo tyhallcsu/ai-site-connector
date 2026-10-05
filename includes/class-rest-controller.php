@@ -273,6 +273,62 @@ class AI_Site_Connector_REST_Controller {
 				),
 			),
 			array(
+				'name'             => 'media_seo_audit',
+				'permission'       => AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST,
+				'method'           => 'GET',
+				'route'            => '/media/audit',
+				'description'      => 'Audit attachments for missing alt/title/caption/description, unattached media, oversized dimensions or file size, suspicious filenames and missing files. Paginated; only media the caller can access. Read-only.',
+				'risk_level'       => 'read',
+				'read_only'        => true,
+				'supports_dry_run' => false,
+				'input_schema'     => array(
+					'type'       => 'object',
+					'properties' => array(
+						'limit'         => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => AI_Site_Connector_Media_Audit::MAX_LIMIT ),
+						'offset'        => array( 'type' => 'integer', 'minimum' => 0 ),
+						'mime'          => array( 'type' => 'string', 'enum' => array( 'image', 'all' ) ),
+						'only_issues'   => array( 'type' => 'boolean' ),
+						'max_dimension' => array( 'type' => 'integer', 'minimum' => 0 ),
+						'max_bytes'     => array( 'type' => 'integer', 'minimum' => 0 ),
+					),
+				),
+				'output_schema'    => array(
+					'type'       => 'object',
+					'properties' => array(
+						'summary'     => array( 'type' => 'object' ),
+						'next_offset' => array( 'type' => array( 'integer', 'null' ) ),
+						'items'       => array( 'type' => 'array' ),
+					),
+				),
+			),
+			array(
+				'name'             => 'duplicate_media',
+				'permission'       => AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST,
+				'method'           => 'GET',
+				'route'            => '/media/duplicates',
+				'description'      => 'Find duplicate media by filename (exact and WordPress -1/-scaled variants) and by SHA-256 of locally readable files, hashing only size collisions within byte budgets. Reports missing/unreadable files. Never deletes anything. Read-only.',
+				'risk_level'       => 'read',
+				'read_only'        => true,
+				'supports_dry_run' => false,
+				'input_schema'     => array(
+					'type'       => 'object',
+					'properties' => array(
+						'max_scan'       => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => AI_Site_Connector_Media_Audit::DUP_MAX_SCAN ),
+						'after_id'       => array( 'type' => 'integer', 'minimum' => 0 ),
+						'max_file_bytes' => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => AI_Site_Connector_Media_Audit::DUP_MAX_FILE_BYTES ),
+					),
+				),
+				'output_schema'    => array(
+					'type'       => 'object',
+					'properties' => array(
+						'by_filename'   => array( 'type' => 'array' ),
+						'by_hash'       => array( 'type' => 'array' ),
+						'unreadable'    => array( 'type' => 'array' ),
+						'next_after_id' => array( 'type' => array( 'integer', 'null' ) ),
+					),
+				),
+			),
+			array(
 				'name'             => 'mcp_self_test',
 				'permission'       => AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS,
 				'method'           => 'GET',
@@ -528,6 +584,77 @@ class AI_Site_Connector_REST_Controller {
 					'limit'      => array( 'type' => 'integer', 'default' => 50 ),
 					'since'      => array( 'type' => 'string' ),
 					'post_types' => array( 'type' => 'array', 'default' => array( 'post', 'page' ) ),
+				),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/media/audit',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'route_media_audit' ),
+				'permission_callback' => array( __CLASS__, 'auth_upload' ),
+				'args'                => array(
+					'limit'         => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => AI_Site_Connector_Media_Audit::MAX_LIMIT,
+						'default' => AI_Site_Connector_Media_Audit::DEFAULT_LIMIT,
+					),
+					'offset'        => array(
+						'type'    => 'integer',
+						'minimum' => 0,
+						'default' => 0,
+					),
+					'mime'          => array(
+						'type'    => 'string',
+						'enum'    => array( 'image', 'all' ),
+						'default' => 'image',
+					),
+					'only_issues'   => array(
+						'type'    => 'boolean',
+						'default' => true,
+					),
+					'max_dimension' => array(
+						'type'        => 'integer',
+						'minimum'     => 0,
+						'description' => 'Flag images wider or taller than this (px). Default: the big_image_size_threshold (2560). 0 disables.',
+					),
+					'max_bytes'     => array(
+						'type'        => 'integer',
+						'minimum'     => 0,
+						'description' => 'Flag images larger than this many bytes. Default 1048576. 0 disables.',
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/media/duplicates',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'route_media_duplicates' ),
+				'permission_callback' => array( __CLASS__, 'auth_upload' ),
+				'args'                => array(
+					'max_scan'       => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => AI_Site_Connector_Media_Audit::DUP_MAX_SCAN,
+						'default' => AI_Site_Connector_Media_Audit::DUP_DEFAULT_SCAN,
+					),
+					'after_id'       => array(
+						'type'    => 'integer',
+						'minimum' => 0,
+						'default' => 0,
+					),
+					'max_file_bytes' => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => AI_Site_Connector_Media_Audit::DUP_MAX_FILE_BYTES,
+						'default' => AI_Site_Connector_Media_Audit::DUP_MAX_FILE_BYTES,
+					),
 				),
 			)
 		);
@@ -859,6 +986,41 @@ class AI_Site_Connector_REST_Controller {
 			'post_types' => (array) $request->get_param( 'post_types' ),
 		);
 		return rest_ensure_response( AI_Site_Connector_Export::recent_changes( $args ) );
+	}
+
+	public static function route_media_audit( WP_REST_Request $request ) {
+		$check = AI_Site_Connector_Permissions::require_permission( AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST );
+		if ( is_wp_error( $check ) ) {
+			return $check;
+		}
+		$args = array(
+			'limit'       => (int) $request->get_param( 'limit' ),
+			'offset'      => (int) $request->get_param( 'offset' ),
+			'mime'        => (string) $request->get_param( 'mime' ),
+			'only_issues' => (bool) $request->get_param( 'only_issues' ),
+		);
+		foreach ( array( 'max_dimension', 'max_bytes' ) as $k ) {
+			if ( null !== $request->get_param( $k ) ) {
+				$args[ $k ] = (int) $request->get_param( $k );
+			}
+		}
+		$res = AI_Site_Connector_Media_Audit::audit( $args );
+		return is_wp_error( $res ) ? $res : rest_ensure_response( $res );
+	}
+
+	public static function route_media_duplicates( WP_REST_Request $request ) {
+		$check = AI_Site_Connector_Permissions::require_permission( AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST );
+		if ( is_wp_error( $check ) ) {
+			return $check;
+		}
+		$res = AI_Site_Connector_Media_Audit::duplicates(
+			array(
+				'max_scan'       => (int) $request->get_param( 'max_scan' ),
+				'after_id'       => (int) $request->get_param( 'after_id' ),
+				'max_file_bytes' => (int) $request->get_param( 'max_file_bytes' ),
+			)
+		);
+		return is_wp_error( $res ) ? $res : rest_ensure_response( $res );
 	}
 
 	public static function route_export_content_inventory( WP_REST_Request $request ) {

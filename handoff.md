@@ -6,27 +6,28 @@
 
 ## Current state
 
-- Last verified `origin/main`: `4d948e0` (PR #80 merged).
-- Current milestone: **0.10.0 release** — prep PR on `chore/release-0.10.0` (version bump, release tooling). After it merges: tag the merge SHA `v0.10.0`, watch `release-zip.yml`, download + verify the asset.
-- Then: M3 (#64 media SEO audit + #65 duplicate media), M4 (#66), M5 (#73/#74), M6 (#75 rest), M7 (#70).
-- Latest release: v0.9.1. Candidate: v0.10.0 (not yet tagged).
+- Last verified `origin/main`: `9c07f10` (v0.10.0 release prep, PR #81).
+- **Latest release: v0.10.0** (2026-10-05) — tag → `9c07f10`, ZIP sha256 `2783dea6b5383c7dd566ac0cacc57715c3b7a94fc8b0a847e9433dcc873706dd`, verified (checksum, version, contents, clean install + real-updater upgrade from v0.9.1). https://github.com/tyhallcsu/ai-site-connector/releases/tag/v0.10.0
+- Current milestone: **M3** — media SEO audit (#64) + duplicate media (#65) on `feature/media-audit`; reviewed + fixed; PR next.
+- Then: M4 (#66 broken links), M5 (#73/#74), M6 (#75 rest: `export`, `enable`/`disable`), M7 (#70 safe content update).
 - A parallel session (Codex) also works in this repo (merged PR #77). Always `git fetch` and check open PRs first.
 
 ## Completed
 
 | Milestone | PR | Merge SHA | Evidence |
 |-----------|----|-----------|----------|
-| M0 CI truthfulness + harness | #78 | `2dd96bc` | run 37337044022: PHPUnit OK (40), integration 3/3 on WP latest/5.6/6.5/6.8/6.9 |
+| M0 CI truthfulness + harness | #78 | `2dd96bc` | run 37337044022: PHPUnit OK (40), integration 3/3 |
 | M1 diagnostics + SEO abstraction | #76 | `c7f689b` | run 37338939083: integration 34/34; closed #67 #68 #69 #71 #72 |
 | M2 content inventory | #79 | `2949c89` | run 37339837499: integration 43/43; closed #63 |
 | Export consistency | #80 | `4d948e0` | run 37341039538: integration 46/46 incl. WP 5.6 |
+| Release 0.10.0 prep + pipeline | #81 | `9c07f10` | run 37342326745: 46/46 on WP 5.6–7.1.2, real-updater upgrade; release run 37342852174 |
 | #59 superseded branch | — | — | branch deleted; evidence in issue comment |
 
 ## Open PRs
 
 | PR | Branch | State |
 |----|--------|-------|
-| (0.10.0 prep) | chore/release-0.10.0 | opening |
+| (M3) | feature/media-audit | local, under review |
 
 ## Open issues
 
@@ -48,8 +49,8 @@ ASC_IT_FILTER=redirects ...                                                   # 
 
 ## Next three actions
 
-1. Merge the 0.10.0 prep PR after CI (confirm the new `Release ZIP install + upgrade` job and the 7.0 row ran).
-2. `git tag -a v0.10.0 -m v0.10.0 <merge-sha> && git push origin v0.10.0`; follow docs/RELEASE_CHECKLIST.md §3 to verify.
-3. Start M3 (#64/#65) from fresh main.
+1. Apply M3 review findings, open PR, CI, merge; close #64 #65.
+2. M4: broken internal link scanner (#66) — no outbound HTTP; resolve via url_to_postid/attachment lookups.
+3. M5: export bundle (#73) + deterministic manifests (#74) over the shared services.
 
 Resume: `cd /Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector && git fetch && gh pr list -R tyhallcsu/ai-site-connector`

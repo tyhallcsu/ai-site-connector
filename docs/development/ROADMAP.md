@@ -10,8 +10,8 @@ acceptance gates, and release grouping. Operating rules:
 |---|-----------|--------|------------|--------|
 | M0 | CI truthfulness + integration harness + control docs | — | — | merged #78 (`2dd96bc`) |
 | M1 | Finish PR #76: self-test, REST routes, page builder, redirects, SEO abstraction hardening, MCP + WP-CLI exposure | #67 #68 #69 #71 #72 (+#75 partial) | M0 | merged #76 (`c7f689b`) |
-| M2 | Content inventory (JSON + CSV) + CLI | #63 (+#75 partial) | M1 (SEO read) | in review |
-| M3 | Media SEO audit + duplicate media + CLI | #64 #65 (+#75 partial) | M0 | queued |
+| M2 | Content inventory (JSON + CSV) + CLI | #63 (+#75 partial) | M1 (SEO read) | merged #79 (`2949c89`); export consistency #80 (`4d948e0`) |
+| M3 | Media SEO audit + duplicate media + CLI | #64 #65 (+#75 partial) | M0 | in review |
 | M4 | Broken internal link scanner + CLI | #66 (+#75 partial) | M0 | queued |
 | M5 | Export bundle + deterministic manifests + CLI `export` | #73 #74 (+#75 partial) | M1–M4 | queued |
 | M6 | WP-CLI remainder (`status`, `enable`/`disable` guards) — close #75 | #75 | M1–M5 | queued |
@@ -31,8 +31,9 @@ acceptance gates, and release grouping. Operating rules:
 
 ## Release grouping
 
-- **0.10.0** — M0–M4 (new read-only diagnostics/audit tools; additive, no
-  contract changes). Cut once M1 + at least one of M2–M4 is merged and green.
+- **0.10.0** — shipped 2026-10-05: M0–M2 + export consistency + release
+  pipeline (tag `v0.10.0` → `9c07f10`).
+- **0.10.x / 0.11.0** — M3 + M4 (media audit/duplicates, broken links).
 - **0.11.0** — M5 + M6 (export bundle/manifests, CLI completion).
 - **0.12.0** — M7 (first new write surface; default-off).
 

@@ -6,6 +6,15 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- Media SEO audit (#64): `GET /media/audit`, MCP `wp_media_audit`,
+  `wp ai-connector media-audit` — paginated issue report per attachment.
+- Duplicate media detection (#65): `GET /media/duplicates`, MCP
+  `wp_media_duplicates`, `wp ai-connector media-duplicates` — filename and
+  SHA-256 groups, size-collision-first hashing within byte budgets, resumable
+  bounded scan, uploads-confined file access, never deletes.
+
 ## [0.10.0] - 2026-10-05
 
 New read-only diagnostics and content-inventory tools, each available as a

@@ -563,7 +563,10 @@ class AI_Site_Connector_Diagnostics {
 				if ( isset( $handler['methods'] ) ) {
 					$m_list = is_string( $handler['methods'] ) ? explode( ',', $handler['methods'] ) : array_keys( array_filter( (array) $handler['methods'] ) );
 					foreach ( $m_list as $m ) {
-						$methods[ strtoupper( trim( (string) $m ) ) ] = true;
+						$m = strtoupper( trim( (string) $m ) );
+						if ( '' !== $m ) {
+							$methods[ $m ] = true;
+						}
 					}
 				}
 				if ( ! empty( $handler['permission_callback'] ) ) {

@@ -344,124 +344,29 @@ for route in diagnostics/self-test diagnostics/rest-routes diagnostics/page-buil
 	fi
 done
 
-# Internal-dispatch the four new tools and assert schema. Uses wp_cli eval
-# rather than HTTP so we don't need a fresh admin App Password — the gate has
-# already been proven by the anonymous probe above.
-wp_cli eval '
-// MCP self-test schema.
-$res = AI_Site_Connector_Diagnostics::self_test();
-if ( ! is_array( $res ) || empty( $res["checks"] ) || ! is_array( $res["summary"] ) ) {
-	fwrite( STDERR, "self_test() did not return the expected shape\n" );
-	exit( 1 );
-}
-foreach ( $res["checks"] as $c ) {
-	if ( ! isset( $c["name"], $c["status"], $c["message"] ) ) {
-		fwrite( STDERR, "self_test() check missing fields\n" );
-		exit( 1 );
-	}
-	if ( ! in_array( $c["status"], array( "pass", "warn", "fail" ), true ) ) {
-		fwrite( STDERR, "self_test() unknown status: " . $c["status"] . "\n" );
-		exit( 1 );
-	}
-}
-
-// REST routes inventory — must include both wp/v2 and ai-site-connector/v1
-// namespaces, and must NOT leak any callable serialisations.
-$res = AI_Site_Connector_Diagnostics::rest_routes();
-if ( ! is_array( $res ) || ! isset( $res["routes"] ) ) {
-	fwrite( STDERR, "rest_routes() did not return the expected shape\n" );
-	exit( 1 );
-}
-$ns = (array) $res["namespaces"];
-if ( ! in_array( "wp/v2", $ns, true ) || ! in_array( "ai-site-connector/v1", $ns, true ) ) {
-	fwrite( STDERR, "rest_routes() namespaces missing expected entries: " . wp_json_encode( $ns ) . "\n" );
-	exit( 1 );
-}
-$json = wp_json_encode( $res );
-// PHP serialises a callable array as ["ClassName","method_name"]. The route
-// inventory must never contain that shape. We deliberately do NOT regex on
-// the word "callback" — has_permission_callback is a normal boolean field
-// in our schema and matching it would false-positive.
-if ( preg_match( "/\\[\\s*\"AI_Site_Connector[^\"]+\"\\s*,\\s*\"route_[^\"]+\"\\s*\\]/", $json ) ) {
-	fwrite( STDERR, "rest_routes() leaked a callable array\n" );
-	exit( 1 );
-}
-
-// Page builder detector.
-$res = AI_Site_Connector_Diagnostics::page_builder( array() );
-if ( ! is_array( $res ) || ! isset( $res["site"]["detected"] ) ) {
-	fwrite( STDERR, "page_builder() did not return the expected shape\n" );
-	exit( 1 );
-}
-// per_post must be absent when post_ids is empty.
-if ( array_key_exists( "per_post", $res ) ) {
-	fwrite( STDERR, "page_builder() should not include per_post when post_ids is empty\n" );
-	exit( 1 );
-}
-
-// Redirect manager helper — no plugin installed in smoke, expect "none".
-$res = AI_Site_Connector_Diagnostics::redirects( array() );
-if ( ! is_array( $res ) || ! isset( $res["plugin_detected"], $res["redirects"] ) ) {
-	fwrite( STDERR, "redirects() did not return the expected shape\n" );
-	exit( 1 );
-}
-if ( "none" !== $res["plugin_detected"] ) {
-	fwrite( STDERR, "redirects() expected plugin_detected=none on clean install, got: " . $res["plugin_detected"] . "\n" );
-	exit( 1 );
-}
-if ( ! empty( $res["redirects"] ) ) {
-	fwrite( STDERR, "redirects() expected empty list on clean install\n" );
-	exit( 1 );
-}
-' --path="$WP_DIR"
-
-log "Checking SEO abstraction dry-run zero-mutation invariant."
-wp_cli eval '
-// Create a target post.
-$post_id = wp_insert_post( array(
-	"post_title"   => "seo-dry-run-target",
-	"post_status"  => "publish",
-	"post_content" => "x",
-) );
-if ( ! $post_id || is_wp_error( $post_id ) ) {
-	fwrite( STDERR, "Could not create test post for SEO dry-run\n" );
-	exit( 1 );
-}
-
-// No SEO plugin active in smoke — detect_seo_plugin() must return "none".
-$detected = AI_Site_Connector_SEO::detect_seo_plugin();
-if ( "none" !== $detected ) {
-	fwrite( STDERR, "Expected detect_seo_plugin()=none on clean install, got: " . $detected . "\n" );
-	exit( 1 );
-}
-
-// Snapshot post_meta BEFORE the dry-run.
-$before = get_post_meta( $post_id );
-
-// Dry-run defaulted true — must report applied=false regardless of plugin.
-$res = AI_Site_Connector_SEO::update_seo_meta( $post_id, array( "title" => "x", "description" => "y" ), true );
-if ( ! is_array( $res ) || true === $res["applied"] ) {
-	fwrite( STDERR, "Dry-run update_seo_meta unexpectedly applied a mutation\n" );
-	exit( 1 );
-}
-
-// Even if the dry-run reported a non-empty would_write list, post_meta must
-// be unchanged.
-$after = get_post_meta( $post_id );
-if ( wp_json_encode( $before ) !== wp_json_encode( $after ) ) {
-	fwrite( STDERR, "Dry-run mutated post_meta — invariant violated\n" );
-	exit( 1 );
-}
-
-// Real-write request with permission still off (default) must be blocked.
-$res = AI_Site_Connector_SEO::update_seo_meta( $post_id, array( "title" => "x" ), false );
-if ( true === $res["applied"] ) {
-	fwrite( STDERR, "Real-write update_seo_meta succeeded despite update_seo permission default-off\n" );
-	exit( 1 );
-}
-
-wp_delete_post( $post_id, true );
-' --path="$WP_DIR"
+# Service behaviour, auth matrix, read-only invariants and the SEO
+# abstraction are covered in tests/integration (run below). Here: the WP-CLI
+# counterparts must work end-to-end through the real command runner.
+log "Checking diagnostics WP-CLI commands."
+wp_cli ai-connector mcp-self-test --user=admin --format=json --path="$WP_DIR" \
+	| jq -e '(.overall | IN("pass","warn")) and (.checks | length >= 11) and (.summary | has("pass","warn","fail"))' >/dev/null \
+	|| { echo "mcp-self-test --format=json unexpected output" >&2; exit 1; }
+wp_cli ai-connector routes --namespace=ai-site-connector/v1 --format=json --path="$WP_DIR" \
+	| jq -e '.namespaces == ["ai-site-connector/v1"] and (.routes | map(.route) | index("/ai-site-connector/v1/diagnostics/redirects") != null)' >/dev/null \
+	|| { echo "routes --format=json unexpected output" >&2; exit 1; }
+wp_cli ai-connector routes --namespace=ai-site-connector/v1 --format=csv --path="$WP_DIR" | head -1 \
+	| grep -q '^namespace,route,methods,args,has_permission_callback' \
+	|| { echo "routes --format=csv missing header" >&2; exit 1; }
+wp_cli ai-connector page-builder --format=json --path="$WP_DIR" \
+	| jq -e '.site.detected | has("elementor") and has("block_editor")' >/dev/null \
+	|| { echo "page-builder --format=json unexpected output" >&2; exit 1; }
+wp_cli ai-connector redirects --format=json --path="$WP_DIR" \
+	| jq -e '.plugin_detected == "none" and .redirects == []' >/dev/null \
+	|| { echo "redirects --format=json unexpected output" >&2; exit 1; }
+if wp_cli ai-connector routes --format=xml --path="$WP_DIR" >/dev/null 2>&1; then
+	echo "routes accepted an unsupported --format" >&2
+	exit 1
+fi
 
 log "Checking tools_catalog metadata schema."
 wp_cli eval '

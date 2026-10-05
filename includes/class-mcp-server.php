@@ -411,6 +411,8 @@ class AI_Site_Connector_MCP_Server {
 		$resp = rest_do_request( $req );
 		$data = $resp->get_data();
 		if ( $resp->get_status() >= 400 ) {
+			// The payload is JSON-encoded into the MCP result, never echoed as HTML.
+			// phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped
 			throw new AI_Site_Connector_MCP_Tool_Error(
 				array(
 					'status'  => (int) $resp->get_status(),
@@ -418,6 +420,7 @@ class AI_Site_Connector_MCP_Server {
 					'message' => is_array( $data ) && isset( $data['message'] ) ? (string) $data['message'] : 'Request failed.',
 				)
 			);
+			// phpcs:enable
 		}
 		return $data;
 	}

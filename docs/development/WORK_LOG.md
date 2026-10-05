@@ -2,6 +2,28 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-05 — dev site, admin audit fixes, outage-time merges, 0.12.2 prep
+
+- No dev target existed (#97). Added the local dev site, `bin/dev-site.sh`
+  (#98 → PR #100). Its headless audit found admin defects #102–#105, fixed
+  in PR #107. Filed #99 (no required checks; #96 merged 12 s after
+  opening), plus backlog #101 #106 #108 #109.
+- GitHub Actions incident, about 19:58–21:20 UTC: on the owner's
+  instruction, #100 (`80a887a`) and #107 (`72b70fe`) were merged on local
+  CI: security-grep, PHPCS, php -l, package smoke, check-version, and
+  runtime smoke 91/91 on PHP 8.5. Run 37366878299 on `9112f8e` ended
+  "failure" only through 10 outage cancellations; no job failed.
+- After recovery, CI run 37375258741 on `15b43de` (current main; same
+  plugin code as `72b70fe` plus handoff) passed 19/19: PHPUnit
+  `OK (40 tests, 109 assertions)`; integration `91 passed, 0 failed` on WP
+  latest (PHP 8.3) and on 5.6/6.5/6.8/6.9/7.0 (PHP 8.0); ZIP smoke; ZIP
+  install + upgrade (v0.12.0 → 0.12.1 build). This is the first GitHub CI
+  evidence for the merged code; the local runs above were the outage-time
+  substitute.
+- Dev site http://localhost:8790 deployed `72b70fe` (70 files verified,
+  ZIP sha256 `00680619…a295`); `bin/dev-site.sh audit` 22/22 tab views clean.
+- 0.12.2 prep: user-facing admin fixes (#102–#105) plus the new icon (#96).
+
 ## 2026-10-05 — v0.12.1 released; backlog complete
 
 - PR #93 → `450fdcd`; main CI 19/19. Tag `v0.12.1` → `450fdcd`; release run

@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.12.1
+Stable tag: 0.12.2
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,12 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.12.2 =
+* Fixed: Permissions tab checkboxes are labelled by tool name for screen readers; admin pages no longer repeat nonce ids.
+* Fixed: admin tables no longer force sideways page scrolling on phones; settings tables stack.
+* Fixed: Connection Test's REST self-test returns to the Connection Test tab; admin notices render below the page header.
+* Changed: new plugin icon.
+
 = 0.12.1 =
 * Fixed: MCP wp_create_post and wp_update_post now require the write_content permission and honour read-only mode, like every other write path. Clients relying on them must enable write_content (or use wp_update_content).
 * Fixed: WP-CLI content-inventory, broken-links, media-audit and media-duplicates require --user instead of printing an empty result.

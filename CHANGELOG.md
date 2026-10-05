@@ -6,6 +6,46 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-10-05
+
+Patch: admin-screen accessibility and layout fixes found by a headless audit
+of a live install, plus the new plugin icon. No REST, MCP or WP-CLI
+behaviour changes; no database changes.
+
+### Fixed
+
+- Permissions tab: each tool checkbox is labelled by the tool name and
+  described by its description, so screen readers announce which permission
+  is being changed, and clicking the name toggles it (#102).
+- Admin forms no longer repeat `id="ai_site_connector_nonce"` /
+  `id="_wpnonce"` on one page. Nonce names and checks are unchanged (#102).
+- Phone-width screens: wide tables scroll inside their card instead of the
+  whole page, and settings tables stack (Connection Test, Credentials,
+  Permissions, Audit Log, API Explorer) (#103).
+- Connection Test: "Run REST self-test" returns to the Connection Test tab
+  instead of Overview (#104).
+- Admin notices, including the first-run welcome, render below the page
+  header instead of between the title and its description (#105).
+
+### Changed
+
+- New plugin icon in the admin page header and in the wordmark, banner and
+  updater artwork (#96). The SVGs stay self-contained in the ZIP.
+
+### Development
+
+- `bin/dev-site.sh`: persistent local dev WordPress with exact-SHA deploys,
+  installed-file verification, database snapshots, rollback, fixtures and a
+  headless admin audit (#100). Not part of the plugin ZIP.
+
+### Compatibility and upgrade
+
+- CI: integration suite on WordPress 5.6, 6.5, 6.8, 6.9 and 7.0 (PHP 8.0)
+  and current stable (PHP 8.3); PHPUnit on PHP 8.1; syntax checks on PHP
+  7.4–8.4. Requirements unchanged: WordPress 5.6+, PHP 7.4+.
+- Upgrade from 0.12.1 by replacing the plugin files (self-updater or ZIP).
+  To roll back, reinstall the 0.12.1 ZIP.
+
 ## [0.12.1] - 2026-10-05
 
 Patch from the v0.12.0 release audit. **Behaviour change:** MCP

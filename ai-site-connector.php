@@ -70,6 +70,7 @@ require_once AI_SITE_CONNECTOR_DIR . 'includes/class-content-inventory.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-media-audit.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-link-scanner.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-export-bundle.php';
+require_once AI_SITE_CONNECTOR_DIR . 'includes/class-content-update.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-cache.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-media.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-export.php';

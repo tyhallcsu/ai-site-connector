@@ -387,6 +387,55 @@ class AI_Site_Connector_REST_Controller {
 				),
 			),
 			array(
+				'name'             => 'update_content',
+				'permission'       => AI_Site_Connector_Permissions::TOOL_WRITE_CONTENT,
+				'method'           => 'POST',
+				'route'            => '/content/update',
+				'description'      => 'Safely update title, excerpt, content, slug, status (draft/pending/publish/private), featured image, taxonomy terms and SEO fields of one post. DRY-RUN BY DEFAULT: returns the before/after diff without writing. Real writes need dry_run=false plus the write_content permission (and update_seo for SEO fields), validate capabilities, transitions, slug conflicts, taxonomies and attachments, take a rollback snapshot first, and restore every written field if any step fails. Never trashes or deletes.',
+				'risk_level'       => 'high',
+				'read_only'        => false,
+				'supports_dry_run' => true,
+				'input_schema'     => array(
+					'type'       => 'object',
+					'required'   => array( 'post_id', 'changes' ),
+					'properties' => array(
+						'post_id'               => array( 'type' => 'integer' ),
+						'changes'               => array( 'type' => 'object' ),
+						'dry_run'               => array( 'type' => 'boolean', 'default' => true ),
+						'expected_modified_gmt' => array( 'type' => 'string' ),
+					),
+				),
+				'output_schema'    => array(
+					'type'       => 'object',
+					'properties' => array(
+						'applied'     => array( 'type' => 'boolean' ),
+						'reason'      => array( 'type' => 'string' ),
+						'diff'        => array( 'type' => 'object' ),
+						'snapshot_id' => array( 'type' => 'string' ),
+					),
+				),
+			),
+			array(
+				'name'             => 'rollback_content',
+				'permission'       => AI_Site_Connector_Permissions::TOOL_WRITE_CONTENT,
+				'method'           => 'POST',
+				'route'            => '/content/rollback',
+				'description'      => 'Roll a post back to a snapshot taken by update_content. Dry-run by default. Refuses (reason=conflict) if any field it would restore was changed after the update, so later edits are never overwritten; only the fields the update touched are restored.',
+				'risk_level'       => 'high',
+				'read_only'        => false,
+				'supports_dry_run' => true,
+				'input_schema'     => array(
+					'type'       => 'object',
+					'required'   => array( 'post_id', 'snapshot_id' ),
+					'properties' => array(
+						'post_id'     => array( 'type' => 'integer' ),
+						'snapshot_id' => array( 'type' => 'string' ),
+						'dry_run'     => array( 'type' => 'boolean', 'default' => true ),
+					),
+				),
+				'output_schema'    => array( 'type' => 'object' ),
+			),
+			array(
 				'name'             => 'mcp_self_test',
 				'permission'       => AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS,
 				'method'           => 'GET',
@@ -764,6 +813,71 @@ class AI_Site_Connector_REST_Controller {
 						'default' => true,
 					),
 				),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/content/update',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'route_content_update' ),
+				'permission_callback' => array( __CLASS__, 'auth_edit_posts' ),
+				'args'                => array(
+					'post_id'               => array(
+						'type'     => 'integer',
+						'required' => true,
+						'minimum'  => 1,
+					),
+					'changes'               => array(
+						'type'     => 'object',
+						'required' => true,
+					),
+					'dry_run'               => array(
+						'type'    => 'boolean',
+						'default' => true,
+					),
+					'expected_modified_gmt' => array(
+						'type'    => 'string',
+						'default' => '',
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/content/rollback',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'route_content_rollback' ),
+				'permission_callback' => array( __CLASS__, 'auth_edit_posts' ),
+				'args'                => array(
+					'post_id'     => array(
+						'type'     => 'integer',
+						'required' => true,
+						'minimum'  => 1,
+					),
+					'snapshot_id' => array(
+						'type'     => 'string',
+						'required' => true,
+						'pattern'  => '^[0-9]{14}-[A-Za-z0-9]{6}$',
+					),
+					'dry_run'     => array(
+						'type'    => 'boolean',
+						'default' => true,
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/content/snapshots/(?P<id>\\d+)',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'route_content_snapshots' ),
+				'permission_callback' => array( __CLASS__, 'auth_edit_posts' ),
 			)
 		);
 
@@ -1170,6 +1284,34 @@ class AI_Site_Connector_REST_Controller {
 				'only_broken' => (bool) $request->get_param( 'only_broken' ),
 			)
 		);
+		return is_wp_error( $res ) ? $res : rest_ensure_response( $res );
+	}
+
+	public static function route_content_update( WP_REST_Request $request ) {
+		// The tool permission for real writes is enforced inside the service
+		// (after validation), so dry runs stay available to editors.
+		$res = AI_Site_Connector_Content_Update::update(
+			(int) $request->get_param( 'post_id' ),
+			(array) $request->get_param( 'changes' ),
+			array(
+				'dry_run'               => (bool) $request->get_param( 'dry_run' ),
+				'expected_modified_gmt' => (string) $request->get_param( 'expected_modified_gmt' ),
+			)
+		);
+		return is_wp_error( $res ) ? $res : rest_ensure_response( $res );
+	}
+
+	public static function route_content_rollback( WP_REST_Request $request ) {
+		$res = AI_Site_Connector_Content_Update::rollback(
+			(int) $request->get_param( 'post_id' ),
+			(string) $request->get_param( 'snapshot_id' ),
+			(bool) $request->get_param( 'dry_run' )
+		);
+		return is_wp_error( $res ) ? $res : rest_ensure_response( $res );
+	}
+
+	public static function route_content_snapshots( WP_REST_Request $request ) {
+		$res = AI_Site_Connector_Content_Update::snapshots( (int) $request->get_param( 'id' ) );
 		return is_wp_error( $res ) ? $res : rest_ensure_response( $res );
 	}
 

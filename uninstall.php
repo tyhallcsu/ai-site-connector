@@ -52,6 +52,11 @@ delete_option( 'ai_site_connector_db_version' );
 delete_option( 'ai_site_connector_log_retention_days' );
 delete_option( 'ai_site_connector_wipe_on_uninstall' );
 delete_option( 'ai_site_connector_disabled' );
+// Content-update rollback snapshots (copies of post content) and their index rows.
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( 'ai_site_connector_snapshot_' ) . '%' ) );
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+$wpdb->delete( $wpdb->postmeta, array( 'meta_key' => '_ai_site_connector_snapshot' ) );
 // Unfinished duplicate-scan states (attachment IDs and filenames).
 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( 'ai_site_connector_dupscan_' ) . '%' ) );

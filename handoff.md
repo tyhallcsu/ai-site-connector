@@ -8,19 +8,17 @@
 
 | Item | Value |
 |------|-------|
-| Latest `origin/main` | `6645155` — chore(release): 0.11.0 (#86); CI 19/19 success on this SHA |
-| Latest published release | **v0.11.0** — tag → `6645155`; https://github.com/tyhallcsu/ai-site-connector/releases/tag/v0.11.0; stable, `releases/latest`; ZIP 264022 B, sha256 `95b337b122d7ed198ab72b5a9aed90006616953fd7e2568228508ecfbd4086f3` |
-| v0.11.0 verification | downloaded asset: checksum OK, header/constant/readme = 0.11.0, top-level allowlist clean, no M7 code; published ZIP clean install OK and upgrade from **published v0.10.0** via its updater OK (exit 0) |
-| Previous release | v0.10.0 — tag → `9c07f10`, sha256 `2783dea6…06dd` |
-| Release candidate | none |
-| Open issues | #70 (M7, draft PR #87), #88 (cross-window duplicate detection) |
+| Latest `origin/main` | `c255de3` — feat(media): library-wide resumable duplicate scan (#88) (#90) |
+| Latest published release | **v0.11.0** — tag → `6645155`; https://github.com/tyhallcsu/ai-site-connector/releases/tag/v0.11.0; ZIP sha256 `95b337b122d7ed198ab72b5a9aed90006616953fd7e2568228508ecfbd4086f3`; verified (checksum, versions, contents, clean install, upgrade from published v0.10.0) |
+| Unreleased on main | #89 export coverage reporting, #90 library-wide duplicate scan (closes #88) |
+| Release candidate | 0.12.0 after #87 (M7, #70) merges |
+| Open issues | #70 |
 
 ## Open PRs
 
-| PR | Branch | Head | State |
-|----|--------|------|-------|
-| #87 | `feature/content-update` | `ad4a914` | **DRAFT — do not merge.** M7 / #70. Worktree `<scratchpad>/wt-m7` (session-local; the branch on origin is the durable copy). Review 2 open items: 1 P1 + 5 P2 + 2 P3 — see `docs/development/M7_REVIEW.md` on that branch. |
-| #89 | `fix/export-coverage` | (latest push) | Bundle index `complete`/`scope`/`limitations`; README scope wording; this handoff. |
+| PR | Branch | State |
+|----|--------|-------|
+| #87 | `feature/content-update` | M7 / #70. Four second-pass reviews; all 31 findings fixed with tests or documented (`docs/development/M7_REVIEW.md`). Combined suite 86/86 locally on the merged head; awaiting CI on the pushed head, then ready → merge. |
 
 ## Completed milestones
 
@@ -36,13 +34,15 @@
 | M5 export bundle | #84 | `8dbb1d0` | 69/69; closed #73 #74 |
 | M6 disable/enable | #85 | `d81b62d` | 71/71 on WP 5.6–7.1.2; closed #75 |
 | v0.11.0 prep | #86 | `6645155` | released v0.11.0 (verified above) |
+| Export coverage reporting | #89 | `1098ee4` | 72/72 on WP 5.6–7.1.2 |
+| Library-wide duplicate scan | #90 | `c255de3` | 73/73 on WP 5.6–7.1.2; closed #88; reviewed (1 P1 + 7 P2 + 3 P3 fixed) |
 | #59 superseded branch | — | — | branch deleted; evidence in issue |
 
 ## Next three actions
 
-1. Merge #89 after CI.
-2. M7 (#87): fix the eight open review-2 items with regression tests (ledger), run the combined suite on the PR head, focused third review (rollback authz under current permissions, concurrent edits/stale snapshots, mid-operation + restore consistency, direct-row recovery path, honest failure reporting), CI, mark ready, merge, release 0.12.0.
-3. #88 cross-window duplicate detection.
+1. CI on #87's head; mark ready; merge; close #70.
+2. Release 0.12.0 (prep PR → CI → tag merge SHA → verify published ZIP + upgrade from v0.11.0).
+3. Final integration/security/docs audit of the shipped surface; report.
 
 Resume: `cd /Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector && git fetch && gh pr list -R tyhallcsu/ai-site-connector`. If the scratchpad worktree is gone: `git worktree prune`, then add a new worktree for `feature/content-update` outside the parent `ess-custom-plugins` tree.
 

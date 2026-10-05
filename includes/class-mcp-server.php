@@ -31,6 +31,8 @@
  *   wp_media_duplicates  — duplicate media by filename and hash
  *   wp_broken_links      — offline broken internal link scan
  *   wp_export_bundle     — deterministic manifest bundle
+ *   wp_update_content    — safe content update (dry-run by default)
+ *   wp_rollback_content  — conflict-aware rollback of an update
  *
  * Constants:
  *   AI_SITE_CONNECTOR_MCP_DISABLE — when true, the route is not registered.
@@ -327,6 +329,39 @@ class AI_Site_Connector_MCP_Server {
 				),
 			),
 			array(
+				'name'        => 'wp_update_content',
+				'description' => 'Safely update one post: title, excerpt, content, slug, status (draft/pending/publish/private), featured_image (attachment id, 0 removes), terms ({taxonomy: [id|slug]}, existing terms only), seo ({title, description, canonical, og_*}). DRY-RUN BY DEFAULT — returns the before/after diff. Set dry_run=false to write (requires the write_content permission; SEO also update_seo); a rollback snapshot_id is returned. Optional expected_modified_gmt for concurrency. Never trashes or deletes.',
+				'inputSchema' => array(
+					'type'       => 'object',
+					'required'   => array( 'post_id', 'changes' ),
+					'properties' => array(
+						'post_id'               => array( 'type' => 'integer' ),
+						'changes'               => array( 'type' => 'object' ),
+						'dry_run'               => array(
+							'type'    => 'boolean',
+							'default' => true,
+						),
+						'expected_modified_gmt' => array( 'type' => 'string' ),
+					),
+				),
+			),
+			array(
+				'name'        => 'wp_rollback_content',
+				'description' => 'Roll back an update made with wp_update_content using its snapshot_id. Dry-run by default; refuses with reason=conflict if any of those fields changed since, so later edits are never overwritten.',
+				'inputSchema' => array(
+					'type'       => 'object',
+					'required'   => array( 'post_id', 'snapshot_id' ),
+					'properties' => array(
+						'post_id'     => array( 'type' => 'integer' ),
+						'snapshot_id' => array( 'type' => 'string' ),
+						'dry_run'     => array(
+							'type'    => 'boolean',
+							'default' => true,
+						),
+					),
+				),
+			),
+			array(
 				'name'        => 'wp_redirects',
 				'description' => 'Detect redirect plugins (Rank Math, Redirection, AIOSEO, Yoast Premium) and export their redirects. Optional: limit (1-1000, default 500), offset. Read-only; admin only.',
 				'inputSchema' => array(
@@ -484,6 +519,10 @@ class AI_Site_Connector_MCP_Server {
 				return self::dispatch_checked( 'GET', '/content/broken-links', self::pick( $args, array( 'post_type', 'status', 'limit', 'offset', 'max_links', 'only_broken' ) ) );
 			case 'wp_export_bundle':
 				return self::dispatch_checked( 'GET', '/export/bundle', self::pick( $args, array( 'max_items', 'sections' ) ) );
+			case 'wp_update_content':
+				return self::dispatch_checked( 'POST', '/content/update', self::pick( $args, array( 'post_id', 'changes', 'dry_run', 'expected_modified_gmt' ) ) );
+			case 'wp_rollback_content':
+				return self::dispatch_checked( 'POST', '/content/rollback', self::pick( $args, array( 'post_id', 'snapshot_id', 'dry_run' ) ) );
 			case 'wp_redirects':
 				return self::dispatch_checked( 'GET', '/diagnostics/redirects', self::pick( $args, array( 'limit', 'offset' ) ) );
 			default:

@@ -2,6 +2,42 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-05 — M2 merged; export consistency merged; 0.10.0 release prep
+
+- PR #79 (M2, #63) squash-merged → `2949c89`; CI run 37339837499 on
+  `806a464`: integration 43/43 on all WP rows. #63 closed.
+- PR #80 (export consistency) squash-merged → `4d948e0`; CI run 37341039538
+  on `be33996`: integration 46/46 on all WP rows. Tests verified
+  red-before-green against the old `class-export.php`. The WP 5.6 row caught
+  that `read_post` only maps inherit attachments to their parent on newer
+  WordPress; attachment visibility is now an explicit rule.
+- Smoke flake: piping WP-CLI CSV into `head` → SIGPIPE under pipefail.
+  Outputs are now captured before inspection.
+- WordPress stable is 7.1.2 (api.wordpress.org version-check); `readme.txt`
+  said `Tested up to: 6.9`. Local smoke + integration pass on 7.1.2 →
+  raised to 7.1; added a 7.0 compat row; smoke now logs the WP version.
+- Release tooling: `bin/check-version.sh` (header, constant, readme, MCP
+  example package, + CHANGELOG/readme entries with `--release`), new CI job
+  `Release ZIP install + upgrade` (`tests/zip-upgrade-smoke.sh`), release
+  workflow gated on version/tag-on-main/required CI checks/no existing
+  release, publishes ZIP + `.sha256` with CHANGELOG notes. Checklist
+  rewritten to match (it said `## [vX.Y.Z]` and `gh release create`, which
+  contradicted the workflow). actionlint clean.
+- Second-pass review of the release pipeline (adversarial reviewer): fixed
+  all findings — the CI-gate step wrote `checks.tsv` into the workspace,
+  which the rsync-based build would have shipped inside the published ZIP;
+  the build now packages tracked files only (`git ls-files`; also dropped a
+  local hook's `artifacts/evidence.log` from local builds) and package-smoke
+  enforces a top-level allowlist. Release gate now requires every CI check
+  run for the SHA (PHP/WP matrices included) plus key jobs present; strict
+  "release not found" check + `overwrite_files: false`; version format
+  validated and passed via env; upgrade test now goes through the previous
+  release's own updater + `wp plugin update` (Plugin_Upgrader).
+- Local release gates for 0.10.0 (WP 7.1.2): check-version OK; PHPUnit OK
+  (40); phpcs 0; security-grep clean; package smoke passed; integration 46/46;
+  ZIP clean install + upgrade v0.9.1 → v0.10.0 passed. Local ZIP sha256
+  `eef0d3d8…69a9` (the published asset is rebuilt by the workflow).
+
 ## 2026-10-05 — M1 merged; #59 closed; M2 (#63) in review
 
 - PR #76 squash-merged → `c7f689b`. CI run 37338939083 on head `c166622`:

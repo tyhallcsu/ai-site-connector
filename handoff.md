@@ -6,29 +6,31 @@
 
 ## Current state
 
-- Last verified `origin/main`: `c7f689b` (M1, PR #76 merged).
-- Current milestone: **M2** — content inventory (#63) on `feature/content-inventory`; PR being opened.
-- Next: export consistency PR (align older `/export/*` routes with the inventory's conventions, incl. draft dates; see SECURITY.md before writing any issue text), then M3 (#64/#65), M4 (#66).
-- Latest release: v0.9.1. 0.10.0 candidate after M2 merges (M1+M2 = coherent new read-only tool group).
-- A parallel session (Codex) also works in this repo (merged PR #77, README artwork). Always `git fetch` and check open PRs before touching README/docs.
+- Last verified `origin/main`: `4d948e0` (PR #80 merged).
+- Current milestone: **0.10.0 release** — prep PR on `chore/release-0.10.0` (version bump, release tooling). After it merges: tag the merge SHA `v0.10.0`, watch `release-zip.yml`, download + verify the asset.
+- Then: M3 (#64 media SEO audit + #65 duplicate media), M4 (#66), M5 (#73/#74), M6 (#75 rest), M7 (#70).
+- Latest release: v0.9.1. Candidate: v0.10.0 (not yet tagged).
+- A parallel session (Codex) also works in this repo (merged PR #77). Always `git fetch` and check open PRs first.
 
 ## Completed
 
 | Milestone | PR | Merge SHA | Evidence |
 |-----------|----|-----------|----------|
 | M0 CI truthfulness + harness | #78 | `2dd96bc` | run 37337044022: PHPUnit OK (40), integration 3/3 on WP latest/5.6/6.5/6.8/6.9 |
-| M1 diagnostics + SEO abstraction | #76 | `c7f689b` | run 37338939083: integration 34/34 on all WP rows; closes #67 #68 #69 #71 #72 |
+| M1 diagnostics + SEO abstraction | #76 | `c7f689b` | run 37338939083: integration 34/34; closed #67 #68 #69 #71 #72 |
+| M2 content inventory | #79 | `2949c89` | run 37339837499: integration 43/43; closed #63 |
+| Export consistency | #80 | `4d948e0` | run 37341039538: integration 46/46 incl. WP 5.6 |
 | #59 superseded branch | — | — | branch deleted; evidence in issue comment |
 
 ## Open PRs
 
 | PR | Branch | State |
 |----|--------|-------|
-| (M2) | feature/content-inventory | opening |
+| (0.10.0 prep) | chore/release-0.10.0 | opening |
 
 ## Open issues
 
-#63 (M2), #64 #65 (M3), #66 (M4), #73 #74 (M5), #75 (partial; remaining subcommands with M2–M6), #70 (M7).
+#64 #65 (M3), #66 (M4), #73 #74 (M5), #75 (partial), #70 (M7).
 
 ## How to test locally
 
@@ -46,8 +48,8 @@ ASC_IT_FILTER=redirects ...                                                   # 
 
 ## Next three actions
 
-1. Open M2 PR, watch CI, merge; close #63; comment on #75.
-2. Export consistency PR for older `/export/*` routes, with integration tests.
-3. M3: media SEO audit (#64) + duplicate media (#65) with CLI `media-audit`.
+1. Merge the 0.10.0 prep PR after CI (confirm the new `Release ZIP install + upgrade` job and the 7.0 row ran).
+2. `git tag -a v0.10.0 -m v0.10.0 <merge-sha> && git push origin v0.10.0`; follow docs/RELEASE_CHECKLIST.md §3 to verify.
+3. Start M3 (#64/#65) from fresh main.
 
 Resume: `cd /Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector && git fetch && gh pr list -R tyhallcsu/ai-site-connector`

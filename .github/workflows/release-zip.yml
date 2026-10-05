@@ -1,10 +1,14 @@
 name: Build release ZIP
 
+# Sole release publisher. A pushed v* tag publishes a GitHub Release with the
+# plugin ZIP + SHA-256 checksum; workflow_dispatch only builds an artifact.
+# Do not also run `gh release create` for the same tag (see docs/RELEASE_CHECKLIST.md).
+
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Plugin version (e.g. 0.1.0). Defaults to plugin header or tag name.'
+        description: 'Plugin version (e.g. 0.1.0). Defaults to plugin header.'
         required: false
         default: ''
   push:
@@ -13,12 +17,20 @@ on:
 
 permissions:
   contents: write
+  checks: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install packaging tools
         run: |
@@ -27,62 +39,133 @@ jobs:
 
       - name: Resolve version
         id: ver
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            v="${{ github.event.inputs.version }}"
+          if [ -n "$INPUT_VERSION" ]; then
+            v="$INPUT_VERSION"
           elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             v="${GITHUB_REF_NAME#v}"
           else
             v=$(grep -E '^[[:space:]]*\*[[:space:]]*Version:' ai-site-connector.php \
                 | head -1 | sed -E 's/.*Version:[[:space:]]*//' | tr -d '[:space:]')
           fi
-          test -n "$v"
+          # Strict format: the value flows into later shell steps.
+          if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
+            echo "Refusing invalid version '$v'."
+            exit 1
+          fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
-      - name: CHANGELOG entry exists for resolved version
-        run: |
-          set -e
-          v="${{ steps.ver.outputs.version }}"
-          if ! grep -qE "^##[[:space:]]*\[${v//./\\.}\]" CHANGELOG.md; then
-            echo "CHANGELOG.md is missing an entry for v$v."
-            echo 'Add a Keep-a-Changelog section like:'
-            echo "  ## [$v] - YYYY-MM-DD"
-            exit 1
-          fi
-          echo "CHANGELOG.md entry for v$v found."
+      # Header, constant, readme Stable tag + changelog entry, CHANGELOG.md
+      # "## [X.Y.Z] - YYYY-MM-DD" heading and the MCP example package.json
+      # must all equal the version being released.
+      - name: Version fields consistent with release
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: bin/check-version.sh --release --expect "$VERSION"
 
-      - name: MCP example version matches plugin version
+      - name: Tag points at a commit on main
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "Tag $GITHUB_REF_NAME ($GITHUB_SHA) is not on main. Tag only merged, tested commits."; exit 1; }
+
+      # Every CI check run for the tagged SHA must be `success` — including
+      # the PHP syntax and WordPress compat matrices — and the key jobs must
+      # be present so an absent CI run cannot pass vacuously. The file lives
+      # in RUNNER_TEMP so it can never be packaged into the ZIP.
+      - name: CI passed for the tagged commit
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          v="${{ steps.ver.outputs.version }}"
-          mcp_v=$(node -p "require('./examples/mcp-server/package.json').version")
-          if [ "$mcp_v" != "$v" ]; then
-            echo "examples/mcp-server/package.json version ($mcp_v) does not match plugin version ($v)."
-            echo 'Bump examples/mcp-server/package.json before tagging.'
+          checks="$RUNNER_TEMP/checks.tsv"
+          gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
+            --jq '.check_runs[] | select(.name != "build") | [.name, (.conclusion // .status)] | @tsv' > "$checks"
+          cat "$checks"
+          fail=0
+          if awk -F'\t' '$2 != "success" { bad = 1; print "Not successful: " $1 " (" $2 ")" } END { exit !bad }' "$checks"; then
+            fail=1
+          fi
+          for required in "PHPUnit" "Composer and PHPCS" "WordPress runtime smoke" "Release ZIP smoke test" "Release ZIP install + upgrade" "Plugin structure" "Dangerous-pattern grep" "PHP 7.4 syntax" "WP 5.6 compat"; do
+            if ! awk -F'\t' -v n="$required" '$1 == n && $2 == "success" { found = 1 } END { exit !found }' "$checks"; then
+              echo "Required check '$required' is missing or not successful for $GITHUB_SHA."
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Refuse to replace an existing release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Only an explicit "not found" passes; API/auth errors fail closed.
+          if out="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" 2>&1)"; then
+            echo "Release $GITHUB_REF_NAME already exists; refusing to overwrite a shipped artifact."
             exit 1
           fi
-          echo "MCP example version matches plugin version ($v)."
+          if ! printf '%s' "$out" | grep -qi 'release not found'; then
+            echo "Could not confirm that $GITHUB_REF_NAME is unreleased: $out"
+            exit 1
+          fi
 
       - name: Build release ZIP
-        run: bin/build-release-zip.sh "${{ steps.ver.outputs.version }}"
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: bin/build-release-zip.sh "$VERSION"
 
       - name: Verify staging contents
-        run: tests/package-smoke.sh "${{ steps.ver.outputs.version }}"
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: tests/package-smoke.sh "$VERSION"
+
+      - name: Checksum and release notes
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -e
+          v="$VERSION"
+          cd build
+          sha256sum "ai-site-connector-v${v}.zip" > "ai-site-connector-v${v}.zip.sha256"
+          cat "ai-site-connector-v${v}.zip.sha256"
+          cd ..
+          # Body = this version's CHANGELOG.md section.
+          awk -v v="$v" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > build/release-notes.md
+          test -s build/release-notes.md
+          {
+            echo
+            echo "**Install / upgrade:** download \`ai-site-connector-v${v}.zip\` and upload it under Plugins → Add New → Upload, or let the built-in updater pick it up. Verify with the attached \`.sha256\`."
+            echo "**Rollback:** reinstall the previous release ZIP from the Releases page; data and settings are preserved."
+          } >> build/release-notes.md
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ai-site-connector-v${{ steps.ver.outputs.version }}
-          path: build/ai-site-connector-v${{ steps.ver.outputs.version }}.zip
+          path: |
+            build/ai-site-connector-v${{ steps.ver.outputs.version }}.zip
+            build/ai-site-connector-v${{ steps.ver.outputs.version }}.zip.sha256
           if-no-files-found: error
 
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: build/ai-site-connector-v${{ steps.ver.outputs.version }}.zip
-          generate_release_notes: true
+          files: |
+            build/ai-site-connector-v${{ steps.ver.outputs.version }}.zip
+            build/ai-site-connector-v${{ steps.ver.outputs.version }}.zip.sha256
+          body_path: build/release-notes.md
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true
+          overwrite_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

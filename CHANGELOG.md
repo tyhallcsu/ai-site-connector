@@ -6,6 +6,14 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-05
+
+New read-only diagnostics and content-inventory tools, each available as a
+REST route, an MCP tool and a WP-CLI command, plus a plugin-neutral SEO
+layer. Additive: no existing route, tool or option changes shape except the
+new `omitted_forbidden` field on two export routes. Tested on WordPress 5.6
+through 7.1.2.
+
 ### Added
 
 - Diagnostics tools, each as REST route + MCP tool + WP-CLI command over one
@@ -19,6 +27,17 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   filterable, JSON or formula-safe CSV, terms + SEO fields, per-post access.
 - In-WordPress integration suite (`tests/integration/`) run by the runtime
   smoke job.
+
+### Changed
+
+- `readme.txt` `Tested up to: 7.1` (runtime smoke + integration suite pass on
+  WordPress 7.1.2); CI compat matrix gains a 7.0 row; the runtime smoke logs
+  the installed WordPress version.
+- Release workflow is the single publisher and now refuses to publish unless
+  all version fields match the tag, the tag is on `main`, required CI checks
+  passed for that SHA, and no release exists yet; attaches a `.sha256` and
+  uses the CHANGELOG section as release notes. `bin/check-version.sh` checks
+  version consistency in CI. New `Release ZIP install + upgrade` CI job.
 
 ### Fixed
 

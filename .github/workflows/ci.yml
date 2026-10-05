@@ -131,13 +131,13 @@ jobs:
           done
           echo "All required files present."
 
-      - name: Plugin header and readme version agree
+      # Header, AI_SITE_CONNECTOR_VERSION, readme Stable tag and the MCP
+      # example package must agree (previously only header vs readme).
+      - name: Version fields agree
         run: |
           set -e
-          version=$(grep -E '^[[:space:]]*\*[[:space:]]*Version:' ai-site-connector.php | head -1 | sed -E 's/.*Version:[[:space:]]*//' | tr -d '[:space:]')
-          test -n "$version"
           grep -q "Plugin Name:[[:space:]]*AI Site Connector" ai-site-connector.php
-          grep -q "Stable tag: ${version}" readme.txt
+          bin/check-version.sh
 
       - name: No forbidden files committed
         run: |
@@ -211,6 +211,56 @@ jobs:
       - name: Build and inspect release ZIP
         run: tests/package-smoke.sh
 
+  zip-install-upgrade:
+    # Installs the built ZIP into a fresh site, then upgrades the previous
+    # published release ZIP to it — catches packaging and upgrade breakage
+    # that the source-tree runtime smoke cannot see.
+    name: Release ZIP install + upgrade
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: mysqli, curl, json, zip
+          tools: none
+          ini-values: memory_limit=512M
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends default-mysql-client curl jq rsync zip unzip
+          curl -L https://github.com/wp-cli/builds/raw/gh-pages/phar/wp-cli.phar -o /tmp/wp
+          chmod +x /tmp/wp
+          sudo mv /tmp/wp /usr/local/bin/wp
+
+      - name: Build ZIP, install clean, upgrade from previous release
+        env:
+          WP_DB_USER: root
+          WP_DB_PASSWORD: root
+          WP_DB_HOST: 127.0.0.1
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          zip_path="$(bin/build-release-zip.sh | tail -n 1)"
+          tests/zip-upgrade-smoke.sh "$zip_path"
+
   wordpress-runtime:
     name: WordPress runtime smoke
     runs-on: ubuntu-latest
@@ -268,7 +318,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        wp: ['5.6', '6.5', '6.8', '6.9']
+        wp: ['5.6', '6.5', '6.8', '6.9', '7.0']
     services:
       mysql:
         image: mysql:8.0

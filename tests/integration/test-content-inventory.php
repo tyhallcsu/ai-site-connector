@@ -43,7 +43,7 @@ asc_it(
 			$res = asc_it_inventory( array( 'post_type' => 'post,page', 'limit' => 500 ) );
 			$by  = array_column( $res['items'], null, 'id' );
 			asc_assert( isset( $by[ $page ], $by[ $post ] ), 'post or page missing' );
-			$keys = array( 'id', 'post_type', 'title', 'slug', 'status', 'author_id', 'created_gmt', 'modified_gmt', 'permalink', 'excerpt', 'featured_image', 'parent_id', 'menu_order', 'terms', 'seo' );
+			$keys = array( 'id', 'post_type', 'title', 'slug', 'status', 'author_id', 'created_gmt', 'modified_gmt', 'permalink', 'excerpt', 'featured_image', 'parent_id', 'menu_order', 'password_protected', 'terms', 'seo' );
 			asc_assert_same( $keys, array_keys( $by[ $page ] ), 'item keys' );
 			asc_assert_same( $parent, $by[ $page ]['parent_id'], 'parent id' );
 			asc_assert_same( 3, $by[ $page ]['menu_order'], 'menu order' );

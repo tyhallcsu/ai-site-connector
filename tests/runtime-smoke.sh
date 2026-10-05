@@ -381,6 +381,26 @@ wp_cli ai-connector media-duplicates --user=admin --format=json --path="$WP_DIR"
 wp_cli ai-connector broken-links --user=admin --all --format=json --path="$WP_DIR" \
 	| jq -e '(.summary | has("broken")) and (.items | type == "array")' >/dev/null \
 	|| { echo "broken-links --format=json unexpected output" >&2; exit 1; }
+EXPORT_A="$(mktemp -d "${TMPDIR:-/tmp}/asc-export-a.XXXXXX")"
+EXPORT_B="$(mktemp -d "${TMPDIR:-/tmp}/asc-export-b.XXXXXX")"
+wp_cli ai-connector export --user=admin --dir="$EXPORT_A" --path="$WP_DIR" >/dev/null
+wp_cli ai-connector export --user=admin --dir="$EXPORT_B" --path="$WP_DIR" >/dev/null
+for f in site-inventory media-seo-audit duplicate-media broken-links redirects plugin-builder-detection rest-routes mcp-self-test manifest-index; do
+	jq -e . "$EXPORT_A/$f.json" >/dev/null || { echo "export wrote invalid or missing $f.json" >&2; exit 1; }
+done
+diff -r "$EXPORT_A" "$EXPORT_B" >/dev/null || { echo "export --dir output is not deterministic between runs" >&2; diff -r "$EXPORT_A" "$EXPORT_B" | head -20 >&2; exit 1; }
+if wp_cli ai-connector export --dir="$EXPORT_B" --path="$WP_DIR" >/dev/null 2>&1; then
+	echo "export succeeded without an administrator --user" >&2
+	exit 1
+fi
+wp_cli ai-connector export --user=admin --dir="$EXPORT_B" --sections=rest-routes.json --path="$WP_DIR" >/dev/null
+[ -f "$EXPORT_B/rest-routes.json" ] && [ ! -f "$EXPORT_B/redirects.json" ] \
+	|| { echo "export --sections left stale manifests behind" >&2; exit 1; }
+if ls -a "$EXPORT_B" | grep -q '^\.ai-connector-export-'; then
+	echo "export left its staging directory behind" >&2
+	exit 1
+fi
+rm -rf "$EXPORT_A" "$EXPORT_B"
 if wp_cli ai-connector content-inventory --user=admin --post_type=attachment --path="$WP_DIR" >/dev/null 2>&1; then
 	echo "content-inventory accepted post_type=attachment" >&2
 	exit 1

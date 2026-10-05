@@ -2,6 +2,26 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-05 — M4 merged; M5 (#73/#74) in review
+
+- PR #83 (M4, #66) squash-merged → `c270434`; CI run 37345095645 on
+  `983fc3c`: integration 62/62 on WP 5.6–7.1.2. #66 closed.
+- M5 export bundle: first pass 67/67 locally (CLI export twice → identical
+  bytes). `generate()` performs a loopback HTTP probe, so the bundle uses a
+  new side-effect-free `Diagnostics::detected_plugins()` instead.
+- Second-pass review: 7 P2 + 2 P3, all fixed with tests — recursive
+  volatile-key stripping deleted real nested data (route args named
+  `offset`/`limit`); self-test manifest varied by admin user / PHP process
+  user (now portable checks only); paginated sections could scan a whole
+  large site in one request (now bounded by rows scanned); counters and
+  items disagreed after overshoot; `--dir` writer could leave a mixed old/new
+  directory and exit 0 on failures (now staged + moved, stale manifests
+  removed, non-zero exit); exception text could carry server paths into the
+  committed index; drafts/private/protected excerpts in the "commit me"
+  inventory (now published only, protected excerpts + excerpt-derived SEO
+  description blanked); CLI without an admin `--user` exported near-empty
+  manifests; duplicate scan window tied to `max_items`. Local 69/69.
+
 ## 2026-10-05 — M3 merged; M4 (#66) in review
 
 - PR #82 (M3) squash-merged → `4f44c85`; CI run 37343885813 on `a5f154e`:

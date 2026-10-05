@@ -900,6 +900,133 @@ class AI_Site_Connector_CLI {
 	}
 
 	/**
+	 * Build the deterministic manifest bundle. Read-only on the site.
+	 *
+	 * With --dir, writes the eight manifest files plus manifest-index.json
+	 * into that local directory (created if missing; existing files with the
+	 * same names are overwritten) — ready to commit from your own checkout.
+	 * WordPress never commits or pushes anything.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--dir=<path>]
+	 * : Directory to write the manifest files into.
+	 *
+	 * [--max_items=<n>]
+	 * : Items per paginated section, 1-5000. Default: 1000.
+	 *
+	 * [--sections=<files>]
+	 * : Comma-separated manifest file names. Default: all.
+	 *
+	 * [--format=<format>]
+	 * : json (print the full bundle) when --dir is not given. Default: json.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *   wp ai-connector export --user=admin --dir=./site-manifests
+	 *   wp ai-connector export --user=admin --sections=redirects.json --format=json
+	 */
+	public function export( $args, $assoc ) {
+		self::format( $assoc, array( 'json' ) );
+		self::require_admin_context();
+		$bundle = AI_Site_Connector_Export_Bundle::build(
+			array(
+				'max_items' => isset( $assoc['max_items'] ) ? (int) $assoc['max_items'] : AI_Site_Connector_Export_Bundle::DEFAULT_MAX_ITEMS,
+				'sections'  => isset( $assoc['sections'] ) ? (string) $assoc['sections'] : '',
+			)
+		);
+		if ( is_wp_error( $bundle ) ) {
+			WP_CLI::error( $bundle->get_error_message() );
+		}
+		$bundle['manifest_index'] = AI_Site_Connector_Export_Bundle::index_document( $bundle );
+		$failed                   = array();
+		foreach ( $bundle['index'] as $name => $info ) {
+			if ( empty( $info['ok'] ) ) {
+				$failed[ $name ] = isset( $info['error'] ) ? $info['error'] : 'unknown error';
+			}
+		}
+
+		if ( empty( $assoc['dir'] ) ) {
+			WP_CLI::log( wp_json_encode( $bundle, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+			if ( $failed ) {
+				WP_CLI::halt( 1 );
+			}
+			return;
+		}
+
+		$dir = rtrim( (string) $assoc['dir'], '/\\' );
+		if ( ! is_dir( $dir ) && ! wp_mkdir_p( $dir ) ) {
+			WP_CLI::error( sprintf( 'Could not create directory %s.', $dir ) );
+		}
+
+		// Stage every file first; only when all writes succeed are they moved
+		// into place, so a failed run never leaves a mix of old and new.
+		$stage = $dir . '/.ai-connector-export-' . wp_generate_password( 8, false, false );
+		if ( ! wp_mkdir_p( $stage ) ) {
+			WP_CLI::error( sprintf( 'Could not create staging directory in %s.', $dir ) );
+		}
+		$contents = array();
+		foreach ( $bundle['files'] as $name => $data ) {
+			if ( in_array( $name, AI_Site_Connector_Export_Bundle::FILES, true ) ) {
+				$contents[ $name ] = AI_Site_Connector_Export_Bundle::encode( $data );
+			}
+		}
+		$contents['manifest-index.json'] = AI_Site_Connector_Export_Bundle::encode( $bundle['manifest_index'] );
+		foreach ( $contents as $name => $body ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+			if ( strlen( $body ) !== file_put_contents( $stage . '/' . $name, $body ) ) {
+				self::remove_dir( $stage );
+				WP_CLI::error( sprintf( 'Could not write %s; nothing in %s was changed.', $name, $dir ) );
+			}
+		}
+		foreach ( array_merge( AI_Site_Connector_Export_Bundle::FILES, array( 'manifest-index.json' ) ) as $name ) {
+			$target = $dir . '/' . $name;
+			if ( isset( $contents[ $name ] ) ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename
+				if ( ! rename( $stage . '/' . $name, $target ) ) {
+					self::remove_dir( $stage );
+					WP_CLI::error( sprintf( 'Could not move %s into %s.', $name, $dir ) );
+				}
+			} elseif ( file_exists( $target ) ) {
+				// A manifest not produced by this run (failed or not selected)
+				// is removed so the directory matches manifest-index.json.
+				wp_delete_file( $target );
+			}
+		}
+		self::remove_dir( $stage );
+
+		foreach ( $bundle['index'] as $name => $info ) {
+			if ( ! empty( $info['ok'] ) && ! empty( $info['truncated'] ) ) {
+				WP_CLI::warning( sprintf( '%s truncated at --max_items.', $name ) );
+			}
+		}
+		if ( $failed ) {
+			foreach ( $failed as $name => $error ) {
+				WP_CLI::warning( sprintf( '%s failed: %s', $name, $error ) );
+			}
+			WP_CLI::error( sprintf( '%d section(s) failed; see manifest-index.json in %s.', count( $failed ), $dir ) );
+		}
+		WP_CLI::success( sprintf( 'Wrote %d manifest files + manifest-index.json to %s.', count( $contents ) - 1, $dir ) );
+	}
+
+	private static function remove_dir( $dir ) {
+		foreach ( (array) glob( $dir . '/*' ) as $f ) {
+			wp_delete_file( $f );
+		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir
+		@rmdir( $dir );
+	}
+
+	/**
+	 * Commands that act site-wide must run as an administrator (--user=<admin>).
+	 */
+	private static function require_admin_context() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			WP_CLI::error( 'Run this as an administrator, e.g. --user=admin.' );
+		}
+	}
+
+	/**
 	 * Validate --format against an allow-list.
 	 */
 	private static function format( $assoc, array $allowed ) {

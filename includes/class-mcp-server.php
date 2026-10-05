@@ -173,7 +173,7 @@ class AI_Site_Connector_MCP_Server {
 			),
 			array(
 				'name'        => 'wp_create_post',
-				'description' => 'Create a post. Required: title, content. Optional: status (default draft), post_type (default post).',
+				'description' => 'Create a post. Required: title, content. Optional: status (default draft), post_type (default post). Requires the write_content permission (off by default); blocked in read-only mode.',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'properties' => array(
@@ -187,7 +187,7 @@ class AI_Site_Connector_MCP_Server {
 			),
 			array(
 				'name'        => 'wp_update_post',
-				'description' => 'Update a post by ID. Required: id. Optional: title, content, status, post_type.',
+				'description' => 'Update a post by ID. Required: id. Optional: title, content, status, post_type. Requires the write_content permission (off by default); blocked in read-only mode. Prefer wp_update_content (dry-run, snapshot, rollback).',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'properties' => array(
@@ -480,6 +480,7 @@ class AI_Site_Connector_MCP_Server {
 				}
 				return self::dispatch( 'GET', '/wp/v2/' . self::pt_rest_base( $pt ) . '/' . $id );
 			case 'wp_create_post':
+				self::require_write_content();
 				$pt = isset( $args['post_type'] ) ? sanitize_key( $args['post_type'] ) : 'post';
 				return self::dispatch(
 					'POST',
@@ -491,6 +492,7 @@ class AI_Site_Connector_MCP_Server {
 					)
 				);
 			case 'wp_update_post':
+				self::require_write_content();
 				$pt = isset( $args['post_type'] ) ? sanitize_key( $args['post_type'] ) : 'post';
 				$id = isset( $args['id'] ) ? (int) $args['id'] : 0;
 				if ( $id <= 0 ) {
@@ -573,6 +575,30 @@ class AI_Site_Connector_MCP_Server {
 			// phpcs:enable
 		}
 		return $data;
+	}
+
+	/**
+	 * Writes through MCP honour the write_content tool permission and
+	 * read-only mode, like every other plugin write path.
+	 *
+	 * @throws AI_Site_Connector_MCP_Tool_Error When writes are not allowed.
+	 */
+	private static function require_write_content() {
+		$gate = AI_Site_Connector_Permissions::require_permission( AI_Site_Connector_Permissions::TOOL_WRITE_CONTENT );
+		if ( is_wp_error( $gate ) ) {
+			$data = $gate->get_error_data();
+			// JSON-encoded into the MCP result, never echoed as HTML.
+			// phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped
+			throw new AI_Site_Connector_MCP_Tool_Error(
+				array(
+					'status'  => 403,
+					'code'    => $gate->get_error_code(),
+					'message' => $gate->get_error_message(),
+					'reason'  => is_array( $data ) && isset( $data['reason'] ) ? (string) $data['reason'] : '',
+				)
+			);
+			// phpcs:enable
+		}
 	}
 
 	private static function list_posts( array $args, $default_pt ) {

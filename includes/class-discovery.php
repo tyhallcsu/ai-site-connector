@@ -65,7 +65,7 @@ class AI_Site_Connector_Discovery {
 				'http' => rest_url( AI_SITE_CONNECTOR_REST_NAMESPACE . '/mcp' ),
 			),
 			'auth_methods'      => array( 'basic_auth_application_password' ),
-			'status'            => 'active',
+			'status'            => class_exists( 'AI_Site_Connector_Permissions' ) && AI_Site_Connector_Permissions::is_disabled() ? 'disabled' : 'active',
 		);
 	}
 

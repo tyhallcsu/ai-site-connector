@@ -1,7 +1,7 @@
 # AI Site Connector
 
 <p align="center">
-  <img src="assets/brand/readme-hero.png" alt="AI Site Connector — an illustrated bridge connecting AI tools to your WordPress site" width="900">
+  <img src="https://raw.githubusercontent.com/tyhallcsu/ai-site-connector/main/assets/brand/readme-hero.png" alt="AI Site Connector — an illustrated bridge connecting AI tools to your WordPress site" width="900">
 </p>
 
 <p align="center">
@@ -88,7 +88,7 @@ WordPress core has supported [Application Passwords](https://make.wordpress.org/
 
 ---
 
-![Connect your site — an illustrated cable linking to a website](assets/brand/readme-connect.png)
+![Connect your site — an illustrated cable linking to a website](https://raw.githubusercontent.com/tyhallcsu/ai-site-connector/main/assets/brand/readme-connect.png)
 
 ## Installation
 
@@ -329,7 +329,7 @@ All endpoints under `/wp-json/ai-site-connector/v1/`. Permission-gated tools suc
 
 | Endpoint                                  | Auth                                              | Returns |
 | ----------------------------------------- | ------------------------------------------------- | ------- |
-| `POST /mcp`                               | Authenticated; per-tool permission gates apply   | JSON-RPC 2.0 MCP transport (`initialize`, `tools/list`, `tools/call`, `ping`). Disable with `define( 'AI_SITE_CONNECTOR_MCP_DISABLE', true )`. See [`examples/mcp-server/`](examples/mcp-server/) for the bundled stdio adapter. |
+| `POST /mcp`                               | Authenticated; per-tool permission gates apply (incl. `write_content` for `wp_create_post` / `wp_update_post`) | JSON-RPC 2.0 MCP transport (`initialize`, `tools/list`, `tools/call`, `ping`). Disable with `define( 'AI_SITE_CONNECTOR_MCP_DISABLE', true )`. See [`examples/mcp-server/`](examples/mcp-server/) for the bundled stdio adapter. |
 | `GET /openapi.json`                       | Public                                            | OpenAPI 3 spec for every route, generated live from the REST registry. 1-hour cache, busted on plugin version change. |
 | `GET /connection-pack/<token>`            | One-time signed token (the token IS the secret)   | Single-use connection-pack JSON download (5-minute TTL, returns 410 after the first read). |
 
@@ -395,7 +395,7 @@ wp ai-connector export --user=admin --dir=./site-manifests && git -C ./site-mani
 
 ### SEO plugin abstraction (`AI_Site_Connector_SEO`)
 
-Internal service (not a REST endpoint yet) used by the diagnostics and upcoming content tools.
+Used by `/content/update` (the `seo` field), the content inventory and the diagnostics.
 
 | Plugin | Read | Write (guarded) |
 | --- | --- | --- |
@@ -408,7 +408,7 @@ Internal service (not a REST endpoint yet) used by the diagnostics and upcoming 
 
 ---
 
-![Stay in control — an illustrated shield, key, and permission controls](assets/brand/readme-control.png)
+![Stay in control — an illustrated shield, key, and permission controls](https://raw.githubusercontent.com/tyhallcsu/ai-site-connector/main/assets/brand/readme-control.png)
 
 ## Safe content updates
 

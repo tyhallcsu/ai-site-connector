@@ -290,12 +290,12 @@ class AI_Site_Connector_MCP_Server {
 			),
 			array(
 				'name'        => 'wp_media_duplicates',
-				'description' => 'Find duplicate media by filename and SHA-256 content hash (bounded scan; resume with after_id = next_after_id). Never deletes. Optional: max_scan (1-20000, default 5000), after_id, max_file_bytes. Read-only.',
+				'description' => 'Find duplicate media across the whole library by filename and SHA-256 content hash. Resumable and bounded per call: repeat with the returned scan_id until complete is true; groups are reported only when complete. Never deletes. Optional: max_scan (attachments per call, 1-20000, default 5000), scan_id, max_file_bytes. Read-only.',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'properties' => array(
 						'max_scan'       => array( 'type' => 'integer' ),
-						'after_id'       => array( 'type' => 'integer' ),
+						'scan_id'        => array( 'type' => 'string' ),
 						'max_file_bytes' => array( 'type' => 'integer' ),
 					),
 				),
@@ -479,7 +479,7 @@ class AI_Site_Connector_MCP_Server {
 			case 'wp_media_audit':
 				return self::dispatch_checked( 'GET', '/media/audit', self::pick( $args, array( 'limit', 'offset', 'mime', 'only_issues', 'max_dimension', 'max_bytes' ) ) );
 			case 'wp_media_duplicates':
-				return self::dispatch_checked( 'GET', '/media/duplicates', self::pick( $args, array( 'max_scan', 'after_id', 'max_file_bytes' ) ) );
+				return self::dispatch_checked( 'GET', '/media/duplicates', self::pick( $args, array( 'max_scan', 'scan_id', 'max_file_bytes' ) ) );
 			case 'wp_broken_links':
 				return self::dispatch_checked( 'GET', '/content/broken-links', self::pick( $args, array( 'post_type', 'status', 'limit', 'offset', 'max_links', 'only_broken' ) ) );
 			case 'wp_export_bundle':

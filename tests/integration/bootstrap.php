@@ -48,7 +48,7 @@ function asc_it_db_fingerprint() {
 		$wpdb->get_var( "SELECT CONCAT(COUNT(*), ':', COALESCE(MAX(post_modified_gmt), ''), ':', COALESCE(SUM(CRC32(CONCAT_WS('|', ID, post_title, post_name, post_status, post_content, post_excerpt, post_parent))), 0)) FROM {$wpdb->posts}" ),
 		$wpdb->get_var( "SELECT CONCAT(COUNT(*), ':', COALESCE(SUM(CRC32(CONCAT_WS('|', post_id, meta_key, meta_value))), 0)) FROM {$wpdb->postmeta}" ),
 		$wpdb->get_var( "SELECT CONCAT(COUNT(*), ':', COALESCE(SUM(CRC32(CONCAT_WS('|', object_id, term_taxonomy_id))), 0)) FROM {$wpdb->term_relationships}" ),
-		$wpdb->get_var( "SELECT CONCAT(COUNT(*), ':', COALESCE(SUM(CRC32(CONCAT_WS('|', option_name, option_value))), 0)) FROM {$wpdb->options} WHERE option_name NOT LIKE '\\_transient%' AND option_name NOT LIKE '\\_site\\_transient%' AND option_name NOT IN ('cron', 'ai_site_connector_last_request_at')" ),
+		$wpdb->get_var( "SELECT CONCAT(COUNT(*), ':', COALESCE(SUM(CRC32(CONCAT_WS('|', option_name, option_value))), 0)) FROM {$wpdb->options} WHERE option_name NOT LIKE '\\_transient%' AND option_name NOT LIKE '\\_site\\_transient%' AND option_name NOT LIKE 'ai\\_site\\_connector\\_dupscan\\_%' AND option_name NOT IN ('cron', 'ai_site_connector_last_request_at')" ),
 	);
 	// phpcs:enable
 	return implode( '#', $parts );
@@ -214,6 +214,23 @@ function asc_it_mcp_call( $tool, $arguments = array() ) {
 		'is_error' => ! empty( $res['result']['isError'] ),
 		'data'     => json_decode( $res['result']['content'][0]['text'], true ),
 	);
+}
+
+/**
+ * Drive a resumable duplicate scan to completion.
+ *
+ * @return array|WP_Error
+ */
+function asc_it_duplicates( $args = array() ) {
+	$scan_id = '';
+	for ( $i = 0; $i < 200; $i++ ) {
+		$res = AI_Site_Connector_Media_Audit::duplicates( array_merge( $args, array( 'scan_id' => $scan_id ) ) );
+		if ( is_wp_error( $res ) || $res['complete'] ) {
+			return $res;
+		}
+		$scan_id = $res['scan_id'];
+	}
+	asc_assert( false, 'duplicate scan did not complete' );
 }
 
 function asc_it_run() {

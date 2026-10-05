@@ -281,57 +281,167 @@ class AI_Site_Connector_Media_Audit {
 		return 0 === strpos( wp_normalize_path( $real ), wp_normalize_path( trailingslashit( $base ) ) ) ? $real : '';
 	}
 
+	/** Resumable duplicate scans: state option prefix and lifetime. */
+	const DUP_STATE_PREFIX = 'ai_site_connector_dupscan_';
+	const DUP_STATE_TTL    = DAY_IN_SECONDS;
+	const DUP_MAX_LIBRARY  = 200000;
+	const DUP_FILES_PER_CALL = 5000;
+
 	/**
-	 * Find duplicate media by filename and by content hash. Read-only.
+	 * Find duplicate media across the whole library, by filename and by
+	 * SHA-256 content hash. Read-only; never deletes anything.
 	 *
-	 * Filenames: attachments whose file basename is identical
-	 * (case-insensitive) — `exact` — or identical after stripping WordPress
-	 * de-duplication suffixes (`-1`, `-2`, `-scaled`) — `suffix_variant`.
+	 * Resumable and bounded per call (#88): each call stats at most
+	 * `max_scan` attachments, or hashes at most the per-call byte budget,
+	 * and stores its progress server-side under `scan_id` (owned by the
+	 * caller, expires after a day). Repeat the call with the returned
+	 * `scan_id` until `complete` is true; only then are `by_filename` and
+	 * `by_hash` populated, and they cover every attachment the caller can
+	 * see — duplicates are paired across the whole library, not per window.
 	 *
-	 * Hashes: SHA-256, computed only for files whose byte size collides with
-	 * another scanned file, within per-file and per-call byte budgets
-	 * (non-administrators get lower scan/hash ceilings). Files left unhashed
-	 * by the budget are listed in `unhashed`.
-	 *
-	 * Groups are computed within one call's scan window; duplicates whose
-	 * members fall in different windows are not paired.
+	 * Filenames: identical basename (case-insensitive) — `exact` — or a
+	 * WordPress re-upload (`-1`, `-scaled`) of an existing original —
+	 * `suffix_variant`. Hashes: only files whose byte size collides with
+	 * another file anywhere in the library are hashed.
 	 *
 	 * @param array $args {
-	 *   @type int $max_scan       Attachments scanned, 1..20000 (default 5000), lowest IDs first.
-	 *   @type int $after_id       Resume after this attachment ID (default 0).
-	 *   @type int $max_file_bytes Skip hashing files larger than this (default 50 MB).
+	 *   @type string $scan_id        Continue this scan (omit to start one).
+	 *   @type int    $max_scan       Attachments stat'ed per call, 1..20000 (default 5000; non-admins ≤ 5000).
+	 *   @type int    $max_file_bytes Skip hashing files larger than this (default 50 MB).
+	 *   @type int    $after_id       No longer supported (use scan_id); > 0 is rejected.
 	 * }
 	 * @return array|WP_Error
 	 */
 	public static function duplicates( $args = array() ) {
-		global $wpdb;
-		$args = wp_parse_args(
+		$args     = wp_parse_args(
 			$args,
 			array(
+				'scan_id'        => '',
 				'max_scan'       => self::DUP_DEFAULT_SCAN,
-				'after_id'       => 0,
 				'max_file_bytes' => self::DUP_MAX_FILE_BYTES,
+				'after_id'       => 0,
 			)
 		);
-		// Lower ceilings for non-administrators: the scan is reachable by any
-		// upload_files user and costs disk I/O.
-		$is_admin   = current_user_can( 'manage_options' );
-		$scan_cap   = $is_admin ? self::DUP_MAX_SCAN : self::DUP_DEFAULT_SCAN;
-		$hash_cap   = $is_admin ? self::DUP_HASH_BUDGET : (int) ( self::DUP_HASH_BUDGET / 5 );
+		$is_admin = current_user_can( 'manage_options' );
+		$scan_cap = $is_admin ? self::DUP_MAX_SCAN : self::DUP_DEFAULT_SCAN;
+		$hash_cap = $is_admin ? self::DUP_HASH_BUDGET : (int) ( self::DUP_HASH_BUDGET / 5 );
 		$max_scan = (int) $args['max_scan'];
-		$after_id = (int) $args['after_id'];
 		$max_file = (int) $args['max_file_bytes'];
+		if ( (int) $args['after_id'] > 0 ) {
+			return self::invalid( 'after_id', 'after_id is no longer supported: duplicate scans are library-wide; continue with scan_id.' );
+		}
 		if ( $max_scan < 1 || $max_scan > $scan_cap ) {
 			return self::invalid( 'max_scan', sprintf( 'max_scan must be between 1 and %d.', $scan_cap ) );
-		}
-		if ( $after_id < 0 ) {
-			return self::invalid( 'after_id', 'after_id must be >= 0.' );
 		}
 		if ( $max_file < 1 || $max_file > self::DUP_MAX_FILE_BYTES ) {
 			return self::invalid( 'max_file_bytes', sprintf( 'max_file_bytes must be between 1 and %d.', self::DUP_MAX_FILE_BYTES ) );
 		}
 
-		// One bounded query: ID, parent and relative file path.
+		$scan_id = (string) $args['scan_id'];
+		if ( '' === $scan_id ) {
+			self::prune_scans( get_current_user_id() );
+			$scan_id = gmdate( 'YmdHis' ) . '-' . wp_generate_password( 8, false, false ) . '-u' . get_current_user_id();
+			$state   = array(
+				'user_id'   => get_current_user_id(),
+				'created'   => time(),
+				'max_file'  => $max_file,
+				'phase'     => 'stat',
+				'last_id'   => 0,
+				'scanned'   => 0,
+				'omitted'   => 0,
+				'names'     => array(),
+				'sizes'     => array(),
+				'unread'    => array(),
+				'queue'     => array(),
+				'qpos'      => 0,
+				'hashes'    => array(),
+				'large'     => array(),
+				'hashed_b'  => 0,
+				'calls'     => 0,
+			);
+		} else {
+			$state = self::load_scan( $scan_id );
+			if ( is_wp_error( $state ) ) {
+				return $state;
+			}
+			$max_file = (int) $state['max_file'];
+		}
+		++$state['calls'];
+
+		if ( 'stat' === $state['phase'] ) {
+			$more = self::scan_stat_window( $state, $max_scan );
+			if ( is_wp_error( $more ) ) {
+				delete_option( self::DUP_STATE_PREFIX . $scan_id );
+				return $more;
+			}
+			if ( $more ) {
+				$saved = self::save_scan( $scan_id, $state );
+				return is_wp_error( $saved ) ? $saved : self::scan_response( $scan_id, $state, false );
+			}
+			// All sizes known: queue every file whose size collides anywhere.
+			ksort( $state['sizes'] );
+			foreach ( $state['sizes'] as $size => $ids ) {
+				if ( count( $ids ) < 2 ) {
+					continue;
+				}
+				foreach ( $ids as $id ) {
+					if ( $size > $max_file ) {
+						$state['large'][] = (int) $id;
+					} else {
+						$state['queue'][] = array( (int) $id, (int) $size );
+					}
+				}
+			}
+			$state['phase'] = 'hash';
+			$state['qpos']  = 0;
+			unset( $state['sizes'] ); // No longer needed; keeps the state small.
+			// This call already did a full stat window; hash in the next one.
+			$saved = self::save_scan( $scan_id, $state );
+			return is_wp_error( $saved ) ? $saved : self::scan_response( $scan_id, $state, false );
+		}
+
+		/**
+		 * Bytes hashed per duplicate-scan call (filterable for constrained hosts).
+		 *
+		 * @param int $hash_cap Default 500 MB for administrators, 100 MB otherwise.
+		 */
+		$hash_cap   = max( 1, (int) apply_filters( 'ai_site_connector_duplicate_hash_budget', $hash_cap ) );
+		$call_bytes = 0;
+		$call_files = 0;
+		$qlen       = count( $state['queue'] );
+		while ( $state['qpos'] < $qlen ) {
+			list( $id, $size ) = $state['queue'][ $state['qpos'] ];
+			if ( $call_files > 0 && ( $call_bytes + $size > $hash_cap || $call_files >= self::DUP_FILES_PER_CALL ) ) {
+				break; // Budget for this call used; continue next call.
+			}
+			++$state['qpos'];
+			++$call_files;
+			$path = self::safe_path( $id );
+			$h    = ( '' !== $path && is_file( $path ) && is_readable( $path ) ) ? hash_file( 'sha256', $path ) : false;
+			if ( ! is_string( $h ) ) {
+				$state['unread'][ $id ] = 'unreadable';
+				continue;
+			}
+			$state['hashes'][ $id ] = array( $h, $size );
+			$call_bytes            += $size;
+			$state['hashed_b']     += $size;
+		}
+		if ( $state['qpos'] < $qlen ) {
+			$saved = self::save_scan( $scan_id, $state );
+			return is_wp_error( $saved ) ? $saved : self::scan_response( $scan_id, $state, false );
+		}
+
+		delete_option( self::DUP_STATE_PREFIX . $scan_id );
+		return self::scan_response( $scan_id, $state, true );
+	}
+
+	/**
+	 * Stat the next window of attachments into the scan state.
+	 *
+	 * @return bool|WP_Error True when more attachments remain.
+	 */
+	private static function scan_stat_window( array &$state, $max_scan ) {
+		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
@@ -342,16 +452,18 @@ class AI_Site_Connector_Media_Audit {
 				 GROUP BY p.ID, p.post_parent
 				 ORDER BY p.ID ASC
 				 LIMIT %d",
-				$after_id,
+				(int) $state['last_id'],
 				$max_scan + 1
 			),
 			ARRAY_A
 		);
-		$truncated = count( $rows ) > $max_scan;
-		if ( $truncated ) {
+		$more = count( $rows ) > $max_scan;
+		if ( $more ) {
 			array_pop( $rows );
 		}
-		// Prime attachment + parent caches: one query instead of 2-3 per row.
+		if ( $state['scanned'] + count( $rows ) > self::DUP_MAX_LIBRARY ) {
+			return self::invalid( 'max_scan', sprintf( 'Libraries above %d attachments are not supported by this scan.', self::DUP_MAX_LIBRARY ) );
+		}
 		$prime = array();
 		foreach ( $rows as $row ) {
 			$prime[] = (int) $row['ID'];
@@ -362,156 +474,225 @@ class AI_Site_Connector_Media_Audit {
 		if ( $prime ) {
 			_prime_post_caches( array_values( array_unique( $prime ) ), false, false );
 		}
-
-		$by_exact   = array();
-		$by_variant = array();
-		$by_size    = array();
-		$unreadable = array();
-		$omitted    = 0;
-		$last_id    = $after_id;
 		foreach ( $rows as $row ) {
-			$id      = (int) $row['ID'];
-			$last_id = $id;
-			$att     = get_post( $id );
+			$id               = (int) $row['ID'];
+			$state['last_id'] = $id;
+			++$state['scanned'];
+			$att = get_post( $id );
 			if ( ! $att || ! AI_Site_Connector_Export::can_read_attachment( $att ) ) {
-				++$omitted;
+				++$state['omitted'];
 				continue;
 			}
 			$file = (string) $row['file'];
 			if ( '' === $file ) {
-				$unreadable[] = array(
-					'attachment_id' => $id,
-					'reason'        => 'no_file_meta',
-				);
+				$state['unread'][ $id ] = 'no_file_meta';
 				continue;
 			}
-			$base = strtolower( wp_basename( $file ) );
-			$by_exact[ $base ][] = $id;
-			$by_variant[ self::variant_key( $base ) ][] = $id;
-
-			$path = self::safe_path( $id );
+			$state['names'][ $id ] = strtolower( wp_basename( $file ) );
+			$path                  = self::safe_path( $id );
 			if ( '' === $path || ! is_file( $path ) ) {
-				$unreadable[] = array(
-					'attachment_id' => $id,
-					'reason'        => 'missing_file',
-				);
+				$state['unread'][ $id ] = 'missing_file';
 				continue;
 			}
 			if ( ! is_readable( $path ) ) {
-				$unreadable[] = array(
-					'attachment_id' => $id,
-					'reason'        => 'unreadable',
-				);
+				$state['unread'][ $id ] = 'unreadable';
 				continue;
 			}
 			$size = (int) filesize( $path );
 			if ( $size > 0 ) {
-				$by_size[ $size ][] = array( $id, $path );
+				$state['sizes'][ $size ][] = $id;
 			}
 		}
+		return $more;
+	}
 
+	/**
+	 * Build the response. Groups are only reported once the scan is complete.
+	 */
+	private static function scan_response( $scan_id, array $state, $complete ) {
 		$filename_groups = array();
-		$seen_exact      = array();
-		foreach ( $by_exact as $name => $ids ) {
-			if ( count( $ids ) > 1 ) {
-				sort( $ids );
-				$filename_groups[]                  = array(
-					'filename'       => $name,
-					'match'          => 'exact',
-					'attachment_ids' => $ids,
-				);
-				$seen_exact[ implode( ',', $ids ) ] = true;
+		$hash_groups     = array();
+		if ( $complete ) {
+			// Visibility and existence are rechecked now: the scan may have
+			// started under broader permissions, and attachments may have been
+			// deleted since they were stat'ed.
+			$ids = array_unique( array_merge( array_keys( $state['names'] ), array_keys( $state['hashes'] ), array_keys( $state['unread'] ) ) );
+			if ( $ids ) {
+				_prime_post_caches( array_map( 'intval', $ids ), false, false );
 			}
-		}
-		foreach ( $by_variant as $key => $ids ) {
-			sort( $ids );
-			// Only a real WordPress re-upload pattern: the unsuffixed original
-			// (key) must be among the members, so slide-1/slide-2 or
-			// team-2023/team-2024 are never reported as duplicates.
-			if ( count( $ids ) > 1 && isset( $by_exact[ $key ] ) && ! isset( $seen_exact[ implode( ',', $ids ) ] ) ) {
-				$filename_groups[] = array(
-					'filename'       => $key,
-					'match'          => 'suffix_variant',
-					'attachment_ids' => $ids,
-				);
-			}
-		}
-		usort( $filename_groups, array( __CLASS__, 'cmp_groups' ) );
-
-		$by_hash       = array();
-		$hashed        = 0;
-		$hashed_bytes  = 0;
-		$skipped_large = array();
-		$unhashed      = array();
-		$budget_hit    = false;
-		ksort( $by_size );
-		foreach ( $by_size as $size => $files ) {
-			if ( count( $files ) < 2 ) {
-				continue;
-			}
-			foreach ( $files as $f ) {
-				list( $id, $path ) = $f;
-				if ( $size > $max_file ) {
-					$skipped_large[] = $id;
-					continue;
+			foreach ( $ids as $id ) {
+				$att = get_post( (int) $id );
+				if ( ! $att || 'attachment' !== $att->post_type ) {
+					unset( $state['names'][ $id ], $state['hashes'][ $id ] );
+					$state['unread'][ $id ] = 'deleted';
+				} elseif ( ! AI_Site_Connector_Export::can_read_attachment( $att ) ) {
+					unset( $state['names'][ $id ], $state['hashes'][ $id ], $state['unread'][ $id ] );
+					++$state['omitted'];
 				}
-				if ( $hashed_bytes + $size > $hash_cap ) {
-					$budget_hit = true;
-					$unhashed[] = $id;
-					continue;
-				}
-				$h = hash_file( 'sha256', $path );
-				if ( ! is_string( $h ) ) {
-					$unreadable[] = array(
-						'attachment_id' => $id,
-						'reason'        => 'unreadable',
+			}
+			$by_exact   = array();
+			$by_variant = array();
+			foreach ( $state['names'] as $id => $base ) {
+				$by_exact[ $base ][]                        = (int) $id;
+				$by_variant[ self::variant_key( $base ) ][] = (int) $id;
+			}
+			$seen = array();
+			foreach ( $by_exact as $name => $ids ) {
+				if ( count( $ids ) > 1 ) {
+					sort( $ids );
+					$filename_groups[]             = array(
+						'filename'       => (string) $name,
+						'match'          => 'exact',
+						'attachment_ids' => $ids,
 					);
-					continue;
+					$seen[ implode( ',', $ids ) ] = true;
 				}
-				++$hashed;
-				$hashed_bytes                 += $size;
-				$by_hash[ $h ]['size_bytes']   = $size;
-				$by_hash[ $h ]['ids'][]        = $id;
 			}
-		}
-		$hash_groups = array();
-		foreach ( $by_hash as $h => $g ) {
-			if ( count( $g['ids'] ) > 1 ) {
-				sort( $g['ids'] );
-				$hash_groups[] = array(
-					'sha256'         => $h,
-					'size_bytes'     => $g['size_bytes'],
-					'attachment_ids' => $g['ids'],
-				);
+			foreach ( $by_variant as $key => $ids ) {
+				sort( $ids );
+				// Only a real re-upload pattern: the unsuffixed original must
+				// be present, so slide-1/slide-2 series are never flagged.
+				if ( count( $ids ) > 1 && isset( $by_exact[ $key ] ) && ! isset( $seen[ implode( ',', $ids ) ] ) ) {
+					$filename_groups[] = array(
+						'filename'       => (string) $key,
+						'match'          => 'suffix_variant',
+						'attachment_ids' => $ids,
+					);
+				}
 			}
+			usort( $filename_groups, array( __CLASS__, 'cmp_groups' ) );
+
+			$by_hash = array();
+			foreach ( $state['hashes'] as $id => $pair ) {
+				$by_hash[ $pair[0] ]['size_bytes'] = (int) $pair[1];
+				$by_hash[ $pair[0] ]['ids'][]      = (int) $id;
+			}
+			foreach ( $by_hash as $h => $g ) {
+				if ( count( $g['ids'] ) > 1 ) {
+					sort( $g['ids'] );
+					$hash_groups[] = array(
+						'sha256'         => $h,
+						'size_bytes'     => $g['size_bytes'],
+						'attachment_ids' => $g['ids'],
+					);
+				}
+			}
+			usort( $hash_groups, array( __CLASS__, 'cmp_groups' ) );
 		}
-		usort( $hash_groups, array( __CLASS__, 'cmp_groups' ) );
+
+		$unreadable = array();
+		foreach ( $state['unread'] as $id => $reason ) {
+			$unreadable[] = array(
+				'attachment_id' => (int) $id,
+				'reason'        => $reason,
+			);
+		}
 		usort(
 			$unreadable,
 			static function ( $a, $b ) {
 				return $a['attachment_id'] - $b['attachment_id'];
 			}
 		);
-		sort( $skipped_large );
-		sort( $unhashed );
+		$large = array_values( array_unique( array_map( 'intval', $state['large'] ) ) );
+		sort( $large );
+		$pending  = isset( $state['qpos'] ) ? array_slice( $state['queue'], (int) $state['qpos'] ) : $state['queue'];
+		$unhashed = array();
+		if ( $complete ) {
+			foreach ( $pending as $q ) {
+				$unhashed[] = (int) $q[0];
+			}
+			sort( $unhashed );
+		}
 
 		return array(
 			'generated_at'          => gmdate( 'c' ),
-			'scanned'               => count( $rows ),
-			'omitted_forbidden'     => $omitted,
-			'after_id'              => $after_id,
-			'next_after_id'         => $truncated ? $last_id : null,
-			'truncated'             => $truncated,
-			'hashed_files'          => $hashed,
-			'hashed_bytes'          => $hashed_bytes,
-			'hash_budget_exhausted' => $budget_hit,
+			'scan_id'               => $complete ? '' : $scan_id,
+			'complete'              => (bool) $complete,
+			'phase'                 => $complete ? 'done' : $state['phase'],
+			'calls'                 => (int) $state['calls'],
+			'scanned'               => (int) $state['scanned'],
+			'omitted_forbidden'     => (int) $state['omitted'],
+			'truncated'             => ! $complete,
+			'next_after_id'         => null,
+			'hashed_files'          => count( $state['hashes'] ),
+			'hashed_bytes'          => (int) $state['hashed_b'],
+			'hash_budget_exhausted' => ! $complete && 'hash' === $state['phase'],
+			'unhashed_count'        => count( $pending ),
 			'unhashed'              => $unhashed,
-			'skipped_large'         => $skipped_large,
-			'scope'                 => 'Groups cover this page of the scan only; use a max_scan at least the library size for complete results.',
+			'skipped_large'         => $large,
+			'scope'                 => $complete
+				? 'Library-wide: every attachment visible to you was considered; files whose size collides with another file were hashed.'
+				: 'Scan in progress: repeat the call with scan_id until complete is true; groups are reported only when complete.',
 			'by_filename'           => $filename_groups,
 			'by_hash'               => $hash_groups,
 			'unreadable'            => $unreadable,
 		);
+	}
+
+	/**
+	 * @return array|WP_Error
+	 */
+	private static function load_scan( $scan_id ) {
+		if ( ! preg_match( '/^[0-9]{14}-[A-Za-z0-9]{8}-u[0-9]+$/', $scan_id ) ) {
+			return self::invalid( 'scan_id', 'Invalid scan_id.' );
+		}
+		$state = get_option( self::DUP_STATE_PREFIX . $scan_id, null );
+		if ( ! is_array( $state ) ) {
+			return new WP_Error( 'asc_scan_not_found', 'Unknown or finished scan_id; start a new scan.', array( 'status' => 404 ) );
+		}
+		if ( (int) $state['user_id'] !== get_current_user_id() ) {
+			// Scan state reflects one user's visibility; never share it.
+			return new WP_Error( 'asc_scan_forbidden', 'This scan belongs to another user.', array( 'status' => 403 ) );
+		}
+		if ( time() - (int) $state['created'] > self::DUP_STATE_TTL ) {
+			delete_option( self::DUP_STATE_PREFIX . $scan_id );
+			return new WP_Error( 'asc_scan_expired', 'This scan expired; start a new scan.', array( 'status' => 410 ) );
+		}
+		return $state;
+	}
+
+	/**
+	 * @return true|WP_Error
+	 */
+	private static function save_scan( $scan_id, array $state ) {
+		$key = self::DUP_STATE_PREFIX . $scan_id;
+		$ok  = false === get_option( $key, false ) ? add_option( $key, $state, '', 'no' ) : update_option( $key, $state, false );
+		$chk = $ok ? get_option( $key, null ) : null;
+		if ( ! is_array( $chk ) || (int) $chk['last_id'] !== (int) $state['last_id'] || ( isset( $state['qpos'] ) && (int) $chk['qpos'] !== (int) $state['qpos'] ) ) {
+			delete_option( $key );
+			return new WP_Error( 'asc_scan_state_failed', 'Could not store the duplicate scan progress (the library may be too large for this database configuration).', array( 'status' => 507 ) );
+		}
+		return true;
+	}
+
+	/**
+	 * Drop the state of an unfinished scan (e.g. when a caller gives up).
+	 */
+	public static function abandon_scan( $scan_id ) {
+		if ( preg_match( '/^[0-9]{14}-[A-Za-z0-9]{8}-u[0-9]+$/', (string) $scan_id ) ) {
+			delete_option( self::DUP_STATE_PREFIX . $scan_id );
+		}
+	}
+
+	/**
+	 * Remove expired scan states.
+	 */
+	/**
+	 * Remove expired scan states (age read from the option name, without
+	 * loading the state) and any earlier scan by the same user: one live scan
+	 * per user bounds storage.
+	 */
+	private static function prune_scans( $user_id ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$names = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( self::DUP_STATE_PREFIX ) . '%' ) );
+		foreach ( (array) $names as $name ) {
+			$id      = substr( (string) $name, strlen( self::DUP_STATE_PREFIX ) );
+			$created = strtotime( substr( $id, 0, 4 ) . '-' . substr( $id, 4, 2 ) . '-' . substr( $id, 6, 2 ) . ' ' . substr( $id, 8, 2 ) . ':' . substr( $id, 10, 2 ) . ':' . substr( $id, 12, 2 ) . ' UTC' );
+			if ( ! $created || time() - $created > self::DUP_STATE_TTL || '-u' . (int) $user_id === substr( $id, strrpos( $id, '-u' ) ) ) {
+				delete_option( $name );
+			}
+		}
 	}
 
 	/**

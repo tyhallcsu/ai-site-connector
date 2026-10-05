@@ -12,7 +12,12 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   and `limitations`, so partial scans (truncation, partial posts, hash budget,
   unreadable or oversized files, scan-window-only duplicate pairing, omitted
   self-test checks) are never mistaken for a complete audit; the CLI warns for
-  each incomplete file. Cross-window duplicate detection is tracked in #88.
+  each incomplete file.
+- Duplicate media detection is library-wide and resumable (#88): calls
+  return `scan_id` / `complete`, progress is kept server-side per caller,
+  and `by_filename` / `by_hash` pair files across the whole library (no more
+  per-window pairing). `after_id` is no longer supported (400); the CLI and
+  the export bundle drive scans to completion.
 
 ## [0.11.0] - 2026-10-05
 

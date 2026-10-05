@@ -44,6 +44,10 @@ class AI_Site_Connector_Export_Bundle {
 		'mcp-self-test.json',
 	);
 
+	/** Bounds for driving the resumable duplicate scan in one export. */
+	const DUP_MAX_CALLS   = 20;
+	const DUP_MAX_SECONDS = 20;
+
 	/** Default and maximum items collected per paginated section. */
 	const DEFAULT_MAX_ITEMS = 1000;
 	const MAX_ITEMS         = 5000;
@@ -205,12 +209,34 @@ class AI_Site_Connector_Export_Bundle {
 					array( 'summary', 'posts_scanned', 'links_examined', 'external_ignored', 'non_http_ignored', 'omitted_forbidden', 'partial_posts' )
 				);
 			case 'duplicate-media.json':
-				// The service's own scan window (not max_items): duplicates only
-				// pair within one window, so a small window hides pairs.
-				$res = AI_Site_Connector_Media_Audit::duplicates( array( 'max_scan' => AI_Site_Connector_Media_Audit::DUP_DEFAULT_SCAN ) );
-				if ( is_wp_error( $res ) ) {
-					return $res;
+				// Drive the resumable library-wide scan, bounded per export.
+				$res     = null;
+				$scan_id = '';
+				$started = microtime( true );
+				for ( $call = 0; $call < self::DUP_MAX_CALLS; $call++ ) {
+					$res = AI_Site_Connector_Media_Audit::duplicates( array( 'scan_id' => $scan_id ) );
+					if ( is_wp_error( $res ) ) {
+						return $res;
+					}
+					$scan_id = $res['scan_id'];
+					if ( $res['complete'] || microtime( true ) - $started > self::DUP_MAX_SECONDS ) {
+						break;
+					}
 				}
+				if ( ! $res['complete'] ) {
+					AI_Site_Connector_Media_Audit::abandon_scan( $scan_id );
+					// Progress fields depend on wall-clock speed; a fixed stub
+					// keeps the manifest deterministic.
+					$res = array(
+						'complete'    => false,
+						'truncated'   => true,
+						'scope'       => 'Scan did not complete within this export\'s bounds; run wp ai-connector media-duplicates for a complete result.',
+						'by_filename' => array(),
+						'by_hash'     => array(),
+						'unreadable'  => array(),
+					);
+				}
+				unset( $res['scan_id'], $res['calls'] );
 				return array(
 					'data'      => $res,
 					'truncated' => (bool) $res['truncated'],
@@ -331,7 +357,7 @@ class AI_Site_Connector_Export_Bundle {
 				$scope = 'Attachments only, offline checks against stored metadata and files.';
 				break;
 			case 'duplicate-media.json':
-				$scope = sprintf( 'One scan window of up to %d attachments in ID order; duplicates are only paired within the window (see issue #88).', AI_Site_Connector_Media_Audit::DUP_DEFAULT_SCAN );
+				$scope = 'Library-wide duplicate scan (filenames and SHA-256 of size collisions) when complete; an export stops after a bounded number of scan calls and then reports no groups.';
 				if ( ! empty( $data['hash_budget_exhausted'] ) ) {
 					$limits[] = 'hash_budget_exhausted';
 				}
@@ -344,8 +370,8 @@ class AI_Site_Connector_Export_Bundle {
 				if ( ! empty( $data['unreadable'] ) ) {
 					$limits[] = 'unreadable_files';
 				}
-				if ( $truncated ) {
-					$limits[] = 'pairs_within_scan_window_only';
+				if ( empty( $data['complete'] ) ) {
+					$limits[] = 'scan_incomplete';
 				}
 				break;
 			case 'broken-links.json':

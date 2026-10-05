@@ -15,6 +15,9 @@
 #   bin/dev-site.sh wp ARGS...             run WP-CLI against the dev site
 #   bin/dev-site.sh with-admin -- CMD...   run CMD with ASC_DEV_URL, ASC_DEV_ADMIN_USER and
 #                                          ASC_DEV_ADMIN_PASSWORD set (never printed)
+#   bin/dev-site.sh audit [OUT_DIR]        headless audit of every admin tab (desktop + phone);
+#                                          exits 1 on findings. Needs node; installs
+#                                          playwright into ASC_DEV_CACHE on first use
 #   bin/dev-site.sh backups                list database snapshots (one is taken before
 #                                          every deploy and rollback; newest 10 kept)
 #   bin/dev-site.sh restore-db FILE --yes-overwrite-dev-db   restore a snapshot
@@ -38,6 +41,7 @@ PLUGIN_SLUG=ai-site-connector
 ADMIN_USER=asc-dev-admin
 RELEASE_REPO=tyhallcsu/ai-site-connector
 KEEP_BACKUPS=10
+PLAYWRIGHT_VERSION=1.55.0
 WORK_DIR=""
 
 export ASC_DEV_PORT="$PORT"
@@ -349,6 +353,21 @@ cmd_with_admin() {
 	ASC_DEV_URL="$SITE_URL" ASC_DEV_ADMIN_USER="$ADMIN_USER" ASC_DEV_ADMIN_PASSWORD="$password" "$@"
 }
 
+cmd_audit() {
+	require_running
+	command -v node >/dev/null 2>&1 || die "node is required for audit"
+	local cache="${ASC_DEV_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/asc-dev-site}" out="${1:-}"
+	if [ ! -d "$cache/node_modules/playwright" ]; then
+		note "installing playwright@$PLAYWRIGHT_VERSION into $cache (first use)"
+		npm install --prefix "$cache" --no-audit --no-fund --silent "playwright@$PLAYWRIGHT_VERSION" >&2
+	fi
+	(cd "$cache" && npx --no-install playwright install chromium-headless-shell >&2)
+	if [ -z "$out" ]; then
+		out="$(mktemp -d "${TMPDIR:-/tmp}/asc-dev-audit.XXXXXX")"
+	fi
+	cmd_with_admin -- env NODE_PATH="$cache/node_modules" node "$ROOT_DIR/bin/dev-site/admin-audit.cjs" "$out"
+}
+
 cmd_destroy() {
 	[ "${1:-}" = "--yes-destroy-dev-data" ] \
 		|| die "destroy deletes the dev database, uploads, artifacts and deployment history. Re-run with --yes-destroy-dev-data."
@@ -374,6 +393,7 @@ case "$command" in
 		wp_cli "$@"
 		;;
 	with-admin) cmd_with_admin "$@" ;;
+	audit) cmd_audit "$@" ;;
 	backups)
 		require_running
 		in_web sh -c "ls -lt '$STATE/backups/' | tail -n +2"

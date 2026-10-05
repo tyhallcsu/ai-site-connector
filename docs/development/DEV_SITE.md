@@ -65,6 +65,11 @@ writable `TMPDIR` (e.g. the session scratchpad).
   `bin/dev-site/mu-plugins/asc-dev-mail-sink.php`.
 - `debug-log` — PHP notices/warnings (WP_DEBUG log).
 - `logs` — Apache access/error log stream.
+- `audit [OUT_DIR]` — headless Chromium audit of all 11 admin tabs at 1280 px
+  and 375 px: page overflow, unlabeled controls, duplicate ids, PHP warning
+  text, JS errors, HTTP >= 400. Screenshots + `report.json` go to OUT_DIR;
+  exit 1 means findings. Installs `playwright` into `ASC_DEV_CACHE`
+  (default `~/.cache/asc-dev-site`) on first use.
 - `with-admin -- CMD` — runs CMD with `ASC_DEV_URL`, `ASC_DEV_ADMIN_USER` and
   `ASC_DEV_ADMIN_PASSWORD` in its environment, for headless browser journeys.
   Use an isolated headless browser context, never a personal browser profile.

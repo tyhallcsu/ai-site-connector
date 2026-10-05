@@ -423,6 +423,10 @@ wp_cli ai-connector status --user=admin --path="$WP_DIR" | grep -Eq 'connector[[
 wp_cli ai-connector enable --yes --user=admin --path="$WP_DIR" >/dev/null
 status="$(curl -sS -o /dev/null -w '%{http_code}' --user "$AI_USER:$APP_PASSWORD" "$WP_URL/wp-json/ai-site-connector/v1/site-info")"
 [ "$status" = "200" ] || { echo "site-info after enable returned $status, expected 200" >&2; exit 1; }
+if wp_cli ai-connector content-inventory --path="$WP_DIR" >/dev/null 2>&1; then
+	echo "content-inventory ran without --user (would print an empty result)" >&2
+	exit 1
+fi
 if wp_cli ai-connector content-inventory --user=admin --post_type=attachment --path="$WP_DIR" >/dev/null 2>&1; then
 	echo "content-inventory accepted post_type=attachment" >&2
 	exit 1

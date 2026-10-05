@@ -6,6 +6,24 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- MCP `wp_create_post` and `wp_update_post` now require the `write_content`
+  tool permission and honour read-only mode, like every other write path;
+  previously they wrote through core routes with only the user's WordPress
+  capabilities. Clients that relied on them must enable `write_content`
+  (or use `wp_update_content`).
+- WP-CLI `content-inventory`, `broken-links`, `media-audit` and
+  `media-duplicates` now require `--user` instead of printing an empty
+  result as nobody.
+- `/.well-known/ai-site-connector.json` reports `status: disabled` while the
+  site-wide switch is off.
+- `GET /content/snapshots/<id>` also requires the `read_content` tool
+  permission.
+- Docs: security model and route docblock list the content update routes and
+  snapshot data retention; README SEO section; README images use absolute
+  URLs so they render from the installed plugin too.
+
 ## [0.12.0] - 2026-10-05
 
 Adds the first general-purpose write tool — safe content update with

@@ -656,6 +656,7 @@ class AI_Site_Connector_CLI {
 	 *   wp ai-connector content-inventory --user=admin --post_type=page --format=csv --all > pages.csv
 	 */
 	public function content_inventory( $args, $assoc ) {
+		self::require_user_context();
 		$format = self::format( $assoc, array( 'table', 'csv', 'json' ) );
 		$query  = array(
 			'post_type'       => isset( $assoc['post_type'] ) ? (string) $assoc['post_type'] : '',
@@ -737,6 +738,7 @@ class AI_Site_Connector_CLI {
 	 *   wp ai-connector media-audit --user=admin --format=csv > media-audit.csv
 	 */
 	public function media_audit( $args, $assoc ) {
+		self::require_user_context();
 		$format = self::format( $assoc, array( 'table', 'csv', 'json' ) );
 		$result = AI_Site_Connector_Media_Audit::audit(
 			array(
@@ -787,6 +789,7 @@ class AI_Site_Connector_CLI {
 	 *   wp ai-connector media-duplicates --user=admin --format=json
 	 */
 	public function media_duplicates( $args, $assoc ) {
+		self::require_user_context();
 		$format = self::format( $assoc, array( 'table', 'json' ) );
 		$scan_id = '';
 		$calls   = 0;
@@ -857,6 +860,7 @@ class AI_Site_Connector_CLI {
 	 *   wp ai-connector broken-links --user=admin --all --format=csv > broken-links.csv
 	 */
 	public function broken_links( $args, $assoc ) {
+		self::require_user_context();
 		$format = self::format( $assoc, array( 'table', 'csv', 'json' ) );
 		$query  = array(
 			'post_type'   => isset( $assoc['post_type'] ) ? (string) $assoc['post_type'] : '',
@@ -1072,6 +1076,16 @@ class AI_Site_Connector_CLI {
 			return;
 		}
 		WP_CLI::success( sprintf( 'AI Site Connector enabled on %s.', get_site_url() ) );
+	}
+
+	/**
+	 * Per-user results need a user: without --user, WordPress runs as
+	 * nobody and these commands would print an empty, plausible-looking result.
+	 */
+	private static function require_user_context() {
+		if ( ! get_current_user_id() ) {
+			WP_CLI::error( 'Run with --user=<login>: results are limited to what that user may see.' );
+		}
 	}
 
 	/**

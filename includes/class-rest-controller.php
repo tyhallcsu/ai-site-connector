@@ -27,6 +27,10 @@
  *  - POST /cache/purge               (auth, manage_options + purge_cache)
  *  - POST /media/sideload            (auth, upload_files + upload_media)
  *  - POST /credentials/rotate-password (auth, manage_options)
+ *  - POST /content/update            (auth, edit_posts; real writes need write_content,
+ *                                     SEO fields also update_seo; dry-run by default)
+ *  - POST /content/rollback          (as above; dry-run by default)
+ *  - GET  /content/snapshots/<id>    (auth, edit_post + read_content)
  *
  * One-time-token endpoint
  *  - GET  /connection-pack/<token>   (token IS the credential; 5-min single-use)
@@ -1311,6 +1315,10 @@ class AI_Site_Connector_REST_Controller {
 	}
 
 	public static function route_content_snapshots( WP_REST_Request $request ) {
+		$check = AI_Site_Connector_Permissions::require_permission( AI_Site_Connector_Permissions::TOOL_READ_CONTENT );
+		if ( is_wp_error( $check ) ) {
+			return $check;
+		}
 		$res = AI_Site_Connector_Content_Update::snapshots( (int) $request->get_param( 'id' ) );
 		return is_wp_error( $res ) ? $res : rest_ensure_response( $res );
 	}

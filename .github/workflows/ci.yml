@@ -115,6 +115,7 @@ jobs:
             includes/class-admin-page.php \
             includes/class-wp-cli.php \
             includes/class-seo-abstraction.php \
+            includes/class-content-inventory.php \
             includes/class-diagnostics.php \
             assets/admin.css \
             assets/admin.js \

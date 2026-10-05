@@ -308,6 +308,7 @@ All endpoints under `/wp-json/ai-site-connector/v1/`. Permission-gated tools suc
 | `GET /export/recent-changes`      | Authenticated, `edit_posts`       | Posts + pages newer than `since`, with content hash for diffing. |
 | `GET /export/page/<id>`           | Authenticated, `edit_posts`       | Single post/page body with featured-image reference. |
 | `GET /export/site-manifest`       | Authenticated, `manage_options`   | Counts + recent + detected plugins in one call. |
+| `GET /export/content-inventory`   | Authenticated, `edit_posts`       | Paginated posts/pages/CPT inventory with terms and SEO fields; JSON or CSV. See below. |
 
 ### Write and credential administration
 
@@ -340,6 +341,16 @@ Read-only diagnostics, gated by `manage_options` + the `view_diagnostics` tool p
 | `/diagnostics/redirects` | `wp_redirects` | `wp ai-connector redirects` | Exports redirects from Rank Math, Redirection, AIOSEO, or Yoast Premium — one row per stored redirect (`id, source, target, status_code, match_type, enabled, plugin, additional_sources[]`). `?limit=1..1000&offset=`; `total`/`next_offset` count stored redirects. An empty plugin table never hides another plugin's data; falls back to `plugin_detected:"none"`. |
 
 MCP tool errors (denied, invalid input) are returned as `isError: true` results with `{status, code, message}`.
+
+### Content inventory
+
+`GET /export/content-inventory` · MCP `wp_content_inventory` · `wp ai-connector content-inventory` (gated by the `export_manifest` permission).
+
+- One row per post/page/CPT item: `id, post_type, title, slug, status, author_id, created_gmt, modified_gmt, permalink, excerpt, featured_image{id,url}, parent_id, menu_order, terms{taxonomy:[{id,slug,name}]}, seo{title,description,canonical,noindex}`.
+- Filters: `post_type` and `status` (comma-separated; default all admin-visible types except attachments, status `any`), `modified_after` / `modified_before` (UTC, exclusive), `limit` 1–500 (default 100), `offset`, `include_terms`, `include_seo`.
+- Ordered by ID; `total` and `next_offset` for paging (`--all` in WP-CLI walks every page).
+- `format=csv` returns `{format:"csv", csv:"…"}` with the same pagination fields; cells starting with `= + - @` are prefixed with `'` to block spreadsheet formula injection.
+- Only items the caller can `edit_post` are listed; the rest are counted in `omitted_forbidden`.
 
 ### SEO plugin abstraction (`AI_Site_Connector_SEO`)
 

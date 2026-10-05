@@ -14,6 +14,15 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `wp_media_duplicates`, `wp ai-connector media-duplicates` — filename and
   SHA-256 groups, size-collision-first hashing within byte budgets, resumable
   bounded scan, uploads-confined file access, never deletes.
+- Broken internal link scanner (#66): `GET /content/broken-links`, MCP
+  `wp_broken_links`, `wp ai-connector broken-links` — resolved offline
+  against the database and uploads (never makes HTTP requests).
+
+### Changed
+
+- Content inventory and the link scanner scope their queries to the caller's
+  own posts when the caller cannot edit others' posts, so totals no longer
+  count other users' drafts/private posts.
 
 ## [0.10.0] - 2026-10-05
 

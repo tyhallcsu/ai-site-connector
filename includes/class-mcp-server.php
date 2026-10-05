@@ -29,6 +29,7 @@
  *   wp_content_inventory — paginated posts/pages/CPT inventory
  *   wp_media_audit       — media SEO/hygiene audit
  *   wp_media_duplicates  — duplicate media by filename and hash
+ *   wp_broken_links      — offline broken internal link scan
  *
  * Constants:
  *   AI_SITE_CONNECTOR_MCP_DISABLE — when true, the route is not registered.
@@ -294,6 +295,21 @@ class AI_Site_Connector_MCP_Server {
 				),
 			),
 			array(
+				'name'        => 'wp_broken_links',
+				'description' => 'Find broken internal links in post/page/CPT content, resolved offline (no HTTP requests; external links ignored). Optional: post_type, status (default publish), limit (posts, 1-200, default 50), offset, max_links (1-5000), only_broken (default true). Returns next_offset. Read-only.',
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'post_type'   => array( 'type' => 'string' ),
+						'status'      => array( 'type' => 'string' ),
+						'limit'       => array( 'type' => 'integer' ),
+						'offset'      => array( 'type' => 'integer' ),
+						'max_links'   => array( 'type' => 'integer' ),
+						'only_broken' => array( 'type' => 'boolean' ),
+					),
+				),
+			),
+			array(
 				'name'        => 'wp_redirects',
 				'description' => 'Detect redirect plugins (Rank Math, Redirection, AIOSEO, Yoast Premium) and export their redirects. Optional: limit (1-1000, default 500), offset. Read-only; admin only.',
 				'inputSchema' => array(
@@ -444,6 +460,8 @@ class AI_Site_Connector_MCP_Server {
 				return self::dispatch_checked( 'GET', '/media/audit', self::pick( $args, array( 'limit', 'offset', 'mime', 'only_issues', 'max_dimension', 'max_bytes' ) ) );
 			case 'wp_media_duplicates':
 				return self::dispatch_checked( 'GET', '/media/duplicates', self::pick( $args, array( 'max_scan', 'after_id', 'max_file_bytes' ) ) );
+			case 'wp_broken_links':
+				return self::dispatch_checked( 'GET', '/content/broken-links', self::pick( $args, array( 'post_type', 'status', 'limit', 'offset', 'max_links', 'only_broken' ) ) );
 			case 'wp_redirects':
 				return self::dispatch_checked( 'GET', '/diagnostics/redirects', self::pick( $args, array( 'limit', 'offset' ) ) );
 			default:

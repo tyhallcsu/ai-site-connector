@@ -73,6 +73,7 @@ class AI_Site_Connector_Plugin {
 			WP_CLI::add_command( 'ai-connector content-inventory', array( 'AI_Site_Connector_CLI', 'content_inventory' ) );
 			WP_CLI::add_command( 'ai-connector media-audit', array( 'AI_Site_Connector_CLI', 'media_audit' ) );
 			WP_CLI::add_command( 'ai-connector media-duplicates', array( 'AI_Site_Connector_CLI', 'media_duplicates' ) );
+			WP_CLI::add_command( 'ai-connector broken-links', array( 'AI_Site_Connector_CLI', 'broken_links' ) );
 		}
 	}
 

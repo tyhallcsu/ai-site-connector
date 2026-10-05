@@ -58,6 +58,25 @@ class AI_Site_Connector_Content_Inventory {
 	}
 
 	/**
+	 * Author restriction for list queries: callers who cannot edit others'
+	 * items of every requested type only see their own, so totals and counts
+	 * never reveal other users' drafts or private posts.
+	 *
+	 * @param string[] $types Post types being queried.
+	 * @return int[] Value for WP_Query `author__in` (empty = no restriction;
+	 *               array( 0 ) matches nothing for an anonymous caller).
+	 */
+	public static function author_scope( array $types ) {
+		foreach ( $types as $type ) {
+			$obj = get_post_type_object( $type );
+			if ( ! $obj || ! current_user_can( $obj->cap->edit_others_posts ) ) {
+				return array( (int) get_current_user_id() );
+			}
+		}
+		return array();
+	}
+
+	/**
 	 * Run the inventory query.
 	 *
 	 * @param array $args {
@@ -145,6 +164,7 @@ class AI_Site_Connector_Content_Inventory {
 
 		$query = new WP_Query(
 			array(
+				'author__in'             => self::author_scope( $types ),
 				'post_type'              => $types,
 				'post_status'            => $statuses,
 				'posts_per_page'         => $limit,

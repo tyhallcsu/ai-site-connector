@@ -329,6 +329,35 @@ class AI_Site_Connector_REST_Controller {
 				),
 			),
 			array(
+				'name'             => 'broken_internal_links',
+				'permission'       => AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST,
+				'method'           => 'GET',
+				'route'            => '/content/broken-links',
+				'description'      => 'Scan post/page/CPT content for internal links and flag broken ones (missing, trashed or unpublished targets, unknown paths, missing uploads, malformed URLs). Resolved offline against the database and uploads directory — never makes HTTP requests; external links are ignored. Paginated by post. Read-only.',
+				'risk_level'       => 'read',
+				'read_only'        => true,
+				'supports_dry_run' => false,
+				'input_schema'     => array(
+					'type'       => 'object',
+					'properties' => array(
+						'post_type'   => array( 'type' => 'string' ),
+						'status'      => array( 'type' => 'string' ),
+						'limit'       => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => AI_Site_Connector_Link_Scanner::MAX_LIMIT ),
+						'offset'      => array( 'type' => 'integer', 'minimum' => 0 ),
+						'max_links'   => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => AI_Site_Connector_Link_Scanner::MAX_LINKS ),
+						'only_broken' => array( 'type' => 'boolean' ),
+					),
+				),
+				'output_schema'    => array(
+					'type'       => 'object',
+					'properties' => array(
+						'summary'     => array( 'type' => 'object' ),
+						'next_offset' => array( 'type' => array( 'integer', 'null' ) ),
+						'items'       => array( 'type' => 'array' ),
+					),
+				),
+			),
+			array(
 				'name'             => 'mcp_self_test',
 				'permission'       => AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS,
 				'method'           => 'GET',
@@ -654,6 +683,49 @@ class AI_Site_Connector_REST_Controller {
 						'minimum' => 1,
 						'maximum' => AI_Site_Connector_Media_Audit::DUP_MAX_FILE_BYTES,
 						'default' => AI_Site_Connector_Media_Audit::DUP_MAX_FILE_BYTES,
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/content/broken-links',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'route_broken_links' ),
+				'permission_callback' => array( __CLASS__, 'auth_edit_posts' ),
+				'args'                => array(
+					'post_type'   => array(
+						'type'        => 'string',
+						'description' => 'Comma-separated post types. Default: all content-inventory types.',
+						'default'     => '',
+					),
+					'status'      => array(
+						'type'        => 'string',
+						'description' => 'Comma-separated statuses of the posts to scan, or "any". Default: publish.',
+						'default'     => 'publish',
+					),
+					'limit'       => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => AI_Site_Connector_Link_Scanner::MAX_LIMIT,
+						'default' => AI_Site_Connector_Link_Scanner::DEFAULT_LIMIT,
+					),
+					'offset'      => array(
+						'type'    => 'integer',
+						'minimum' => 0,
+						'default' => 0,
+					),
+					'max_links'   => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => AI_Site_Connector_Link_Scanner::MAX_LINKS,
+						'default' => AI_Site_Connector_Link_Scanner::MAX_LINKS,
+					),
+					'only_broken' => array(
+						'type'    => 'boolean',
+						'default' => true,
 					),
 				),
 			)
@@ -1018,6 +1090,24 @@ class AI_Site_Connector_REST_Controller {
 				'max_scan'       => (int) $request->get_param( 'max_scan' ),
 				'after_id'       => (int) $request->get_param( 'after_id' ),
 				'max_file_bytes' => (int) $request->get_param( 'max_file_bytes' ),
+			)
+		);
+		return is_wp_error( $res ) ? $res : rest_ensure_response( $res );
+	}
+
+	public static function route_broken_links( WP_REST_Request $request ) {
+		$check = AI_Site_Connector_Permissions::require_permission( AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST );
+		if ( is_wp_error( $check ) ) {
+			return $check;
+		}
+		$res = AI_Site_Connector_Link_Scanner::scan(
+			array(
+				'post_type'   => (string) $request->get_param( 'post_type' ),
+				'status'      => (string) $request->get_param( 'status' ),
+				'limit'       => (int) $request->get_param( 'limit' ),
+				'offset'      => (int) $request->get_param( 'offset' ),
+				'max_links'   => (int) $request->get_param( 'max_links' ),
+				'only_broken' => (bool) $request->get_param( 'only_broken' ),
 			)
 		);
 		return is_wp_error( $res ) ? $res : rest_ensure_response( $res );

@@ -2,6 +2,22 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-05 — M3 merged; M4 (#66) in review
+
+- PR #82 (M3) squash-merged → `4f44c85`; CI run 37343885813 on `a5f154e`:
+  integration 54/54 on WP 5.6, 6.5, 6.8, 6.9, 7.0, 7.1.2. Closed #64 #65.
+- M4 link scanner: first pass 59/59 locally; second-pass review found 4 P2 +
+  3 P3, all fixed with tests: the `<a …>(.*?)</a>` regex hit PCRE's backtrack
+  limit on large/malformed content and silently returned no links (now a
+  linear tag scan; PCRE failure is reported as `extract_failed`); unclosed
+  anchors swallowed the next link; `data-href` matched; archives under a
+  permalink front, `/page/N` and feeds were false "broken"; relative hrefs
+  resolved against home instead of the source post; the first post bypassed
+  `max_links`; totals counted other users' posts (inventory had the same
+  issue — both now scope by author when the caller cannot edit others');
+  CLI `--all` counters were last-page only; NUL bytes in upload paths.
+  Local integration 62/62.
+
 ## 2026-10-05 — v0.10.0 released; M3 (#64/#65) in review
 
 - PR #81 squash-merged → `9c07f10`. Main CI on `9c07f10`: 19/19 check runs

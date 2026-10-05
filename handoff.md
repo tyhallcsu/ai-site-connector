@@ -8,7 +8,7 @@
 
 - Last verified `origin/main`: `9c07f10` (v0.10.0 release prep, PR #81).
 - **Latest release: v0.10.0** (2026-10-05) — tag → `9c07f10`, ZIP sha256 `2783dea6b5383c7dd566ac0cacc57715c3b7a94fc8b0a847e9433dcc873706dd`, verified (checksum, version, contents, clean install + real-updater upgrade from v0.9.1). https://github.com/tyhallcsu/ai-site-connector/releases/tag/v0.10.0
-- Current milestone: **M3** — media SEO audit (#64) + duplicate media (#65) on `feature/media-audit`; reviewed + fixed; PR next.
+- Current milestone: **M4** — broken internal links (#66) on `feature/broken-links`; reviewed + fixed; PR next. M3 merged (#82 → `4f44c85`).
 - Then: M4 (#66 broken links), M5 (#73/#74), M6 (#75 rest: `export`, `enable`/`disable`), M7 (#70 safe content update).
 - A parallel session (Codex) also works in this repo (merged PR #77). Always `git fetch` and check open PRs first.
 
@@ -20,6 +20,7 @@
 | M1 diagnostics + SEO abstraction | #76 | `c7f689b` | run 37338939083: integration 34/34; closed #67 #68 #69 #71 #72 |
 | M2 content inventory | #79 | `2949c89` | run 37339837499: integration 43/43; closed #63 |
 | Export consistency | #80 | `4d948e0` | run 37341039538: integration 46/46 incl. WP 5.6 |
+| M3 media audit + duplicates | #82 | `4f44c85` | run 37343885813: integration 54/54 on WP 5.6–7.1.2; closed #64 #65 |
 | Release 0.10.0 prep + pipeline | #81 | `9c07f10` | run 37342326745: 46/46 on WP 5.6–7.1.2, real-updater upgrade; release run 37342852174 |
 | #59 superseded branch | — | — | branch deleted; evidence in issue comment |
 
@@ -27,11 +28,11 @@
 
 | PR | Branch | State |
 |----|--------|-------|
-| (M3) | feature/media-audit | local, under review |
+| (M4) | feature/broken-links | opening |
 
 ## Open issues
 
-#64 #65 (M3), #66 (M4), #73 #74 (M5), #75 (partial), #70 (M7).
+#66 (M4), #73 #74 (M5), #75 (partial), #70 (M7).
 
 ## How to test locally
 

@@ -8,17 +8,17 @@
 
 | Item | Value |
 |------|-------|
-| Latest `origin/main` | `c255de3` — feat(media): library-wide resumable duplicate scan (#88) (#90) |
+| Latest `origin/main` | `d378e50` — feat(content): safe content update (#87) |
 | Latest published release | **v0.11.0** — tag → `6645155`; https://github.com/tyhallcsu/ai-site-connector/releases/tag/v0.11.0; ZIP sha256 `95b337b122d7ed198ab72b5a9aed90006616953fd7e2568228508ecfbd4086f3`; verified (checksum, versions, contents, clean install, upgrade from published v0.10.0) |
 | Unreleased on main | #89 export coverage reporting, #90 library-wide duplicate scan (closes #88) |
-| Release candidate | 0.12.0 after #87 (M7, #70) merges |
-| Open issues | #70 |
+| Release candidate | **0.12.0** — prep PR `chore/release-0.12.0`; local gates passed |
+| Open issues | none |
 
 ## Open PRs
 
 | PR | Branch | State |
 |----|--------|-------|
-| #87 | `feature/content-update` | M7 / #70. Four second-pass reviews; all 31 findings fixed with tests or documented (`docs/development/M7_REVIEW.md`). Combined suite 86/86 locally on the merged head; awaiting CI on the pushed head, then ready → merge. |
+| (0.12.0 prep) | chore/release-0.12.0 | opening |
 
 ## Completed milestones
 
@@ -35,14 +35,15 @@
 | M6 disable/enable | #85 | `d81b62d` | 71/71 on WP 5.6–7.1.2; closed #75 |
 | v0.11.0 prep | #86 | `6645155` | released v0.11.0 (verified above) |
 | Export coverage reporting | #89 | `1098ee4` | 72/72 on WP 5.6–7.1.2 |
+| M7 safe content update | #87 | `d378e50` | 86/86 on WP 5.6–7.1.2; closed #70; 4 reviews |
 | Library-wide duplicate scan | #90 | `c255de3` | 73/73 on WP 5.6–7.1.2; closed #88; reviewed (1 P1 + 7 P2 + 3 P3 fixed) |
 | #59 superseded branch | — | — | branch deleted; evidence in issue |
 
 ## Next three actions
 
-1. CI on #87's head; mark ready; merge; close #70.
-2. Release 0.12.0 (prep PR → CI → tag merge SHA → verify published ZIP + upgrade from v0.11.0).
-3. Final integration/security/docs audit of the shipped surface; report.
+1. Merge the 0.12.0 prep PR after CI; verify main CI on the merge SHA; tag; verify the published ZIP (checksum, versions, install, upgrade from published v0.11.0).
+2. Final integration/security/docs audit of the shipped surface.
+3. Report; no further ready backlog.
 
 Resume: `cd /Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector && git fetch && gh pr list -R tyhallcsu/ai-site-connector`. If the scratchpad worktree is gone: `git worktree prune`, then add a new worktree for `feature/content-update` outside the parent `ess-custom-plugins` tree.
 

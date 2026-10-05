@@ -6,6 +6,15 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-05
+
+Adds the first general-purpose write tool — safe content update with
+dry-run, snapshot and rollback — off by default. Duplicate detection becomes
+library-wide; export manifests state their coverage. **Breaking for
+duplicate-scan clients:** `after_id` on `/media/duplicates` now returns 400;
+continue scans with `scan_id` until `complete` is true. Tested on WordPress
+5.6 through 7.1.2.
+
 ### Added
 
 - Safe content update (#70): `POST /content/update`, `POST /content/rollback`,

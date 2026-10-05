@@ -295,6 +295,10 @@ All endpoints under `/wp-json/ai-site-connector/v1/`. Permission-gated tools suc
 | `GET /posts`                   | Authenticated, `edit_posts`                | Up to 50 most recent posts |
 | `GET /tools`                   | Any authenticated user                     | MCP tool catalog: name, method, route, permission slug, per-tool allow state for the calling user, last successful MCP request timestamp. |
 | `GET /diagnostics/site-report` | Authenticated, `manage_options`            | Capability report: WP/PHP versions, theme, active plugins, page-builder / SEO / cache plugin detection, REST routes, current-user caps, env limits, cron health, uploads writability. |
+| `GET /diagnostics/self-test`   | Authenticated, `manage_options`            | Pass/warn/fail MCP-surface checks (see [Diagnostics tool surface](#diagnostics-tool-surface)). |
+| `GET /diagnostics/rest-routes` | Authenticated, `manage_options`            | REST route inventory; optional `?namespace=`. |
+| `GET /diagnostics/page-builder`| Authenticated, `manage_options`            | Page builder evidence; optional `?post_ids=` (max 100). |
+| `GET /diagnostics/redirects`   | Authenticated, `manage_options`            | Redirect export; `?limit=1..1000&offset=`. |
 
 ### Exports (read-only snapshots for repo sync)
 
@@ -325,23 +329,30 @@ A separate public discovery file is served at `/.well-known/ai-site-connector.js
 
 ### Diagnostics tool surface
 
-Read-only diagnostic endpoints, all gated by `manage_options` + the `view_diagnostics` tool permission (default-on). All four return structured JSON; none mutate the site.
+Read-only diagnostics, gated by `manage_options` + the `view_diagnostics` tool permission (default-on). Each is available as a REST route, an MCP tool, and a WP-CLI command backed by the same service.
 
-| Endpoint                          | Returns |
-| --------------------------------- | ------- |
-| `/diagnostics/site-report`        | Broad capability snapshot (WP/PHP, plugins, builders, SEO/cache detection, REST status, caps, ini limits, cron). |
-| `/diagnostics/self-test`          | Pass/warn/fail checks tailored to the MCP surface: plugin loaded, REST reachable, MCP route registered, uploads writable, SEO/page-builder detected, audit log present, SEO dry-run invariant. Returns `{checks:[…], summary:{pass,warn,fail}}`. |
-| `/diagnostics/rest-routes`        | Live REST route inventory via `rest_get_server()->get_routes()`. Each entry has `namespace`, `route`, `methods[]`, `args_summary`, `has_permission_callback`. **Never serialises callables.** |
-| `/diagnostics/page-builder`       | Site-level builder evidence (Elementor, Beaver Builder, Divi, Gutenberg block themes, Fusion/Avada, WPBakery, Oxygen, Bricks) plus optional per-post probes via `?post_ids=1,2,3`. |
-| `/diagnostics/redirects`          | Detects Rank Math, Redirection, AIOSEO, Yoast Premium redirect plugins and exports existing redirects (source / target / status_code / match_type). Pagination via `?limit` and `?offset`. Falls back to `plugin_detected:"none"` gracefully. |
+| REST endpoint | MCP tool | WP-CLI | Returns |
+| --- | --- | --- | --- |
+| `/diagnostics/site-report` | — | — | Broad capability snapshot (WP/PHP, plugins, builders, SEO/cache detection, REST status, caps, ini limits, cron). |
+| `/diagnostics/self-test` | `wp_self_test` | `wp ai-connector mcp-self-test` | Pass/warn/fail checks: plugin loaded, REST reachable, MCP route registered, caller capabilities, uploads/export/temp dirs writable, SEO/page-builder detection, audit log, SEO dry-run invariant. `{overall, checks:[…], summary:{pass,warn,fail}}`. Records one audit-log row per REST/MCP call. |
+| `/diagnostics/rest-routes` | `wp_rest_routes` | `wp ai-connector routes` | Route inventory: `namespace`, `route`, `methods[]`, `args` (type/required/enum/description), `has_permission_callback`. Optional `?namespace=wp/v2`. Never serialises callables or arg defaults. |
+| `/diagnostics/page-builder` | `wp_page_builder` | `wp ai-connector page-builder` | Site-level evidence (Elementor, Beaver Builder, Divi, Avada/Fusion, WPBakery, Oxygen, Bricks, block editor) plus per-post evidence for up to 100 `?post_ids=1,2,3`. |
+| `/diagnostics/redirects` | `wp_redirects` | `wp ai-connector redirects` | Exports redirects from Rank Math, Redirection, AIOSEO, or Yoast Premium (`id, source, target, status_code, match_type, enabled, plugin`). `?limit=1..1000&offset=`; `total` for paging; falls back to `plugin_detected:"none"`. |
+
+MCP tool errors (denied, invalid input) are returned as `isError: true` results with `{status, code, message}`.
 
 ### SEO plugin abstraction (`AI_Site_Connector_SEO`)
 
-Internal class — not a REST endpoint. Provides a plugin-neutral surface for reading and (guarded) writing SEO metadata. Detects Rank Math, Yoast, AIOSEO, SEOPress, or `none`.
+Internal service (not a REST endpoint yet) used by the diagnostics and upcoming content tools.
 
-- `AI_Site_Connector_SEO::detect_seo_plugin()`
-- `AI_Site_Connector_SEO::get_seo_meta($post_id)` — pure read; returns plugin-neutral fields (title, description, canonical, og_*, noindex).
-- `AI_Site_Connector_SEO::update_seo_meta($post_id, $data, $dry_run = true)` — **defaults to dry-run**. Real writes require both `$dry_run = false` AND the `update_seo` tool permission enabled (default-OFF). When blocked, returns `{blocked:true, reason:"permission_denied"}` without mutating.
+| Plugin | Read | Write (guarded) |
+| --- | --- | --- |
+| Rank Math, Yoast, SEOPress | title, description, canonical, og_title/description/image, noindex | title, description, canonical, og_title/description/image |
+| AIOSEO 4 | from the `aioseo_posts` table (legacy `_aioseop_*` meta as fallback) | none — reported as `skipped: unsupported_field` |
+| none | native title / excerpt / permalink | none |
+
+- `update_seo_meta($post_id, $data, $dry_run = true)` **defaults to dry-run** and returns a before/after diff. A real write requires `$dry_run = false`, the `update_seo` tool permission (default-OFF), and `edit_post` on the target post. `noindex` is read-only (each plugin encodes robots differently); invalid URLs and unknown fields are skipped, never written.
+- Detection can be overridden with the `ai_site_connector_seo_plugin` filter when several SEO plugins are active.
 
 ---
 

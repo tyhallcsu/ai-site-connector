@@ -2,6 +2,41 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-05 — M0 merged; M1 (PR #76) reconciliation
+
+- PR #78 (M0) squash-merged → `2dd96bc`. CI on head `4839e11`: all 17 jobs
+  green; logs confirm `OK (40 tests, 109 assertions)` and
+  `integration: 3 passed` on WP latest/5.6/6.5/6.8/6.9.
+- A parallel session merged PR #77 (README artwork, docs only) into main at
+  `ee05bd6` during M0. No conflict; merged main into the #76 branch (merge,
+  not rebase, to avoid force-pushing a shared PR branch).
+- PR #76 review findings fixed:
+  - `redirects()`: `if/elseif` chain meant an active Rank Math with no table
+    hid Redirection data; now every present plugin is tried in order and
+    `data_unavailable` lists the skipped ones. Yoast Premium path ignored
+    limit/offset. Added `total`, `enabled`, `id`, `plugin` per row; Rank Math
+    multi-source redirects expand to one row per source; limit capped 1..1000.
+  - SEO abstraction: separate read/write maps. Rank Math robots is a
+    serialized array (read normalised to a `noindex` flag; previously cast to
+    `"Array"`); `noindex` is now read-only everywhere; AIOSEO 4 reads from
+    `aioseo_posts` and refuses writes (legacy meta writes were silently
+    ignored by AIOSEO 4); URL fields validated; per-post `edit_post` check
+    (also for dry runs, which disclose current values); values `wp_slash`ed.
+  - `page-builder`: `post_ids` capped at 100 (REST `maxItems`, 400 beyond),
+    per-post `read_post` check, multisite network plugins, malformed meta safe.
+  - `self-test`: adds export/temp dir checks and caller capabilities (#72
+    criteria), `overall` field, real SEO dry-run against an existing post with
+    before/after meta comparison, no filesystem paths in messages.
+  - `rest-routes`: arg metadata (type/required/enum/description, never
+    defaults), `?namespace=` filter, empty method names from malformed
+    handlers dropped (found by a new test).
+  - Exposed as MCP tools (`wp_self_test`, `wp_rest_routes`, `wp_page_builder`,
+    `wp_redirects`) with MCP-spec `isError` results, and WP-CLI commands
+    (`mcp-self-test`, `routes`, `page-builder`, `redirects`).
+- Local evidence: integration 30 passed / 0 failed; runtime smoke passed incl.
+  WP-CLI JSON/CSV checks; PHPUnit OK (40); phpcs 0 violations; security-grep
+  clean; package smoke passed.
+
 ## 2026-10-05 — Session bootstrap (M0)
 
 State verified (`gh` + `git fetch`):

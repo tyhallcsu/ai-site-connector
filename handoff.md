@@ -1,9 +1,9 @@
 # Handoff — AI Site Connector
 
-**Updated:** 2026-10-05 ~20:20 UTC (14:20 America/Denver) · **Session:** `asc-dev-audit-ship` (dev audit + ship)
+**Updated:** 2026-10-05 ~20:36 UTC (14:36 America/Denver) · **Mode:** owner add-on "continuous low-usage" (single agent, no subagents; new features stay in backlog) · **Session:** `asc-dev-audit-ship` (dev audit + ship)
 **Repo:** tyhallcsu/ai-site-connector (public, standalone — the parent `ess-custom-plugins` dir is not a repo)
 **Primary checkout:** `/Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector` (on `main` @ `16f5816`, 1 behind origin — fast-forward it before use)
-**Session worktree:** `.claude/worktrees/asc-dev-audit-ship` · active branch `feature/dev-site` (owner: this session)
+**Session worktree:** `.claude/worktrees/asc-dev-audit-ship` · branches `feature/dev-site` (PR #100) and `fix/admin-ui-audit` (PR #107), both owned by this session
 **Rules:** `docs/development/OPERATING_BRIEF.md` · **Dev site:** `docs/development/DEV_SITE.md` · **Plan:** `docs/development/ROADMAP.md` · **Log:** `docs/development/WORK_LOG.md`
 
 ## Verified state
@@ -13,7 +13,8 @@
 | `origin/main` | `9112f8e` — design: new plugin icon (#96, Codex session) | `git fetch`; post-merge CI run 37366878299 still queued during a GitHub Actions incident |
 | Latest release | **v0.12.1** → `450fdcd`; ZIP sha256 `768b7064…e021` | `gh release view` digest |
 | Unreleased on main | #95 docs, #96 brand assets (no PHP change) | `git log v0.12.1..origin/main` |
-| Dev site | http://localhost:8790 — local Docker, **deployed `9112f8e`** (origin/main), ZIP sha256 `adc52dc3…fd8c`, 70 files verified | `bin/dev-site.sh status` 20:17 UTC |
+| Dev site | http://localhost:8790 — local Docker, **deployed `9112f8e`** (origin/main; rolled back after a labelled #107 candidate check), 70 files verified | `bin/dev-site.sh status` 20:34 UTC |
+| CI | every run since 19:58 UTC still `queued` (GitHub Actions incident, githubstatus.com) — nothing can merge until it clears | `gh run list` |
 | Remote dev target | none exists — owner decision tracked in #97 | config/registry search |
 
 ## Startup reconciliation (2026-10-05)
@@ -30,13 +31,19 @@
 | #97 | environment | No development WordPress target configured | open — owner decision (remote dev site?) |
 | #98 | enhancement | Persistent local dev site with exact-SHA deploy/rollback | PR #100 (draft) |
 | #99 | investigation | main has no required checks; #96 merged before CI ran | open — needs owner (admin setting) |
-| #101 | enhancement | Byte-reproducible release ZIP | open — ready |
+| #101 | enhancement | Byte-reproducible release ZIP | backlog (not auto-implemented in low-usage mode) |
+| #102 | bug | Permission checkboxes lack accessible names (+ duplicate nonce ids) | PR #107 |
+| #103 | bug | Wide tables overflow on phones (5 tabs) | PR #107 |
+| #104 | bug | Connection Test REST self-test returns to Overview | PR #107 |
+| #105 | bug | Notices render inside the page header | PR #107 |
+| #106 | enhancement | Live sign-in check in wp-admin (CLI self-test parity) | backlog |
 
 ## Open PRs
 
 | PR | Branch | State |
 |----|--------|-------|
-| #100 | `feature/dev-site` | draft; implements #98; local runs pass (up, deploy release, deploy main, refusal, rollback) |
+| #100 | `feature/dev-site` | draft, head `a4d151f`+handoff; implements #98; local runs pass (up, deploy release/main, refusal, rollback, audit); CI queued |
+| #107 | `fix/admin-ui-audit` | draft, head `30c544f`; fixes #102–#105; local: integration 91/91, PHPCS clean, dev audit 0/22 findings (main 10/22); CI queued |
 
 ## Audit coverage
 
@@ -44,16 +51,17 @@
 |------|--------|
 | Dev environment / deploy path | done → #97 #98 #101 |
 | Repo process / CI gates | done → #99 |
-| Fresh install + onboarding UI (headless) | next |
-| Admin tabs, diagnostics, connection test, REST/MCP/CLI parity | not yet |
+| Fresh install + onboarding UI (headless) | done → #104 #105 #106 (wizard → pack w/ live pre-flight ✓ → 8 snippet formats) |
+| Admin tabs: layout, a11y, console/HTTP errors (`bin/dev-site.sh audit`) | done → #102 #103 |
+| Diagnostics, REST/MCP/CLI parity | partial (CLI self-test 6/6 on dev) |
 | Content update preview/rollback on fixtures | not yet |
 | Inventory/export/media/link audits on fixtures | not yet |
 
 ## Next three actions
 
-1. Finish PR #100: commit runbook + fixes, CI green on head (Actions incident permitting), mark ready, merge, re-verify `status` on dev.
-2. Headless Playwright journey on dev: login → AI Site Connector admin → onboarding/connection setup → diagnostics; file issues for real findings.
-3. Pick the next ready issue (#101 or an audit finding), branch from main, draft PR early.
+1. When Actions recovers: confirm main CI on `9112f8e`, then CI on #100 and #107 heads (19 checks each); mark ready; squash-merge #100 then #107 (rebase #107 if handoff conflicts).
+2. After #107 merges: `bin/dev-site.sh deploy` (merge SHA), `bin/dev-site.sh audit` → expect 0 findings; comment evidence on #102–#105.
+3. Next uncovered audit: `bin/dev-site.sh seed` + inventory/link/media/duplicate scans vs the known fixtures; file real findings.
 
 Resume: `cd <worktree> && git fetch && gh pr list -R tyhallcsu/ai-site-connector && bin/dev-site.sh status`
 

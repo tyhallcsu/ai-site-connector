@@ -222,20 +222,50 @@ asc_it(
 );
 
 asc_it(
-	'duplicates: bounded scan resumes with next_after_id; invalid input rejected; no duplicates case',
+	'duplicates: resumable scan pairs identical files across windows (#88); invalid input rejected',
 	function () {
-		$ids = array();
-		for ( $i = 0; $i < 3; $i++ ) {
-			$ids[] = asc_it_attachment( "distinct-{$i}.png", "distinct-bytes-{$i}", array( 'mime' => 'image/png' ) );
-		}
+		$ids   = array();
+		$ids[] = $a = asc_it_attachment( 'cross-a.png', 'CROSS-WINDOW-SAME', array( 'mime' => 'image/png' ) );
+		$ids[] = $c = asc_it_attachment( 'cross-c.png', 'something-else-xx', array( 'mime' => 'image/png' ) );
+		$ids[] = $b = asc_it_attachment( 'cross-b.png', 'CROSS-WINDOW-SAME', array( 'mime' => 'image/png' ) );
 		try {
-			$first = AI_Site_Connector_Media_Audit::duplicates( array( 'max_scan' => 1, 'after_id' => $ids[0] - 1 ) );
-			asc_assert_same( true, $first['truncated'], 'truncated' );
-			asc_assert_same( $ids[0], $first['next_after_id'], 'next_after_id' );
-			$rest = AI_Site_Connector_Media_Audit::duplicates( array( 'after_id' => $ids[0] - 1 ) );
-			asc_assert_same( array(), $rest['by_hash'], 'no hash duplicates' );
-			asc_assert_same( null, $rest['next_after_id'], 'complete scan' );
-			foreach ( array( array( 'max_scan' => 0 ), array( 'max_scan' => 20001 ), array( 'after_id' => -1 ), array( 'max_file_bytes' => 0 ) ) as $bad ) {
+			$scan_id = '';
+			$calls   = 0;
+			do {
+				$res = AI_Site_Connector_Media_Audit::duplicates( array( 'scan_id' => $scan_id, 'max_scan' => 1 ) );
+				asc_assert( ! is_wp_error( $res ), 'scan error: ' . ( is_wp_error( $res ) ? $res->get_error_message() : '' ) );
+				if ( ! $res['complete'] ) {
+					asc_assert_same( array(), $res['by_hash'], 'groups reported before the scan completed' );
+					asc_assert_same( true, $res['truncated'], 'partial result not flagged' );
+					asc_assert( '' !== $res['scan_id'], 'no scan_id to continue' );
+				}
+				$scan_id = $res['scan_id'];
+				asc_assert( ++$calls < 100, 'scan never completed' );
+			} while ( ! $res['complete'] );
+			asc_assert( $calls > 2, 'fixture did not span several windows' );
+			$pair = null;
+			foreach ( $res['by_hash'] as $g ) {
+				if ( in_array( $a, $g['attachment_ids'], true ) ) {
+					$pair = $g['attachment_ids'];
+				}
+			}
+			asc_assert_same( array( $a, $b ), $pair, 'cross-window duplicate not paired' );
+			asc_assert( false === get_option( AI_Site_Connector_Media_Audit::DUP_STATE_PREFIX . $scan_id ), 'scan state left behind' );
+			asc_assert_same( '', $res['scan_id'], 'finished scan still advertises a scan_id' );
+
+			// Another user cannot continue (or read) someone else's scan.
+			$first  = AI_Site_Connector_Media_Audit::duplicates( array( 'max_scan' => 1 ) );
+			$editor = asc_it_user( 'editor' );
+			try {
+				$other = asc_it_as_user( $editor, function () use ( $first ) {
+					return AI_Site_Connector_Media_Audit::duplicates( array( 'scan_id' => $first['scan_id'] ) );
+				} );
+				asc_assert( is_wp_error( $other ) && 'asc_scan_forbidden' === $other->get_error_code(), 'scan shared across users' );
+			} finally {
+				asc_it_delete_user( $editor );
+				AI_Site_Connector_Media_Audit::abandon_scan( $first['scan_id'] );
+			}
+			foreach ( array( array( 'max_scan' => 0 ), array( 'max_scan' => 20001 ), array( 'after_id' => 5 ), array( 'max_file_bytes' => 0 ), array( 'scan_id' => 'nope' ), array( 'scan_id' => '20990101000000-abcdefgh' ) ) as $bad ) {
 				asc_assert( is_wp_error( AI_Site_Connector_Media_Audit::duplicates( $bad ) ), 'accepted ' . wp_json_encode( $bad ) );
 			}
 		} finally {

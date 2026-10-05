@@ -244,7 +244,7 @@ class AI_Site_Connector_REST_Controller {
 				'permission'       => AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS,
 				'method'           => 'GET',
 				'route'            => '/diagnostics/self-test',
-				'description'      => 'Structured pass/warn/fail self-test of the MCP surface — plugin loaded, REST reachable, MCP route registered, uploads writable, SEO/page-builder detected, audit log present, SEO dry-run invariant.',
+				'description'      => 'Structured pass/warn/fail self-test of the MCP surface — plugin loaded, REST reachable, MCP route registered, caller capabilities, uploads/export/temp dirs writable, SEO/page-builder detected, audit log present, SEO dry-run invariant. Site content is not modified; each call records one audit-log row.',
 				'risk_level'       => 'read',
 				'read_only'        => true,
 				'supports_dry_run' => false,
@@ -252,6 +252,7 @@ class AI_Site_Connector_REST_Controller {
 				'output_schema'    => array(
 					'type'       => 'object',
 					'properties' => array(
+						'overall' => array( 'type' => 'string', 'enum' => array( 'pass', 'warn', 'fail' ) ),
 						'checks'  => array( 'type' => 'array' ),
 						'summary' => array( 'type' => 'object' ),
 					),
@@ -262,11 +263,16 @@ class AI_Site_Connector_REST_Controller {
 				'permission'       => AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS,
 				'method'           => 'GET',
 				'route'            => '/diagnostics/rest-routes',
-				'description'      => 'Live REST route inventory via rest_get_server()->get_routes(). Never serialises callables — only echoes has_permission_callback boolean. Read-only.',
+				'description'      => 'Live REST route inventory: namespace, route, methods, args (type/required/enum/description) and whether every endpoint declares a permission callback. Never serialises callables or defaults. Read-only.',
 				'risk_level'       => 'read',
 				'read_only'        => true,
 				'supports_dry_run' => false,
-				'input_schema'     => array(),
+				'input_schema'     => array(
+					'type'       => 'object',
+					'properties' => array(
+						'namespace' => array( 'type' => 'string' ),
+					),
+				),
 				'output_schema'    => array(
 					'type'       => 'object',
 					'properties' => array(
@@ -281,7 +287,7 @@ class AI_Site_Connector_REST_Controller {
 				'permission'       => AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS,
 				'method'           => 'GET',
 				'route'            => '/diagnostics/page-builder',
-				'description'      => 'Page builder detection: site-level always, per-post optional via ?post_ids=. Read-only.',
+				'description'      => 'Page builder detection (Elementor, Beaver Builder, Divi, Avada/Fusion, WPBakery, Oxygen, Bricks, block editor): site-level always, per-post evidence for up to 100 ?post_ids=. Read-only.',
 				'risk_level'       => 'read',
 				'read_only'        => true,
 				'supports_dry_run' => false,
@@ -319,6 +325,8 @@ class AI_Site_Connector_REST_Controller {
 					'type'       => 'object',
 					'properties' => array(
 						'plugin_detected' => array( 'type' => 'string' ),
+						'plugins_present' => array( 'type' => 'array' ),
+						'total'           => array( 'type' => 'integer' ),
 						'count'           => array( 'type' => 'integer' ),
 						'redirects'       => array( 'type' => 'array' ),
 					),
@@ -564,6 +572,13 @@ class AI_Site_Connector_REST_Controller {
 				'methods'             => 'GET',
 				'callback'            => array( __CLASS__, 'route_rest_routes' ),
 				'permission_callback' => array( __CLASS__, 'auth_admin' ),
+				'args'                => array(
+					'namespace' => array(
+						'type'        => 'string',
+						'description' => 'Only return routes in this exact namespace, e.g. wp/v2.',
+						'default'     => '',
+					),
+				),
 			)
 		);
 
@@ -576,9 +591,11 @@ class AI_Site_Connector_REST_Controller {
 				'permission_callback' => array( __CLASS__, 'auth_admin' ),
 				'args'                => array(
 					'post_ids' => array(
-						'type'    => 'array',
-						'items'   => array( 'type' => 'integer' ),
-						'default' => array(),
+						'type'        => 'array',
+						'items'       => array( 'type' => 'integer' ),
+						'maxItems'    => AI_Site_Connector_Diagnostics::PAGE_BUILDER_MAX_POSTS,
+						'description' => 'Optional post IDs to probe for per-post builder evidence (comma-separated or array).',
+						'default'     => array(),
 					),
 				),
 			)
@@ -592,8 +609,17 @@ class AI_Site_Connector_REST_Controller {
 				'callback'            => array( __CLASS__, 'route_redirects' ),
 				'permission_callback' => array( __CLASS__, 'auth_admin' ),
 				'args'                => array(
-					'limit'  => array( 'type' => 'integer', 'default' => 500 ),
-					'offset' => array( 'type' => 'integer', 'default' => 0 ),
+					'limit'  => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => AI_Site_Connector_Diagnostics::REDIRECTS_MAX_LIMIT,
+						'default' => 500,
+					),
+					'offset' => array(
+						'type'    => 'integer',
+						'minimum' => 0,
+						'default' => 0,
+					),
 				),
 			)
 		);
@@ -796,7 +822,7 @@ class AI_Site_Connector_REST_Controller {
 		if ( is_wp_error( $check ) ) {
 			return $check;
 		}
-		return rest_ensure_response( AI_Site_Connector_Diagnostics::rest_routes() );
+		return rest_ensure_response( AI_Site_Connector_Diagnostics::rest_routes( array( 'namespace' => (string) $request->get_param( 'namespace' ) ) ) );
 	}
 
 	public static function route_page_builder( WP_REST_Request $request ) {
@@ -804,10 +830,8 @@ class AI_Site_Connector_REST_Controller {
 		if ( is_wp_error( $check ) ) {
 			return $check;
 		}
-		$args = array(
-			'post_ids' => (array) $request->get_param( 'post_ids' ),
-		);
-		return rest_ensure_response( AI_Site_Connector_Diagnostics::page_builder( $args ) );
+		$res = AI_Site_Connector_Diagnostics::page_builder( array( 'post_ids' => (array) $request->get_param( 'post_ids' ) ) );
+		return is_wp_error( $res ) ? $res : rest_ensure_response( $res );
 	}
 
 	public static function route_redirects( WP_REST_Request $request ) {

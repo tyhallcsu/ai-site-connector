@@ -474,4 +474,158 @@ class AI_Site_Connector_CLI {
 			WP_CLI::halt( 1 );
 		}
 	}
+
+	// === Diagnostics counterparts (#75) — same services as REST/MCP ========
+
+	/**
+	 * Run the MCP-surface self-test (pass/warn/fail checks).
+	 *
+	 * Distinct from `self-test`, which exercises the credential round trip.
+	 * Exits 1 when any check fails. Read-only.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--format=<format>]
+	 * : table|json. Default: table.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *   wp ai-connector mcp-self-test --user=admin --format=json
+	 */
+	public function mcp_self_test( $args, $assoc ) {
+		$result = AI_Site_Connector_Diagnostics::self_test();
+		if ( 'json' === self::format( $assoc, array( 'table', 'json' ) ) ) {
+			WP_CLI::log( wp_json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+		} else {
+			\WP_CLI\Utils\format_items( 'table', $result['checks'], array( 'name', 'status', 'message' ) );
+			WP_CLI::log( sprintf( 'overall=%s pass=%d warn=%d fail=%d', $result['overall'], $result['summary']['pass'], $result['summary']['warn'], $result['summary']['fail'] ) );
+		}
+		if ( 'fail' === $result['overall'] ) {
+			WP_CLI::halt( 1 );
+		}
+	}
+
+	/**
+	 * List registered REST routes. Read-only.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--namespace=<namespace>]
+	 * : Only routes in this exact namespace, e.g. wp/v2.
+	 *
+	 * [--format=<format>]
+	 * : table|csv|json. Default: table.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *   wp ai-connector routes --namespace=ai-site-connector/v1
+	 */
+	public function routes( $args, $assoc ) {
+		$result = AI_Site_Connector_Diagnostics::rest_routes( array( 'namespace' => isset( $assoc['namespace'] ) ? (string) $assoc['namespace'] : '' ) );
+		$format = self::format( $assoc, array( 'table', 'csv', 'json' ) );
+		if ( 'json' === $format ) {
+			WP_CLI::log( wp_json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+			return;
+		}
+		$rows = array();
+		foreach ( $result['routes'] as $r ) {
+			$rows[] = array(
+				'namespace'               => $r['namespace'],
+				'route'                   => $r['route'],
+				'methods'                 => implode( ',', $r['methods'] ),
+				'args'                    => implode( ',', array_keys( (array) $r['args'] ) ),
+				'has_permission_callback' => $r['has_permission_callback'] ? 'yes' : 'no',
+			);
+		}
+		\WP_CLI\Utils\format_items( $format, $rows, array( 'namespace', 'route', 'methods', 'args', 'has_permission_callback' ) );
+	}
+
+	/**
+	 * Detect page builders site-wide and optionally per post. Read-only.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--post_ids=<ids>]
+	 * : Comma-separated post IDs (max 100).
+	 *
+	 * [--format=<format>]
+	 * : table|json. Default: table.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *   wp ai-connector page-builder --post_ids=12,34 --format=json
+	 */
+	public function page_builder( $args, $assoc ) {
+		$result = AI_Site_Connector_Diagnostics::page_builder( array( 'post_ids' => isset( $assoc['post_ids'] ) ? (string) $assoc['post_ids'] : '' ) );
+		if ( is_wp_error( $result ) ) {
+			WP_CLI::error( $result->get_error_message() );
+		}
+		if ( 'json' === self::format( $assoc, array( 'table', 'json' ) ) ) {
+			WP_CLI::log( wp_json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+			return;
+		}
+		$rows = array();
+		foreach ( $result['site']['detected'] as $builder => $on ) {
+			$rows[] = array(
+				'scope'   => 'site',
+				'builder' => $builder,
+				'present' => $on ? 'yes' : 'no',
+			);
+		}
+		foreach ( isset( $result['per_post'] ) ? $result['per_post'] : array() as $post_id => $info ) {
+			$rows[] = array(
+				'scope'   => 'post:' . $post_id,
+				'builder' => isset( $info['error'] ) ? $info['error'] : implode( ',', array_keys( $info['evidence'] ) ),
+				'present' => isset( $info['error'] ) ? '-' : ( empty( $info['evidence'] ) ? 'no' : 'yes' ),
+			);
+		}
+		\WP_CLI\Utils\format_items( 'table', $rows, array( 'scope', 'builder', 'present' ) );
+	}
+
+	/**
+	 * Export redirects from the active redirect plugin. Read-only.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--limit=<n>]
+	 * : 1-1000. Default: 500.
+	 *
+	 * [--offset=<n>]
+	 * : Default: 0.
+	 *
+	 * [--format=<format>]
+	 * : table|csv|json. Default: table.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *   wp ai-connector redirects --format=csv > redirects.csv
+	 */
+	public function redirects( $args, $assoc ) {
+		$result = AI_Site_Connector_Diagnostics::redirects(
+			array(
+				'limit'  => isset( $assoc['limit'] ) ? (int) $assoc['limit'] : 500,
+				'offset' => isset( $assoc['offset'] ) ? (int) $assoc['offset'] : 0,
+			)
+		);
+		$format = self::format( $assoc, array( 'table', 'csv', 'json' ) );
+		if ( 'json' === $format ) {
+			WP_CLI::log( wp_json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+			return;
+		}
+		if ( 'table' === $format ) {
+			WP_CLI::log( sprintf( 'plugin_detected=%s total=%d', $result['plugin_detected'], $result['total'] ) );
+		}
+		\WP_CLI\Utils\format_items( $format, $result['redirects'], array( 'id', 'source', 'target', 'status_code', 'match_type', 'enabled', 'plugin' ) );
+	}
+
+	/**
+	 * Validate --format against an allow-list.
+	 */
+	private static function format( $assoc, array $allowed ) {
+		$format = isset( $assoc['format'] ) ? (string) $assoc['format'] : $allowed[0];
+		if ( ! in_array( $format, $allowed, true ) ) {
+			WP_CLI::error( sprintf( 'Unsupported --format=%s. Use one of: %s.', $format, implode( ', ', $allowed ) ) );
+		}
+		return $format;
+	}
 }

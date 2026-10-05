@@ -5,10 +5,22 @@
  * One internal surface for reading SEO metadata regardless of which SEO
  * plugin is active (Rank Math, Yoast, AIOSEO, SEOPress, or native fallback).
  *
- * Write side is intentionally guarded: `update_seo_meta()` defaults to
- * `$dry_run = true` and consults `AI_Site_Connector_Permissions::tool_allowed()`
- * before performing any real mutation. Real writes require both
- * `$dry_run = false` AND the `update_seo` permission enabled (default OFF).
+ * Support matrix (what is actually implemented, not merely detected):
+ *
+ *   plugin    | read                                  | write (guarded)
+ *   ----------+---------------------------------------+---------------------------------
+ *   rankmath  | all fields (post meta)                | title, description, canonical, og_*
+ *   yoast     | all fields (post meta)                | title, description, canonical, og_*
+ *   seopress  | all fields (post meta)                | title, description, canonical, og_*
+ *   aioseo    | aioseo_posts table, legacy meta       | none (custom table; reported as skipped)
+ *   none      | native fallbacks (title/excerpt/link) | none
+ *
+ * `noindex` is read-only everywhere: each plugin encodes robots directives
+ * differently (Rank Math stores a serialized array), so a plain string write
+ * would corrupt them.
+ *
+ * Writes default to dry-run. A real write requires `$dry_run = false`, the
+ * `update_seo` tool permission (default OFF), and `edit_post` on the target.
  *
  * @package AI_Site_Connector
  */
@@ -20,9 +32,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 class AI_Site_Connector_SEO {
 
 	/**
-	 * Canonical field keys returned from `get_seo_meta()` and accepted by
-	 * `update_seo_meta()`. Pure-plugin-neutral field names — the abstraction
-	 * is responsible for mapping these to per-plugin meta keys.
+	 * Canonical, plugin-neutral field keys returned by `get_seo_meta()` and
+	 * accepted by `update_seo_meta()`.
 	 */
 	const FIELDS = array(
 		'title',
@@ -33,6 +44,9 @@ class AI_Site_Connector_SEO {
 		'og_image',
 		'noindex',
 	);
+
+	/** Fields that hold URLs and are validated with esc_url_raw() on write. */
+	const URL_FIELDS = array( 'canonical', 'og_image' );
 
 	public static function register_hooks() {
 		// Pure service class — no hooks to register. Method here for symmetry
@@ -46,30 +60,48 @@ class AI_Site_Connector_SEO {
 	 * @return string One of 'rankmath' | 'yoast' | 'aioseo' | 'seopress' | 'none'.
 	 */
 	public static function detect_seo_plugin() {
+		$detected = 'none';
 		if ( defined( 'RANK_MATH_VERSION' ) || class_exists( 'RankMath' ) ) {
-			return 'rankmath';
+			$detected = 'rankmath';
+		} elseif ( defined( 'WPSEO_VERSION' ) || class_exists( 'WPSEO_Options' ) ) {
+			$detected = 'yoast';
+		} elseif ( defined( 'AIOSEO_VERSION' ) || function_exists( 'aioseo' ) ) {
+			$detected = 'aioseo';
+		} elseif ( defined( 'SEOPRESS_VERSION' ) ) {
+			$detected = 'seopress';
 		}
-		if ( defined( 'WPSEO_VERSION' ) || class_exists( 'WPSEO_Options' ) ) {
-			return 'yoast';
-		}
-		if ( defined( 'AIOSEO_VERSION' ) || function_exists( 'aioseo' ) ) {
-			return 'aioseo';
-		}
-		if ( defined( 'SEOPRESS_VERSION' ) ) {
-			return 'seopress';
-		}
-		return 'none';
+
+		/**
+		 * Override SEO plugin detection — e.g. to pick the authoritative
+		 * plugin when several are active. Unknown values fall back to 'none'.
+		 *
+		 * @param string $detected One of rankmath|yoast|aioseo|seopress|none.
+		 */
+		$filtered = (string) apply_filters( 'ai_site_connector_seo_plugin', $detected );
+		return in_array( $filtered, array( 'rankmath', 'yoast', 'aioseo', 'seopress', 'none' ), true ) ? $filtered : 'none';
 	}
 
 	/**
-	 * Read SEO metadata for a post in plugin-neutral form.
+	 * Fields this abstraction can write for a plugin.
+	 *
+	 * @param string $plugin Plugin slug from detect_seo_plugin().
+	 * @return string[]
+	 */
+	public static function writable_fields( $plugin ) {
+		return array_keys( array_filter( self::write_map( $plugin ) ) );
+	}
+
+	/**
+	 * Read SEO metadata for a post in plugin-neutral form. Callers are
+	 * responsible for authorising access to the post.
 	 *
 	 * @param int $post_id Post / page / CPT ID.
 	 * @return array {
 	 *   @type string $plugin           Detected plugin name (see detect_seo_plugin()).
 	 *   @type int    $post_id          Echoed back.
-	 *   @type array  $fields           Canonical field => value map. Missing fields are '' (not omitted).
-	 *   @type array  $source_meta_keys Per-canonical-field source meta key, for transparency.
+	 *   @type array  $fields           Canonical field => string value. Missing fields are ''.
+	 *                                  `noindex` is '1' when the post is set to noindex, else ''.
+	 *   @type array  $source_meta_keys Canonical field => where the value came from.
 	 * }
 	 */
 	public static function get_seo_meta( $post_id ) {
@@ -90,26 +122,46 @@ class AI_Site_Connector_SEO {
 			);
 		}
 
-		$map = self::meta_key_map( $plugin );
-		foreach ( self::FIELDS as $field ) {
-			$key = isset( $map[ $field ] ) ? $map[ $field ] : '';
-			if ( '' !== $key ) {
-				$value = (string) get_post_meta( $post_id, $key, true );
-			} else {
-				$value = '';
-			}
-			if ( '' === $value && 'none' === $plugin ) {
-				// Native fallback — use post fields where reasonable.
-				if ( 'title' === $field ) {
-					$value = (string) get_the_title( $post_id );
-				} elseif ( 'description' === $field ) {
-					$value = (string) $post->post_excerpt;
-				} elseif ( 'canonical' === $field ) {
-					$value = (string) get_permalink( $post_id );
+		if ( 'aioseo' === $plugin ) {
+			$row = self::aioseo_row( $post_id );
+			if ( null !== $row ) {
+				$columns = array(
+					'title'          => 'title',
+					'description'    => 'description',
+					'canonical'      => 'canonical_url',
+					'og_title'       => 'og_title',
+					'og_description' => 'og_description',
+					'og_image'       => 'og_image_custom_url',
+					'noindex'        => 'robots_noindex',
+				);
+				foreach ( $columns as $field => $column ) {
+					if ( array_key_exists( $column, $row ) ) {
+						$fields[ $field ] = self::scalar( $row[ $column ] );
+						$source[ $field ] = 'aioseo_posts.' . $column;
+					}
 				}
+				$fields['noindex'] = self::truthy_flag( $fields['noindex'] ) ? '1' : '';
 			}
-			$fields[ $field ] = $value;
-			$source[ $field ] = $key;
+		}
+
+		$map = self::read_map( $plugin );
+		foreach ( self::FIELDS as $field ) {
+			if ( '' !== $fields[ $field ] || empty( $map[ $field ] ) ) {
+				continue;
+			}
+			$raw              = get_post_meta( $post_id, $map[ $field ], true );
+			$fields[ $field ] = 'noindex' === $field ? self::normalize_noindex( $plugin, $raw ) : self::scalar( $raw );
+			$source[ $field ] = $map[ $field ];
+		}
+
+		if ( 'none' === $plugin ) {
+			// Native fallback — what WordPress itself would render.
+			$fields['title']       = (string) get_the_title( $post_id );
+			$fields['description'] = (string) $post->post_excerpt;
+			$fields['canonical']   = (string) get_permalink( $post_id );
+			$source['title']       = 'post_title';
+			$source['description'] = 'post_excerpt';
+			$source['canonical']   = 'permalink';
 		}
 
 		return array(
@@ -126,21 +178,23 @@ class AI_Site_Connector_SEO {
 	 * Behaviour:
 	 *  - `$dry_run = true` (default): never mutates. Returns the diff that
 	 *    *would* be written.
-	 *  - `$dry_run = false` AND the `update_seo` permission is enabled:
-	 *    performs the write via update_post_meta().
-	 *  - `$dry_run = false` but the permission is OFF: blocked, returns an
-	 *    error and does not mutate.
+	 *  - `$dry_run = false`: writes only when the `update_seo` permission is
+	 *    enabled AND the current user can `edit_post` the target.
+	 *  - Fields the active plugin cannot safely store, unknown fields, and
+	 *    invalid URLs are reported in `skipped` and never written.
 	 *
 	 * @param int   $post_id Target post ID.
-	 * @param array $data    Canonical field => new value map. Unknown fields ignored.
-	 * @param bool  $dry_run Default true. Set false to actually write (still gated by permission).
+	 * @param array $data    Canonical field => new value map.
+	 * @param bool  $dry_run Default true. Set false to actually write (still gated).
 	 * @return array {
-	 *   @type bool   $applied      true only when a real mutation happened.
-	 *   @type bool   $dry_run      Echoed back.
-	 *   @type bool   $blocked      true when the permission gate refused.
-	 *   @type string $reason       'dry_run' | 'permission_denied' | 'post_not_found' | 'no_op' | 'ok'.
-	 *   @type array  $would_write  field => array(old, new) for every field that *would* change.
-	 *   @type string $plugin       Detected SEO plugin.
+	 *   @type bool   $applied     true only when a real mutation happened.
+	 *   @type bool   $dry_run     Echoed back.
+	 *   @type bool   $blocked     true when a gate refused.
+	 *   @type string $reason      'dry_run' | 'permission_denied' | 'forbidden_post' |
+	 *                             'post_not_found' | 'no_op' | 'ok'.
+	 *   @type array  $would_write field => { meta_key, old, new } for every field that changes.
+	 *   @type array  $skipped     field => reason ('unknown_field' | 'unsupported_field' | 'invalid_url').
+	 *   @type string $plugin      Detected SEO plugin.
 	 * }
 	 */
 	public static function update_seo_meta( $post_id, array $data, $dry_run = true ) {
@@ -152,29 +206,43 @@ class AI_Site_Connector_SEO {
 			'blocked'     => false,
 			'reason'      => '',
 			'would_write' => array(),
+			'skipped'     => array(),
 			'plugin'      => $plugin,
 		);
 
-		if ( ! get_post( $post_id ) ) {
+		$post = $post_id > 0 ? get_post( $post_id ) : null;
+		if ( ! $post ) {
 			$response['reason']  = 'post_not_found';
 			$response['blocked'] = true;
 			return $response;
 		}
 
-		// Compute the proposed diff first — used for both dry-run output AND
-		// the actual write path. Skips fields whose canonical key is unknown
-		// for the detected plugin (no native write target).
-		$map = self::meta_key_map( $plugin );
+		// Object-level gate applies to dry runs too: a dry run discloses the
+		// current values, so it must not reveal posts the caller cannot edit.
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			$response['reason']  = 'forbidden_post';
+			$response['blocked'] = true;
+			return $response;
+		}
+
+		$map = self::write_map( $plugin );
 		foreach ( $data as $field => $new_value ) {
+			$field = (string) $field;
 			if ( ! in_array( $field, self::FIELDS, true ) ) {
+				$response['skipped'][ $field ] = 'unknown_field';
 				continue;
 			}
 			if ( empty( $map[ $field ] ) ) {
+				$response['skipped'][ $field ] = 'unsupported_field';
+				continue;
+			}
+			$new = self::sanitize_value( $field, $new_value );
+			if ( null === $new ) {
+				$response['skipped'][ $field ] = 'invalid_url';
 				continue;
 			}
 			$meta_key = $map[ $field ];
-			$old      = (string) get_post_meta( $post_id, $meta_key, true );
-			$new      = (string) $new_value;
+			$old      = self::scalar( get_post_meta( $post_id, $meta_key, true ) );
 			if ( $old !== $new ) {
 				$response['would_write'][ $field ] = array(
 					'meta_key' => $meta_key,
@@ -194,18 +262,22 @@ class AI_Site_Connector_SEO {
 			return $response;
 		}
 
-		// Real write requested. Permission gate — same pattern as the other
-		// write tools (cache purge, media sideload). `can()` honours
-		// read-only mode, WP capability, and the per-tool whitelist setting.
+		// `can()` honours read-only mode, the tool's WP capability, the
+		// per-tool whitelist (update_seo defaults OFF) and the override filter.
 		if ( ! class_exists( 'AI_Site_Connector_Permissions' )
-			|| ! AI_Site_Connector_Permissions::can( AI_Site_Connector_Permissions::TOOL_UPDATE_SEO ) ) {
+			|| ! AI_Site_Connector_Permissions::can( AI_Site_Connector_Permissions::TOOL_UPDATE_SEO, array( 'post_id' => $post_id ) ) ) {
 			$response['blocked'] = true;
 			$response['reason']  = 'permission_denied';
 			return $response;
 		}
 
-		foreach ( $response['would_write'] as $field => $row ) {
-			update_post_meta( $post_id, $row['meta_key'], $row['new'] );
+		foreach ( $response['would_write'] as $row ) {
+			if ( '' === $row['new'] ) {
+				delete_post_meta( $post_id, $row['meta_key'] );
+			} else {
+				// wp_slash: update_post_meta() unslashes its input.
+				update_post_meta( $post_id, $row['meta_key'], wp_slash( $row['new'] ) );
+			}
 		}
 		$response['applied'] = true;
 		$response['reason']  = 'ok';
@@ -213,13 +285,9 @@ class AI_Site_Connector_SEO {
 	}
 
 	/**
-	 * Canonical-field → per-plugin meta-key map. Returned per detection call
-	 * (cheap, no caching needed). Returns empty strings for fields that have
-	 * no native write target on the detected plugin (e.g. AIOSEO stores most
-	 * data in custom tables, not post meta, so writing via post meta is not
-	 * safe and we deliberately leave those slots empty).
+	 * Canonical field → post-meta key used for reads.
 	 */
-	private static function meta_key_map( $plugin ) {
+	private static function read_map( $plugin ) {
 		switch ( $plugin ) {
 			case 'rankmath':
 				return array(
@@ -242,19 +310,13 @@ class AI_Site_Connector_SEO {
 					'noindex'        => '_yoast_wpseo_meta-robots-noindex',
 				);
 			case 'aioseo':
-				// AIOSEO's post-level fields live in the aioseo_posts custom
-				// table, not post meta. The legacy `_aioseop_*` post-meta
-				// keys are still readable on older posts; leave them as
-				// READ-ONLY hints. Returning empty here means update_seo_meta
-				// will skip the field rather than write to the wrong place.
+				// Legacy (AIOSEO 3.x) post meta — only consulted when the
+				// aioseo_posts table has no value for the field.
 				return array(
-					'title'          => '_aioseop_title',
-					'description'    => '_aioseop_description',
-					'canonical'      => '_aioseop_custom_link',
-					'og_title'       => '_aioseop_opengraph_settings',
-					'og_description' => '',
-					'og_image'       => '',
-					'noindex'        => '_aioseop_noindex',
+					'title'       => '_aioseop_title',
+					'description' => '_aioseop_description',
+					'canonical'   => '_aioseop_custom_link',
+					'noindex'     => '_aioseop_noindex',
 				);
 			case 'seopress':
 				return array(
@@ -266,17 +328,86 @@ class AI_Site_Connector_SEO {
 					'og_image'       => '_seopress_social_fb_img',
 					'noindex'        => '_seopress_robots_index',
 				);
-			case 'none':
 			default:
-				return array(
-					'title'          => '',
-					'description'    => '',
-					'canonical'      => '',
-					'og_title'       => '',
-					'og_description' => '',
-					'og_image'       => '',
-					'noindex'        => '',
-				);
+				return array();
 		}
+	}
+
+	/**
+	 * Canonical field → post-meta key used for writes. Only plain-string
+	 * meta values the plugin reads back verbatim are listed.
+	 */
+	private static function write_map( $plugin ) {
+		$map = self::read_map( $plugin );
+		if ( 'aioseo' === $plugin ) {
+			// AIOSEO 4 reads from its custom table; legacy meta writes would
+			// be silently ignored, so nothing is writable.
+			return array();
+		}
+		unset( $map['noindex'] );
+		return $map;
+	}
+
+	/**
+	 * Normalise each plugin's robots encoding to '1' (noindex) or ''.
+	 */
+	private static function normalize_noindex( $plugin, $raw ) {
+		switch ( $plugin ) {
+			case 'rankmath':
+				// Serialized array of directives, e.g. array( 'noindex', 'nofollow' ).
+				return is_array( $raw ) && in_array( 'noindex', $raw, true ) ? '1' : '';
+			case 'yoast':
+				// '1' = noindex, '2' = explicitly index, '' = default.
+				return '1' === self::scalar( $raw ) ? '1' : '';
+			case 'seopress':
+				return 'yes' === self::scalar( $raw ) ? '1' : '';
+			default:
+				return self::truthy_flag( self::scalar( $raw ) ) ? '1' : '';
+		}
+	}
+
+	private static function truthy_flag( $value ) {
+		return in_array( strtolower( (string) $value ), array( '1', 'on', 'yes', 'true' ), true );
+	}
+
+	/**
+	 * Coerce a stored meta value to a string without leaking "Array".
+	 */
+	private static function scalar( $value ) {
+		if ( is_scalar( $value ) ) {
+			return (string) $value;
+		}
+		return '';
+	}
+
+	/**
+	 * @return string|null Sanitised value, or null when a URL field is invalid.
+	 */
+	private static function sanitize_value( $field, $value ) {
+		$value = is_scalar( $value ) ? trim( (string) $value ) : '';
+		if ( in_array( $field, self::URL_FIELDS, true ) ) {
+			if ( '' === $value ) {
+				return '';
+			}
+			$url = esc_url_raw( $value, array( 'http', 'https' ) );
+			return '' === $url ? null : $url;
+		}
+		return sanitize_text_field( $value );
+	}
+
+	/**
+	 * Fetch the AIOSEO 4 per-post row, or null when the table/row is absent.
+	 */
+	private static function aioseo_row( $post_id ) {
+		global $wpdb;
+		$table = $wpdb->prefix . 'aioseo_posts';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
+		if ( (string) $exists !== (string) $table ) {
+			return null;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE post_id = %d LIMIT 1", $post_id ), ARRAY_A );
+		return is_array( $row ) ? $row : null;
 	}
 }

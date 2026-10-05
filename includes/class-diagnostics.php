@@ -187,6 +187,21 @@ class AI_Site_Connector_Diagnostics {
 		);
 	}
 
+	/**
+	 * Builder / SEO / cache plugin detection from the active plugin list.
+	 * Side-effect free (unlike generate(), which probes REST over HTTP).
+	 *
+	 * @return array{page_builders:array,seo:array,cache:array}
+	 */
+	public static function detected_plugins() {
+		$files = self::active_plugin_files();
+		return array(
+			'page_builders' => self::site_builders(),
+			'seo'           => self::detect_seo( $files ),
+			'cache'         => self::detect_cache( $files ),
+		);
+	}
+
 	private static function detect_seo( $active_plugins ) {
 		$by_slug = array_flip( array_map( array( __CLASS__, 'slug_from_file' ), (array) $active_plugins ) );
 		return array(

@@ -312,6 +312,7 @@ All endpoints under `/wp-json/ai-site-connector/v1/`. Permission-gated tools suc
 | `GET /media/audit`                | Authenticated, `upload_files`     | Media SEO/hygiene audit (alt/title/caption/description, unattached, oversized, suspicious filename, missing file). See below. |
 | `GET /media/duplicates`           | Authenticated, `upload_files`     | Duplicate media by filename and SHA-256; never deletes. See below. |
 | `GET /content/broken-links`       | Authenticated, `edit_posts`       | Offline broken internal link scan (no HTTP requests). See below. |
+| `GET /export/bundle`              | Authenticated, `manage_options`   | Deterministic GitHub-ready manifest bundle (8 files + index). See below. |
 
 ### Write and credential administration
 
@@ -370,6 +371,23 @@ Both gated by `upload_files` + the `export_manifest` permission; both list only 
 - Relative hrefs are resolved against the linking post's permalink, as a browser would.
 - Row: `source_post_id, source_post_type, url, link_text, status, reason, target_post_id`. Statuses `ok | broken | invalid | skipped`; reasons include `post_missing`, `post_trashed`, `post_not_published`, `not_found`, `term_not_found`, `missing_upload`, `malformed_url`, `system_path`, `extract_failed`.
 - `limit` posts per call (1–200, default 50), `offset`, `next_offset`; `max_links` (≤ 5 000) bounds work per call — a single oversized post is checked up to the cap and listed in `partial_posts`. `only_broken` (default true).
+
+### Export bundle and GitHub-ready manifests
+
+`GET /export/bundle` · MCP `wp_export_bundle` · `wp ai-connector export --dir=<path>` (admin; requires both `export_manifest` and `view_diagnostics`).
+
+One call builds eight manifests from the services above — `site-inventory.json`, `media-seo-audit.json`, `duplicate-media.json`, `broken-links.json`, `redirects.json`, `plugin-builder-detection.json`, `rest-routes.json`, `mcp-self-test.json` — plus `manifest-index.json` (per-file `ok`, `truncated`, `items`, `sha256`).
+
+- **Deterministic:** no timestamps or paging cursors inside manifests, keys sorted recursively, lists in stable ID/route order, identical encoding (pretty JSON, trailing newline). Two exports of an unchanged site are byte-identical — also across different admin users and between REST and WP-CLI: `mcp-self-test.json` keeps only checks that do not depend on the caller or PHP process user (name + status). The response envelope carries the only `generated_at`.
+- **Commit-safe content:** `site-inventory.json` lists published content only, with excerpts (and excerpt-derived SEO descriptions) blanked for password-protected posts.
+- **Bounded:** `max_items` (1–5 000, default 1 000) caps the rows *scanned* per paginated section (posts, attachments), not just findings; truncation is flagged per file. The duplicate scan uses its own 5 000-attachment window.
+- **Isolated:** a failing section is reported in the index (`ok:false`, `error`) and the rest of the bundle is still built.
+- **No secrets:** no credentials, admin email, server paths or option values; the bundle makes no HTTP requests (the capability report's loopback probe is deliberately not used).
+- **No commits from WordPress:** the CLI writes files to a local directory you choose (staged, then moved into place; manifests not produced by the run are removed so the directory always matches `manifest-index.json`; non-zero exit if any section failed). Committing and pushing happen in your own checkout with your own credentials.
+
+```bash
+wp ai-connector export --user=admin --dir=./site-manifests && git -C ./site-manifests status
+```
 
 ### SEO plugin abstraction (`AI_Site_Connector_SEO`)
 

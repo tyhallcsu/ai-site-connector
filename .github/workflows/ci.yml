@@ -118,6 +118,7 @@ jobs:
             includes/class-content-inventory.php \
             includes/class-media-audit.php \
             includes/class-link-scanner.php \
+            includes/class-export-bundle.php \
             includes/class-diagnostics.php \
             assets/admin.css \
             assets/admin.js \

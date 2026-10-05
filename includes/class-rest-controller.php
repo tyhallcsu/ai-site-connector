@@ -358,6 +358,31 @@ class AI_Site_Connector_REST_Controller {
 				),
 			),
 			array(
+				'name'             => 'export_bundle',
+				'permission'       => AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST,
+				'method'           => 'GET',
+				'route'            => '/export/bundle',
+				'description'      => 'One-call bundle of deterministic, GitHub-ready manifests: site-inventory, media-seo-audit, duplicate-media, broken-links, redirects, plugin-builder-detection, rest-routes, mcp-self-test (+ manifest_index with sha256 per file). No timestamps inside manifests; per-section item caps; a failing section is reported, not fatal. No secrets. Admin only; also requires view_diagnostics. Read-only.',
+				'risk_level'       => 'read',
+				'read_only'        => true,
+				'supports_dry_run' => false,
+				'input_schema'     => array(
+					'type'       => 'object',
+					'properties' => array(
+						'max_items' => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => AI_Site_Connector_Export_Bundle::MAX_ITEMS ),
+						'sections'  => array( 'type' => 'string' ),
+					),
+				),
+				'output_schema'    => array(
+					'type'       => 'object',
+					'properties' => array(
+						'index'          => array( 'type' => 'object' ),
+						'manifest_index' => array( 'type' => 'object' ),
+						'files'          => array( 'type' => 'object' ),
+					),
+				),
+			),
+			array(
 				'name'             => 'mcp_self_test',
 				'permission'       => AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS,
 				'method'           => 'GET',
@@ -726,6 +751,29 @@ class AI_Site_Connector_REST_Controller {
 					'only_broken' => array(
 						'type'    => 'boolean',
 						'default' => true,
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/export/bundle',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'route_export_bundle' ),
+				'permission_callback' => array( __CLASS__, 'auth_admin' ),
+				'args'                => array(
+					'max_items' => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => AI_Site_Connector_Export_Bundle::MAX_ITEMS,
+						'default' => AI_Site_Connector_Export_Bundle::DEFAULT_MAX_ITEMS,
+					),
+					'sections'  => array(
+						'type'        => 'string',
+						'description' => 'Comma-separated manifest file names to include. Default: all.',
+						'default'     => '',
 					),
 				),
 			)
@@ -1111,6 +1159,27 @@ class AI_Site_Connector_REST_Controller {
 			)
 		);
 		return is_wp_error( $res ) ? $res : rest_ensure_response( $res );
+	}
+
+	public static function route_export_bundle( WP_REST_Request $request ) {
+		// The bundle includes admin diagnostics, so both gates apply.
+		foreach ( array( AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST, AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS ) as $tool ) {
+			$check = AI_Site_Connector_Permissions::require_permission( $tool );
+			if ( is_wp_error( $check ) ) {
+				return $check;
+			}
+		}
+		$res = AI_Site_Connector_Export_Bundle::build(
+			array(
+				'max_items' => (int) $request->get_param( 'max_items' ),
+				'sections'  => (string) $request->get_param( 'sections' ),
+			)
+		);
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		$res['manifest_index'] = AI_Site_Connector_Export_Bundle::index_document( $res );
+		return rest_ensure_response( $res );
 	}
 
 	public static function route_export_content_inventory( WP_REST_Request $request ) {

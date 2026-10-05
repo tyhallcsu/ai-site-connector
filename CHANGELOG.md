@@ -17,6 +17,10 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Broken internal link scanner (#66): `GET /content/broken-links`, MCP
   `wp_broken_links`, `wp ai-connector broken-links` — resolved offline
   against the database and uploads (never makes HTTP requests).
+- Export bundle (#73) and deterministic GitHub-ready manifests (#74):
+  `GET /export/bundle`, MCP `wp_export_bundle`, `wp ai-connector export
+  --dir=<path>` — eight manifests + sha256 index, byte-identical across runs
+  of an unchanged site, per-section caps and failure isolation, no secrets.
 
 ### Changed
 

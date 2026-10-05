@@ -234,8 +234,9 @@ class AI_Site_Connector_Content_Inventory {
 				'id'  => $thumb_id,
 				'url' => $thumb_id ? (string) wp_get_attachment_url( $thumb_id ) : '',
 			),
-			'parent_id'      => (int) $post->post_parent,
-			'menu_order'     => (int) $post->menu_order,
+			'parent_id'          => (int) $post->post_parent,
+			'menu_order'         => (int) $post->menu_order,
+			'password_protected' => '' !== (string) $post->post_password,
 		);
 
 		if ( $include_terms ) {

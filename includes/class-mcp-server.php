@@ -30,6 +30,7 @@
  *   wp_media_audit       — media SEO/hygiene audit
  *   wp_media_duplicates  — duplicate media by filename and hash
  *   wp_broken_links      — offline broken internal link scan
+ *   wp_export_bundle     — deterministic manifest bundle
  *
  * Constants:
  *   AI_SITE_CONNECTOR_MCP_DISABLE — when true, the route is not registered.
@@ -310,6 +311,17 @@ class AI_Site_Connector_MCP_Server {
 				),
 			),
 			array(
+				'name'        => 'wp_export_bundle',
+				'description' => 'Deterministic, GitHub-ready manifest bundle (site-inventory, media-seo-audit, duplicate-media, broken-links, redirects, plugin-builder-detection, rest-routes, mcp-self-test) plus manifest_index with sha256 per file. Optional: max_items (per section, 1-5000, default 1000), sections (comma-separated file names). Commit the files yourself; WordPress never pushes anywhere. Read-only; admin only.',
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'max_items' => array( 'type' => 'integer' ),
+						'sections'  => array( 'type' => 'string' ),
+					),
+				),
+			),
+			array(
 				'name'        => 'wp_redirects',
 				'description' => 'Detect redirect plugins (Rank Math, Redirection, AIOSEO, Yoast Premium) and export their redirects. Optional: limit (1-1000, default 500), offset. Read-only; admin only.',
 				'inputSchema' => array(
@@ -462,6 +474,8 @@ class AI_Site_Connector_MCP_Server {
 				return self::dispatch_checked( 'GET', '/media/duplicates', self::pick( $args, array( 'max_scan', 'after_id', 'max_file_bytes' ) ) );
 			case 'wp_broken_links':
 				return self::dispatch_checked( 'GET', '/content/broken-links', self::pick( $args, array( 'post_type', 'status', 'limit', 'offset', 'max_links', 'only_broken' ) ) );
+			case 'wp_export_bundle':
+				return self::dispatch_checked( 'GET', '/export/bundle', self::pick( $args, array( 'max_items', 'sections' ) ) );
 			case 'wp_redirects':
 				return self::dispatch_checked( 'GET', '/diagnostics/redirects', self::pick( $args, array( 'limit', 'offset' ) ) );
 			default:

@@ -1,19 +1,21 @@
 # AI Site Connector
 
 <p align="center">
-  <img src="assets/brand/ai-site-connector-readme-banner.svg" alt="AI Site Connector - Secure REST API access for AI coding agents" width="900">
+  <img src="assets/brand/readme-hero.png" alt="AI Site Connector — an illustrated bridge connecting AI tools to your WordPress site" width="900">
 </p>
 
 <p align="center">
-  <strong>Secure REST API access for Claude, Codex, and other AI coding agents on self-hosted WordPress.</strong><br>
-  No WordPress.com, no Jetpack, no backdoors - just WordPress core Application Passwords with admin-controlled setup.
+  <strong>Your WordPress. Connected. Your permissions. In control.</strong><br>
+  Connect Claude, Codex, and other AI tools to a self-hosted WordPress site using Application Passwords.
 </p>
 
-[![CI](https://github.com/tyhallcsu/ai-site-connector/actions/workflows/ci.yml/badge.svg)](https://github.com/tyhallcsu/ai-site-connector/actions/workflows/ci.yml)
-[![Build release ZIP](https://github.com/tyhallcsu/ai-site-connector/actions/workflows/release-zip.yml/badge.svg)](https://github.com/tyhallcsu/ai-site-connector/actions/workflows/release-zip.yml)
-![PHP](https://img.shields.io/badge/PHP-7.4%20%7C%208.0%20%7C%208.1%20%7C%208.2%20%7C%208.3%20%7C%208.4-777BB4?logo=php&logoColor=white)
-![WordPress](https://img.shields.io/badge/WordPress-5.6%2B-21759B?logo=wordpress&logoColor=white)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<p align="center">
+  <a href="https://github.com/tyhallcsu/ai-site-connector/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/tyhallcsu/ai-site-connector/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/tyhallcsu/ai-site-connector/actions/workflows/release-zip.yml"><img alt="Build release ZIP" src="https://github.com/tyhallcsu/ai-site-connector/actions/workflows/release-zip.yml/badge.svg"></a>
+  <a href=".github/workflows/ci.yml"><img alt="PHP syntax matrix" src="https://img.shields.io/badge/PHP-7.4%20%7C%208.0%20%7C%208.1%20%7C%208.2%20%7C%208.3%20%7C%208.4-777BB4?logo=php&logoColor=white"></a>
+  <a href="ai-site-connector.php"><img alt="WordPress" src="https://img.shields.io/badge/WordPress-5.6%2B-21759B?logo=wordpress&logoColor=white"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
+</p>
 
 A WordPress plugin that lets Claude, Codex, and other AI coding agents authenticate to a self-hosted WordPress site over the REST API using **Application Passwords** — with **no WordPress.com account, no Jetpack, and no third-party cloud service** required.
 
@@ -21,14 +23,41 @@ A WordPress plugin that lets Claude, Codex, and other AI coding agents authentic
 
 ---
 
+## Start here
+
+**Give an AI tool its own connection to your website.** Install the plugin, create a dedicated WordPress user, and generate a connection pack. You decide the user's role, share the credential with your chosen tool, and revoke it when the work is done.
+
+[**Download the plugin**](https://github.com/tyhallcsu/ai-site-connector/releases/latest) · [Connect your site](#installation) · [Choose a connection](#choose-your-connection) · [Permissions](#understand-access-before-enabling-writes) · [Troubleshooting](#troubleshooting) · [Documentation](#documentation-library)
+
+| I want to… | Start with… |
+| --- | --- |
+| Connect my site without writing code | [Installation](#installation), then the setup wizard |
+| Use Claude Desktop or Cursor | [MCP connection instructions](#mcp--claude-desktop--cursor) |
+| Use Codex, Claude Code, or a script | [Connection pack and authentication examples](#how-claude--codex-should-authenticate) |
+| Understand what the agent can change | [Access controls](#understand-access-before-enabling-writes) and [role capabilities](#recommended-role--capability-setup) |
+| Export content or inspect a site | [Endpoint reference](#rest-endpoints-added-by-this-plugin) and [task cookbook](docs/COOKBOOK.md) |
+| Disconnect an agent | [Revoke its Application Password](#how-to-revoke-access) |
+
+### Before you begin
+
+| You need | Why |
+| --- | --- |
+| A self-hosted WordPress site, **5.6+**, running **PHP 7.4+** | The plugin uses WordPress core Application Passwords. The PHP badge describes the syntax-check matrix, not a live-site compatibility guarantee. |
+| Administrator access for setup | Installation, user creation, and credential management happen in WordPress admin. Your AI user can have a narrower role. |
+| HTTPS and an accessible REST API | Your AI tool must reach the site and send its authentication header. |
+| An AI client or automation tool | This plugin connects the site; it does not include an AI subscription or model. |
+| Node.js **18+** for the documented local MCP bridges | Only needed on the computer running that bridge, not for ordinary REST requests. |
+
+**Terminology:** a *connection pack* is a set of connection instructions containing a secret; an *Application Password* is a revocable credential for one WordPress user; *MCP* lets compatible AI clients discover and call tools; *REST* lets scripts make HTTP requests directly.
+
 ## What this plugin does
 
 1. Adds a **Tools → AI Site Connector** admin page with status cards, a setup wizard, credential management, and an audit log.
 2. Registers a custom **AI Site Operator** role with sensible read/edit capabilities (no plugin/file/theme editing, no `manage_options`).
 3. Provides a **wizard** to create a dedicated AI/service user (default username `ai-agent`) — or pick an existing user.
-4. Generates **Application Passwords** using WordPress core (`WP_Application_Passwords`), shown **once**, never stored in plaintext.
+4. Generates **Application Passwords** using WordPress core (`WP_Application_Passwords`), shown at creation. WordPress stores a hash; the plugin temporarily caches the plaintext connection pack for admin display and optional one-time download. See [credential handling](#understand-access-before-enabling-writes).
 5. Produces a copy-paste **connection pack** containing site URL, REST base, username, and password, plus curl / Python / JavaScript / Claude Code examples.
-6. Exposes a narrow, permission-gated **REST surface** under `/wp-json/ai-site-connector/v1/` — diagnostics, exports, an MCP transport, and a handful of explicitly-opted-in write paths (cache purge, media sideload, credential rotation).
+6. Exposes a narrow, permission-gated **REST surface** under `/wp-json/ai-site-connector/v1/` — diagnostics, exports, an MCP transport, and opt-in cache purge and media sideload tools, plus administrator-only credential rotation.
 7. Maintains an **audit log** of plugin events (user creation, password generation, revocation, health access).
 8. Ships **WP-CLI commands** under `wp ai-connector …`.
 
@@ -38,10 +67,10 @@ This plugin is best for **routine, scoped, auditable AI maintenance** — conten
 
 Use SSH / SFTP / WP-CLI directly when you need:
 
-- **File editing** — theme, plugin, or `wp-config.php` changes. The REST API cannot touch files; that limit is by design and this plugin does not bypass it.
-- **Recovering a broken site** — if WordPress is white-screening or fataling, REST is broken too. SSH is the only thing that still works.
+- **File editing** — theme, plugin, or `wp-config.php` changes. This plugin provides no arbitrary file editor.
+- **Recovering a broken site** — a fatal WordPress error may also break REST. Use SSH or your hosting recovery tools when the API is unavailable.
 - **Bulk database operations** — `wp db query "UPDATE ..."` will outpace 10,000 REST calls. WP-CLI runs in-process; REST has per-call HTTP overhead.
-- **Server-level work** — PHP version, opcache, cron, error logs, host config. None of that is REST-reachable.
+- **Server-level work** — PHP version, opcache, cron, error logs, host config. This plugin does not expose those server controls.
 - **Performance-critical batch jobs** — for the same per-call-overhead reason as above.
 
 Pick the right tool per task. If your AI agent genuinely needs the items above, give it scoped SSH access (with all the trust that implies) and keep this plugin for everything else.
@@ -59,18 +88,44 @@ WordPress core has supported [Application Passwords](https://make.wordpress.org/
 
 ---
 
+![Connect your site — an illustrated cable linking to a website](assets/brand/readme-connect.png)
+
 ## Installation
+
+**Recommended: install the packaged ZIP.** Open [the latest release](https://github.com/tyhallcsu/ai-site-connector/releases/latest), expand **Assets**, and download the versioned `ai-site-connector-vX.Y.Z.zip` file. In WordPress, choose **Plugins → Add New → Upload Plugin**, upload that ZIP, then **Install Now → Activate**. Use the packaged plugin ZIP rather than GitHub's automatically generated source archive.
+
+If you prefer to copy the plugin files manually:
 
 1. Copy the `ai-site-connector/` folder into `wp-content/plugins/` on your WordPress site.
 2. Activate **AI Site Connector** in the Plugins screen.
 3. Open **Tools → AI Site Connector**.
 4. Confirm the connectivity checks (HTTPS, REST reachable, Application Passwords available).
 
-You can also install via WP-CLI:
+After placing the plugin files, activate via WP-CLI:
 
 ```bash
 wp plugin activate ai-site-connector
 ```
+
+### Your first successful connection
+
+1. Open **Tools → AI Site Connector** and confirm the connectivity checks.
+2. In **Setup Wizard**, create a dedicated **AI Site Operator** user. Keep Administrator access for human setup unless the task specifically requires it.
+3. In **Credentials**, generate a connection pack and save it in your password manager.
+4. Choose the matching client format below and configure your AI tool. Restart the client if its MCP configuration requires it.
+5. Start with an identity check and capability inspection. A public health response only proves reachability; it does **not** prove your credential works.
+6. Enable only the plugin tools needed for your task. Review the user's WordPress capabilities before allowing edits.
+
+See [Create an AI user](#create-an-ai-user), [Generate a connection pack](#generate-a-connection-pack), and the [connection guide](docs/CLAUDE_CONNECTION_GUIDE.md) for detailed steps.
+
+### Choose your connection
+
+| Your tool | Connection path |
+| --- | --- |
+| Claude Desktop, Cursor, or an MCP-compatible editor | Copy the corresponding MCP configuration from the connection pack. The documented `mcp-remote` bridge needs Node.js 18+ and package access on first use. [MCP setup](#mcp--claude-desktop--cursor) |
+| Codex, Claude Code, curl, Python, or JavaScript | Use the site URL, dedicated username, and Application Password with HTTP Basic Auth. [Examples](#how-claude--codex-should-authenticate) |
+| n8n, Make.com, or Zapier | Use the connection pack's platform-specific Basic Auth instructions with the platform's HTTP request action. |
+| Developers maintaining their own MCP bridge | Use the [bundled Node.js stdio adapter](examples/mcp-server/README.md). |
 
 ## Updating
 
@@ -225,7 +280,7 @@ AI tooling can detect the plugin and its sub-surfaces (MCP transport, OpenAPI sp
 
 ## REST endpoints (added by this plugin)
 
-All endpoints under `/wp-json/ai-site-connector/v1/`. Every write path requires both the underlying WordPress capability AND an explicit permission slug granted on **Tools → AI Site Connector → Permissions** — operators choose which agent abilities to unlock per site. There is no file editor, no SQL exec, and no plugin installer; for those, use SSH / WP-CLI.
+All endpoints under `/wp-json/ai-site-connector/v1/`. Permission-gated tools such as cache purge and media sideload require both the underlying WordPress capability and an enabled permission slug under **Tools → AI Site Connector → Permissions**. Credential rotation instead uses the administrator capability check (`manage_options`); it has no separate tool-permission slug. Core WordPress routes have their own permission checks. There is no file editor, no SQL exec, and no plugin installer; for those, use SSH / WP-CLI.
 
 ### Read & introspection
 
@@ -250,7 +305,7 @@ All endpoints under `/wp-json/ai-site-connector/v1/`. Every write path requires 
 | `GET /export/page/<id>`           | Authenticated, `edit_posts`       | Single post/page body with featured-image reference. |
 | `GET /export/site-manifest`       | Authenticated, `manage_options`   | Counts + recent + detected plugins in one call. |
 
-### Write (permission-slug gated; off by default for non-read tools)
+### Write and credential administration
 
 | Endpoint                              | Auth                                                            | Effect |
 | ------------------------------------- | --------------------------------------------------------------- | ------ |
@@ -270,6 +325,20 @@ A separate public discovery file is served at `/.well-known/ai-site-connector.js
 
 ---
 
+![Stay in control — an illustrated shield, key, and permission controls](assets/brand/readme-control.png)
+
+## Understand access before enabling writes
+
+| Control | What it actually does |
+| --- | --- |
+| **WordPress user role** | Sets the user's underlying capabilities. The default AI Site Operator can edit its own content; it cannot manage plugins, site options, or other authors' content. |
+| **Plugin tool permissions** | Add an allow/deny check to the tools that consult the plugin's permission guard. Non-read tools default to off. |
+| **Read-only mode** | Denies non-read tools through that guard. It is **not a universal read-only switch for every WordPress REST route**. |
+| **Application Password** | Authenticates as its associated user. Revoke it to stop that credential's access; uninstalling this plugin alone does not revoke it. |
+| **Connection pack** | Contains a real secret. The admin flash uses a 60-second transient; the generated download link uses a five-minute site transient, deleted on consumption. Transients may reside in the database or object cache. Do not interpret “shown once” as “never stored in plaintext.” |
+
+Use a dedicated account and confirm its capabilities before requesting changes. Plugin tool toggles do not replace WordPress role design. See the [security model](docs/SECURITY_MODEL.md) and [vulnerability reporting policy](SECURITY.md).
+
 ## Security best practices
 
 - **Use HTTPS.** This plugin refuses to mint Application Passwords over plain HTTP unless you explicitly set `define('AI_SITE_CONNECTOR_ALLOW_HTTP', true)` or `WP_DEBUG` is true (for local dev only).
@@ -277,7 +346,7 @@ A separate public discovery file is served at `/.well-known/ai-site-connector.js
 - Treat connection packs like passwords: store in 1Password / Bitwarden / Vault, **never** in git.
 - Rotate Application Passwords on a schedule. The plugin makes revoke easy.
 - Watch the audit log under **Tools → AI Site Connector → Audit Log**.
-- If the site is behind Cloudflare or a WAF, allowlist the AI IP range — many WAFs block the `Authorization` header by default.
+- If a firewall blocks a request, inspect its event log and adjust only the rule, route, and source needed for the connection. Keep authentication enforced.
 
 ## Recommended role / capability setup
 
@@ -300,7 +369,7 @@ Extend with the filter — for example, to let the AI revise content authored by
 add_filter( 'ai_site_connector_operator_caps', function ( $caps ) {
     $caps['edit_others_posts']   = true;
     $caps['edit_others_pages']   = true;
-    $caps['list_users']          = true;   // also unlocks /site-info for legacy callers
+    $caps['list_users']          = true;   // permits user listing; /site-info requires edit_posts
     $caps['publish_posts']       = true;
     return $caps;
 } );
@@ -337,13 +406,13 @@ tests/package-smoke.sh
 
 ## Troubleshooting
 
-**REST API disabled** — Some security plugins (iThemes Security, Wordfence) can disable the REST API for non-logged-in users. Whitelist `/wp-json/` and ensure the `Authorization` header is allowed.
+**REST API disabled** — A security plugin or host rule may restrict REST access. Check the specific denial and permit authenticated requests to the required routes; ensure the `Authorization` header reaches WordPress.
 
 **HTTPS missing** — Configure SSL on the host (Let's Encrypt, Cloudflare Origin Cert, etc.) before going to production.
 
 **Application Passwords unavailable** — The feature may be turned off via the `wp_is_application_passwords_available` filter. Re-enable it, or check that you are on WP 5.6+.
 
-**Basic Auth blocked** — Some hosts strip the `Authorization` header at Apache/nginx. Add this to `.htaccess`:
+**Basic Auth blocked** — Some hosts strip the `Authorization` header. On Apache with rewrite support, your host may recommend the following `.htaccess` configuration. nginx needs its own server configuration; `.htaccess` does not apply there:
 
 ```
 RewriteEngine On
@@ -353,13 +422,30 @@ RewriteRule .* - [E=HTTP_AUTHORIZATION:%1]
 
 **401 unauthorized** — Verify the username, that the Application Password is correct, and that the user has not been deleted/disabled.
 
-**403 forbidden** — The user does not have the capability required for that endpoint. Check the role.
+**403 forbidden** — Check the user role, the endpoint’s required capability, and any applicable plugin permission slug or read-only setting. A firewall may also return 403; inspect the response and logs before changing permissions.
 
-**Cloudflare / WAF blocking** — Disable Cloudflare's "Block Authorization Header" rules for `/wp-json/*`. In the WordPress firewall, allow the AI's IP, or temporarily switch Cloudflare into Development Mode while testing.
+**Cloudflare / WAF blocking** — Use the firewall event log to identify the actual matching rule. Add a narrowly scoped exception only if required; do not disable protection across `/wp-json/*`. Consult your host when authenticated requests do not reach WordPress.
 
 ---
 
+## Documentation library
+
+| Resource | What you will find |
+| --- | --- |
+| [Connection guide](docs/CLAUDE_CONNECTION_GUIDE.md) | Authentication, identity checks, capabilities, and operating boundaries |
+| [Task cookbook](docs/COOKBOOK.md) | curl and Python examples for everyday content work |
+| [Agent bootstrap prompt](examples/agent-bootstrap-prompt.md) | A reusable onboarding template with placeholder credentials |
+| [Feature reference](docs/FEATURES.md) | Detailed feature descriptions originally written for v0.2.0; use this README's endpoint tables and current source for newer behavior |
+| [Discovery](docs/DISCOVERY.md) | Machine-readable site discovery and schema |
+| [Security model](docs/SECURITY_MODEL.md) · [Security policy](SECURITY.md) | Trust boundaries and private vulnerability reporting |
+| [Changelog](CHANGELOG.md) · [Releases](https://github.com/tyhallcsu/ai-site-connector/releases) | Version history and installable ZIPs |
+| [Testing checklist](TESTING_CHECKLIST.md) · [Runtime testing](docs/RUNTIME_TESTING_REQUIRED.md) | Manual verification and live WordPress testing requirements |
+| [Release checklist](docs/RELEASE_CHECKLIST.md) | Maintainer packaging and release checks |
+| [Issues](https://github.com/tyhallcsu/ai-site-connector/issues) | Bugs and feature requests; never include a real connection pack |
+
 ## Brand assets
+
+The illustrated README uses `readme-hero.png`, `readme-connect.png`, and `readme-control.png`. These are conceptual artwork, not product screenshots. The existing logo and runtime mark are preserved. [Artwork provenance](docs/README_ARTWORK.md).
 
 - `assets/brand/ai-site-connector-mark.svg` — compact icon/mark; **shipped at runtime** (rendered by the Tools → AI Site Connector admin page header).
 - `assets/brand/ai-site-connector-logo.svg` — horizontal logo with wordmark; for README, repo, social previews.

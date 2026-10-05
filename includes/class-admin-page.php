@@ -64,6 +64,20 @@ class AI_Site_Connector_Admin_Page {
 		wp_enqueue_script( 'ai-site-connector-admin', AI_SITE_CONNECTOR_URL . 'assets/admin.js', array(), AI_SITE_CONNECTOR_VERSION, true );
 	}
 
+	/**
+	 * Nonce + referer hidden fields, like wp_nonce_field() but without its
+	 * id attribute: tabs render several forms, and repeated ids are invalid
+	 * markup. check_admin_referer() reads the field by name, so handlers are
+	 * unchanged.
+	 *
+	 * @param string $action Nonce action.
+	 * @param string $name   Request field name.
+	 */
+	private static function nonce_field( $action = self::NONCE_ACTION, $name = self::NONCE_FIELD ) {
+		printf( '<input type="hidden" name="%1$s" value="%2$s" />', esc_attr( $name ), esc_attr( wp_create_nonce( $action ) ) );
+		wp_referer_field();
+	}
+
 	private static function flash( $msg, $type = 'success', $extra = array() ) {
 		set_transient(
 			self::FLASH_OPTION . '_' . get_current_user_id(),
@@ -565,7 +579,21 @@ class AI_Site_Connector_Admin_Page {
 			);
 			self::flash( $msg, $code < 400 ? 'success' : 'error' );
 		}
-		self::redirect_back( 'overview' );
+		// Return to whichever tab hosts the form that started the test.
+		$return_tab = isset( $_POST['return_tab'] ) ? sanitize_key( wp_unslash( $_POST['return_tab'] ) ) : '';
+		self::redirect_back( self::allowed_return_tab( $return_tab, array( 'overview', 'connection' ), 'overview' ) );
+	}
+
+	/**
+	 * Restrict a posted return tab to the tabs that host the form.
+	 *
+	 * @param string   $requested Sanitized tab key from the request.
+	 * @param string[] $allowed   Tab keys the form can be submitted from.
+	 * @param string   $fallback  Tab used for anything else.
+	 * @return string
+	 */
+	public static function allowed_return_tab( $requested, array $allowed, $fallback ) {
+		return in_array( $requested, $allowed, true ) ? $requested : $fallback;
 	}
 
 	private static function build_connection_pack( $user_id, $cred ) {
@@ -620,6 +648,8 @@ class AI_Site_Connector_Admin_Page {
 					<p class="description"><?php esc_html_e( 'Connect Claude / Codex / AI agents to this WordPress site over the REST API using Application Passwords. WordPress.com is not required.', 'ai-site-connector' ); ?></p>
 				</div>
 			</div>
+			<?php // Core's common.js moves admin notices to just after this marker, keeping them out of the header. ?>
+			<hr class="wp-header-end">
 
 			<?php if ( $flash ) : ?>
 				<div class="notice notice-<?php echo esc_attr( 'success' === $flash['type'] ? 'success' : 'error' ); ?>">
@@ -725,7 +755,7 @@ class AI_Site_Connector_Admin_Page {
 					<tr><th><?php esc_html_e( 'Authenticated as', 'ai-site-connector' ); ?></th><td><?php echo esc_html( $user->user_login ); ?> (<?php echo esc_html( implode( ', ', (array) $user->roles ) ); ?>)</td></tr>
 				</table>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-					<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+					<?php self::nonce_field(); ?>
 					<input type="hidden" name="action" value="ai_site_connector_test_rest" />
 					<p><button type="submit" class="button button-secondary"><?php esc_html_e( 'Test REST API', 'ai-site-connector' ); ?></button></p>
 				</form>
@@ -832,13 +862,13 @@ class AI_Site_Connector_Admin_Page {
 			<?php if ( ! $disabled && $can_update ) : ?>
 				<div class="asc-updates-actions">
 					<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-						<?php wp_nonce_field( 'ai_site_connector_check_updates' ); ?>
+						<?php self::nonce_field( 'ai_site_connector_check_updates', '_wpnonce' ); ?>
 						<input type="hidden" name="action" value="ai_site_connector_check_updates" />
 						<button type="submit" class="button button-secondary"><?php esc_html_e( 'Check for updates now', 'ai-site-connector' ); ?></button>
 					</form>
 					<?php if ( $available ) : ?>
 						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-							<?php wp_nonce_field( 'ai_site_connector_run_update' ); ?>
+							<?php self::nonce_field( 'ai_site_connector_run_update', '_wpnonce' ); ?>
 							<input type="hidden" name="action" value="ai_site_connector_run_update" />
 							<button type="submit" class="button button-primary"><?php
 								/* translators: %s: new version. */
@@ -863,7 +893,7 @@ class AI_Site_Connector_Admin_Page {
 								/* translators: %s: version. */
 								echo esc_js( sprintf( __( 'Rollback to v%s now? The plugin will be deactivated and reactivated.', 'ai-site-connector' ), $bk['version'] ) );
 							?>');">
-								<?php wp_nonce_field( 'ai_site_connector_rollback' ); ?>
+								<?php self::nonce_field( 'ai_site_connector_rollback', '_wpnonce' ); ?>
 								<input type="hidden" name="action" value="ai_site_connector_rollback" />
 								<input type="hidden" name="to_version" value="<?php echo esc_attr( $bk['version'] ); ?>" />
 								<button type="submit" class="button button-secondary"><?php
@@ -899,7 +929,7 @@ class AI_Site_Connector_Admin_Page {
 			<h2><?php esc_html_e( 'Create a dedicated AI user', 'ai-site-connector' ); ?></h2>
 			<p><?php esc_html_e( 'Application Passwords inherit the user\'s permissions. We recommend "AI Site Operator" for least privilege. Avoid Administrator unless absolutely required.', 'ai-site-connector' ); ?></p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<?php self::nonce_field(); ?>
 				<input type="hidden" name="action" value="ai_site_connector_create_user" />
 				<table class="form-table">
 					<tr><th><label for="ai_username"><?php esc_html_e( 'Username', 'ai-site-connector' ); ?></label></th>
@@ -946,7 +976,7 @@ class AI_Site_Connector_Admin_Page {
 				<p class="notice notice-warning"><?php esc_html_e( 'HTTPS is recommended. Plain HTTP is allowed only if WP_DEBUG or AI_SITE_CONNECTOR_ALLOW_HTTP is true.', 'ai-site-connector' ); ?></p>
 			<?php endif; ?>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<?php self::nonce_field(); ?>
 				<input type="hidden" name="action" value="ai_site_connector_generate_password" />
 				<table class="form-table">
 					<tr><th><label for="ai_user_id"><?php esc_html_e( 'User', 'ai-site-connector' ); ?></label></th>
@@ -1038,14 +1068,14 @@ class AI_Site_Connector_Admin_Page {
 							</td>
 							<td>
 								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline; margin-right: 6px;">
-									<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+									<?php self::nonce_field(); ?>
 									<input type="hidden" name="action" value="ai_site_connector_rotate_password" />
 									<input type="hidden" name="ai_user_id" value="<?php echo (int) $u->ID; ?>" />
 									<input type="hidden" name="ai_uuid" value="<?php echo esc_attr( isset( $p['uuid'] ) ? $p['uuid'] : '' ); ?>" />
 									<button type="submit" class="button" onclick="return confirm('<?php echo esc_js( __( 'Rotate this Application Password? A new one will be minted with the same scopes/IP/expiry; AI tools must use the new password going forward.', 'ai-site-connector' ) ); ?>');"><?php esc_html_e( 'Rotate', 'ai-site-connector' ); ?></button>
 								</form>
 								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline">
-									<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+									<?php self::nonce_field(); ?>
 									<input type="hidden" name="action" value="ai_site_connector_revoke_password" />
 									<input type="hidden" name="ai_user_id" value="<?php echo (int) $u->ID; ?>" />
 									<input type="hidden" name="ai_uuid" value="<?php echo esc_attr( isset( $p['uuid'] ) ? $p['uuid'] : '' ); ?>" />
@@ -1162,7 +1192,7 @@ class AI_Site_Connector_Admin_Page {
 			<h2><?php esc_html_e( 'Webhook forwarder', 'ai-site-connector' ); ?></h2>
 			<p class="description"><?php esc_html_e( 'POST every selected audit event to an HTTPS endpoint (Slack / Discord / Datadog / generic JSON). Delivery is non-blocking — a broken receiver never delays REST traffic. HMAC-SHA256 signature in the X-AISC-Signature header when a secret is set.', 'ai-site-connector' ); ?></p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<?php self::nonce_field(); ?>
 				<input type="hidden" name="action" value="ai_site_connector_save_webhook" />
 				<table class="asc-kv">
 					<tr><th><label for="webhook_url"><?php esc_html_e( 'Webhook URL', 'ai-site-connector' ); ?></label></th>
@@ -1196,7 +1226,7 @@ class AI_Site_Connector_Admin_Page {
 			</form>
 			<?php if ( '' !== $url ) : ?>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-					<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+					<?php self::nonce_field(); ?>
 					<input type="hidden" name="action" value="ai_site_connector_test_webhook" />
 					<p><button type="submit" class="button button-secondary"><?php esc_html_e( 'Send test event', 'ai-site-connector' ); ?></button></p>
 				</form>
@@ -1216,7 +1246,7 @@ class AI_Site_Connector_Admin_Page {
 				<?php esc_html_e( 'Optional periodic summary of audit events sent by email. Lighter-weight alternative to a real-time webhook. Empty windows (no events) are skipped automatically.', 'ai-site-connector' ); ?>
 			</p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<?php self::nonce_field(); ?>
 				<input type="hidden" name="action" value="ai_site_connector_save_digest_settings" />
 				<table class="asc-kv">
 					<tr>
@@ -1254,7 +1284,7 @@ class AI_Site_Connector_Admin_Page {
 				</p>
 			</form>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<?php self::nonce_field(); ?>
 				<input type="hidden" name="action" value="ai_site_connector_send_test_digest" />
 				<p>
 					<button type="submit" class="button button-secondary"><?php esc_html_e( 'Send test digest now', 'ai-site-connector' ); ?></button>
@@ -1439,7 +1469,7 @@ class AI_Site_Connector_Admin_Page {
 			</p>
 			<?php $filter_override = (int) apply_filters( 'ai_site_connector_log_retention_days', $retention_days ) !== (int) get_option( AI_Site_Connector_Audit_Log::RETENTION_OPTION, AI_Site_Connector_Audit_Log::DEFAULT_RETENTION ); ?>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-bottom: 12px;">
-				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<?php self::nonce_field(); ?>
 				<input type="hidden" name="action" value="ai_site_connector_save_retention" />
 				<label>
 					<?php esc_html_e( 'Retention window (days):', 'ai-site-connector' ); ?>
@@ -1453,7 +1483,7 @@ class AI_Site_Connector_Admin_Page {
 				<?php endif; ?>
 			</form>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<?php self::nonce_field(); ?>
 				<input type="hidden" name="action" value="ai_site_connector_prune_log" />
 				<p>
 					<button type="submit" class="button button-secondary" onclick="return confirm('<?php echo esc_js( __( 'Prune audit log entries older than the retention window now? Recent rows are preserved.', 'ai-site-connector' ) ); ?>');">
@@ -1472,7 +1502,7 @@ class AI_Site_Connector_Admin_Page {
 				<?php esc_html_e( 'By default, deleting this plugin preserves the audit log table, the AI Site Operator role, the dedicated AI user, and any Application Passwords. Tick the box below if you want a clean wipe of the data this plugin owns when the plugin is deleted.', 'ai-site-connector' ); ?>
 			</p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<?php self::nonce_field(); ?>
 				<input type="hidden" name="action" value="ai_site_connector_save_uninstall_pref" />
 				<p>
 					<label>
@@ -1534,7 +1564,7 @@ class AI_Site_Connector_Admin_Page {
 				<a class="button" href="<?php echo esc_url( admin_url( 'tools.php?page=' . self::PAGE_SLUG . '&tab=audit' ) ); ?>"><?php esc_html_e( 'Clear', 'ai-site-connector' ); ?></a>
 			</form>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-top:8px">
-				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<?php self::nonce_field(); ?>
 				<input type="hidden" name="action" value="ai_site_connector_export_audit_csv" />
 				<input type="hidden" name="filter_action" value="<?php echo esc_attr( $filters['action'] ); ?>" />
 				<input type="hidden" name="filter_tool" value="<?php echo esc_attr( $filters['tool'] ); ?>" />
@@ -1726,8 +1756,9 @@ class AI_Site_Connector_Admin_Page {
 				?>
 			</p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline">
-				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<?php self::nonce_field(); ?>
 				<input type="hidden" name="action" value="ai_site_connector_test_rest" />
+				<input type="hidden" name="return_tab" value="connection" />
 				<button type="submit" class="button button-secondary"><?php esc_html_e( 'Run REST self-test', 'ai-site-connector' ); ?></button>
 			</form>
 		</div>
@@ -1795,7 +1826,7 @@ Do not commit the Application Password to git.</pre>
 				<?php esc_html_e( 'Each tool consults this list BEFORE executing. WP capability checks still apply on top — disabling a tool here cannot grant access, only deny it.', 'ai-site-connector' ); ?>
 			</p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<?php self::nonce_field(); ?>
 				<input type="hidden" name="action" value="ai_site_connector_save_permissions" />
 				<p>
 					<label>
@@ -1817,10 +1848,10 @@ Do not commit the Application Password to git.</pre>
 					<tbody>
 						<?php foreach ( $perms as $key => $row ) : ?>
 							<tr>
-								<td><input type="checkbox" name="ai_site_connector_perms[<?php echo esc_attr( $key ); ?>]" value="1" <?php checked( $row['enabled'] ); ?> /></td>
+								<td><input type="checkbox" id="asc-perm-<?php echo esc_attr( $key ); ?>" name="ai_site_connector_perms[<?php echo esc_attr( $key ); ?>]" value="1" aria-describedby="asc-perm-desc-<?php echo esc_attr( $key ); ?>" <?php checked( $row['enabled'] ); ?> /></td>
 								<td>
-									<strong><?php echo esc_html( $row['label'] ); ?></strong> <code><?php echo esc_html( $key ); ?></code><br>
-									<span class="description"><?php echo esc_html( $row['description'] ); ?></span>
+									<label for="asc-perm-<?php echo esc_attr( $key ); ?>"><strong><?php echo esc_html( $row['label'] ); ?></strong></label> <code><?php echo esc_html( $key ); ?></code><br>
+									<span class="description" id="asc-perm-desc-<?php echo esc_attr( $key ); ?>"><?php echo esc_html( $row['description'] ); ?></span>
 								</td>
 								<td><code><?php echo esc_html( $row['category'] ); ?></code></td>
 								<td><code><?php echo esc_html( $row['wp_cap'] ); ?></code></td>
@@ -1843,7 +1874,7 @@ Do not commit the Application Password to git.</pre>
 			<h2><?php esc_html_e( 'Cache purge', 'ai-site-connector' ); ?></h2>
 			<p class="description"><?php esc_html_e( 'Flushes WP object cache plus every supported cache plugin that is active. Cloudflare runs only if both API token and zone are set in plugin options.', 'ai-site-connector' ); ?></p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<?php self::nonce_field(); ?>
 				<input type="hidden" name="action" value="ai_site_connector_purge_cache" />
 				<p><button type="submit" class="button button-secondary"><?php esc_html_e( 'Purge all caches now', 'ai-site-connector' ); ?></button></p>
 			</form>
@@ -1853,7 +1884,7 @@ Do not commit the Application Password to git.</pre>
 			<h2><?php esc_html_e( 'Site capability report', 'ai-site-connector' ); ?></h2>
 			<p class="description"><?php esc_html_e( 'Same payload returned by GET /diagnostics/site-report. No secrets are included — safe to paste into a support thread.', 'ai-site-connector' ); ?></p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline">
-				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<?php self::nonce_field(); ?>
 				<input type="hidden" name="action" value="ai_site_connector_export_diagnostics" />
 				<p><button type="submit" class="button button-primary"><?php esc_html_e( 'Download diagnostic report (JSON)', 'ai-site-connector' ); ?></button></p>
 			</form>
@@ -1938,7 +1969,7 @@ Do not commit the Application Password to git.</pre>
 				<?php esc_html_e( 'Each button writes a JSON snapshot under wp-content/uploads/ai-site-connector/exports/. The same data is available via REST under /export/* for an AI agent to fetch directly.', 'ai-site-connector' ); ?>
 			</p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<?php wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD ); ?>
+				<?php self::nonce_field(); ?>
 				<input type="hidden" name="action" value="ai_site_connector_export_write" />
 				<p>
 					<label>

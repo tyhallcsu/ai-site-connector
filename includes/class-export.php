@@ -58,18 +58,24 @@ class AI_Site_Connector_Export {
 			)
 		);
 
-		$items = array();
+		$items   = array();
+		$omitted = 0;
 		foreach ( $attachments as $att ) {
+			if ( ! self::can_read_attachment( $att ) ) {
+				++$omitted;
+				continue;
+			}
 			$items[] = self::build_media_item( $att, (bool) $args['include_sha256'] );
 		}
 
 		return array(
-			'generated_at' => gmdate( 'c' ),
-			'site_url'     => home_url(),
-			'count'        => count( $items ),
-			'limit'        => $limit,
-			'offset'       => $offset,
-			'items'        => $items,
+			'generated_at'      => gmdate( 'c' ),
+			'site_url'          => home_url(),
+			'count'             => count( $items ),
+			'omitted_forbidden' => $omitted,
+			'limit'             => $limit,
+			'offset'            => $offset,
+			'items'             => $items,
 		);
 	}
 
@@ -105,8 +111,33 @@ class AI_Site_Connector_Export {
 			'mime_type'     => $mime,
 			'size_bytes'    => $size,
 			'sha256'        => $sha256,
-			'modified_gmt'  => (string) $att->post_modified_gmt,
+			'modified_gmt'  => self::gmt_date( $att->post_modified_gmt, $att->post_modified ),
 		);
+	}
+
+	/**
+	 * Attached media follows its parent post's visibility; unattached media
+	 * is visible to anyone who can use the Media Library. Explicit because
+	 * read_post only maps inherit-status attachments to the parent on newer
+	 * WordPress versions (on 5.6 it falls through to edit_post).
+	 *
+	 * @param WP_Post $att Attachment.
+	 */
+	public static function can_read_attachment( $att ) {
+		$parent = (int) $att->post_parent;
+		if ( $parent > 0 && get_post( $parent ) ) {
+			return current_user_can( 'read_post', $parent );
+		}
+		return current_user_can( 'upload_files' ) || current_user_can( 'edit_post', $att->ID );
+	}
+
+	/**
+	 * GMT date, derived from the local column when WordPress stored the zero
+	 * date (never-published drafts).
+	 */
+	private static function gmt_date( $gmt, $local ) {
+		$gmt = (string) $gmt;
+		return ( '' === $gmt || '0000-00-00 00:00:00' === $gmt ) ? get_gmt_from_date( (string) $local ) : $gmt;
 	}
 
 	/**
@@ -137,16 +168,26 @@ class AI_Site_Connector_Export {
 			'order'          => 'DESC',
 		);
 		if ( '' !== (string) $args['since'] ) {
-			$query_args['date_query'] = array(
-				array(
-					'column' => 'post_modified_gmt',
-					'after'  => (string) $args['since'],
-				),
-			);
+			$since_ts = strtotime( (string) $args['since'] );
+			if ( false !== $since_ts ) {
+				// Local column: never-published drafts keep a zero
+				// post_modified_gmt, so the GMT column would drop them.
+				$query_args['date_query'] = array(
+					array(
+						'column' => 'post_modified',
+						'after'  => get_date_from_gmt( gmdate( 'Y-m-d H:i:s', $since_ts ) ),
+					),
+				);
+			}
 		}
-		$posts = get_posts( $query_args );
-		$items = array();
+		$posts   = get_posts( $query_args );
+		$items   = array();
+		$omitted = 0;
 		foreach ( $posts as $p ) {
+			if ( ! current_user_can( 'edit_post', $p->ID ) ) {
+				++$omitted;
+				continue;
+			}
 			$items[] = array(
 				'id'             => (int) $p->ID,
 				'type'           => $p->post_type,
@@ -154,7 +195,7 @@ class AI_Site_Connector_Export {
 				'title'          => $p->post_title,
 				'slug'           => $p->post_name,
 				'permalink'      => get_permalink( $p->ID ),
-				'modified_gmt'   => $p->post_modified_gmt,
+				'modified_gmt'   => self::gmt_date( $p->post_modified_gmt, $p->post_modified ),
 				'author_id'      => (int) $p->post_author,
 				'content_length' => strlen( (string) $p->post_content ),
 				'content_hash'   => hash( 'sha256', (string) $p->post_content ),
@@ -164,9 +205,10 @@ class AI_Site_Connector_Export {
 		return array(
 			'generated_at' => gmdate( 'c' ),
 			'site_url'     => home_url(),
-			'since'        => (string) $args['since'],
-			'count'        => count( $items ),
-			'items'        => $items,
+			'since'             => (string) $args['since'],
+			'count'             => count( $items ),
+			'omitted_forbidden' => $omitted,
+			'items'             => $items,
 		);
 	}
 
@@ -193,8 +235,8 @@ class AI_Site_Connector_Export {
 			'slug'            => $post->post_name,
 			'author_id'       => (int) $post->post_author,
 			'permalink'       => get_permalink( $post->ID ),
-			'modified_gmt'    => $post->post_modified_gmt,
-			'created_gmt'     => $post->post_date_gmt,
+			'modified_gmt'    => self::gmt_date( $post->post_modified_gmt, $post->post_modified ),
+			'created_gmt'     => self::gmt_date( $post->post_date_gmt, $post->post_date ),
 			'content'         => (string) $post->post_content,
 			'excerpt'         => (string) $post->post_excerpt,
 			'featured_image'  => array(

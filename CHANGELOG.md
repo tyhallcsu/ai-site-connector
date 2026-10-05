@@ -22,6 +22,12 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- `/export/recent-changes`, `/export/media-manifest` and `/export/page/<id>`
+  now follow the same per-item conventions as the content inventory:
+  recent changes lists only posts the caller can edit, the media manifest
+  only attachments the caller can read (both report `omitted_forbidden`),
+  and never-published drafts are no longer dropped by the `since` filter or
+  reported with a `0000-00-00` GMT date.
 - CI: PHPUnit discovered zero tests and still passed; it now runs 40 tests
   and fails on an empty run. Three latent test-harness bugs fixed.
 - Local `composer phpcs` scanned zero files when the checkout path contained

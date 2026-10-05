@@ -354,8 +354,10 @@ wp_cli ai-connector mcp-self-test --user=admin --format=json --path="$WP_DIR" \
 wp_cli ai-connector routes --namespace=ai-site-connector/v1 --format=json --path="$WP_DIR" \
 	| jq -e '.namespaces == ["ai-site-connector/v1"] and (.routes | map(.route) | index("/ai-site-connector/v1/diagnostics/redirects") != null)' >/dev/null \
 	|| { echo "routes --format=json unexpected output" >&2; exit 1; }
-wp_cli ai-connector routes --namespace=ai-site-connector/v1 --format=csv --path="$WP_DIR" | head -1 \
-	| grep -q '^namespace,route,methods,args,has_permission_callback' \
+# Capture before inspecting: piping into `head` closes the pipe early and
+# WP-CLI's SIGPIPE then fails the step under pipefail (flaky on WP 5.6).
+ROUTES_CSV="$(wp_cli ai-connector routes --namespace=ai-site-connector/v1 --format=csv --path="$WP_DIR")"
+printf '%s\n' "$ROUTES_CSV" | sed -n 1p | grep -q '^namespace,route,methods,args,has_permission_callback' \
 	|| { echo "routes --format=csv missing header" >&2; exit 1; }
 wp_cli ai-connector page-builder --format=json --path="$WP_DIR" \
 	| jq -e '.site.detected | has("elementor") and has("block_editor")' >/dev/null \
@@ -366,8 +368,8 @@ wp_cli ai-connector redirects --format=json --path="$WP_DIR" \
 wp_cli ai-connector content-inventory --user=admin --all --format=json --path="$WP_DIR" \
 	| jq -e '(.total | type == "number") and (.items | length) == .total and .next_offset == null' >/dev/null \
 	|| { echo "content-inventory --all --format=json unexpected output" >&2; exit 1; }
-wp_cli ai-connector content-inventory --user=admin --format=csv --path="$WP_DIR" | head -1 \
-	| grep -q '^"id","post_type","title"' \
+INVENTORY_CSV="$(wp_cli ai-connector content-inventory --user=admin --format=csv --path="$WP_DIR")"
+printf '%s\n' "$INVENTORY_CSV" | sed -n 1p | grep -q '^"id","post_type","title"' \
 	|| { echo "content-inventory --format=csv missing header" >&2; exit 1; }
 if wp_cli ai-connector content-inventory --user=admin --post_type=attachment --path="$WP_DIR" >/dev/null 2>&1; then
 	echo "content-inventory accepted post_type=attachment" >&2

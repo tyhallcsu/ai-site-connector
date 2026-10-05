@@ -220,3 +220,35 @@ asc_it(
 		}
 	}
 );
+
+asc_it(
+	'bundle coverage: index states scope, completeness and limitations',
+	function () {
+		$ids   = array( asc_it_post(), asc_it_post() );
+		$atts  = array();
+		$atts[] = asc_it_attachment( 'cov-present.png', 'present', array( 'mime' => 'image/png' ) );
+		$atts[] = asc_it_attachment( 'cov-gone.png', 'gone', array( 'mime' => 'image/png' ) );
+		$up     = wp_upload_dir();
+		unlink( trailingslashit( $up['basedir'] ) . 'asc-it/cov-gone.png' ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		try {
+			$res = AI_Site_Connector_Export_Bundle::build( array( 'max_items' => 1 ) );
+			foreach ( $res['index'] as $file => $info ) {
+				asc_assert( array_key_exists( 'complete', $info ) && array_key_exists( 'scope', $info ) && array_key_exists( 'limitations', $info ), "{$file} lacks coverage fields" );
+				asc_assert_same( empty( $info['limitations'] ), $info['complete'], "{$file} complete must equal no limitations" );
+			}
+			$inv = $res['index']['site-inventory.json'];
+			asc_assert_same( false, $inv['complete'], 'capped inventory reported complete' );
+			asc_assert( in_array( 'truncated', $inv['limitations'], true ), 'truncated limitation' );
+			asc_assert( false !== stripos( $inv['scope'], 'published' ), 'inventory scope must say published-only' );
+			asc_assert( in_array( 'unreadable_files', $res['index']['duplicate-media.json']['limitations'], true ), 'unreadable files not surfaced' );
+			asc_assert( in_array( 'context_checks_omitted', $res['index']['mcp-self-test.json']['limitations'], true ), 'self-test omission not surfaced' );
+			$doc = AI_Site_Connector_Export_Bundle::index_document( $res );
+			asc_assert_same( false, $doc['files']['site-inventory.json']['complete'], 'manifest-index.json carries completeness' );
+		} finally {
+			foreach ( $ids as $id ) {
+				wp_delete_post( $id, true );
+			}
+			asc_it_cleanup_attachments( $atts );
+		}
+	}
+);

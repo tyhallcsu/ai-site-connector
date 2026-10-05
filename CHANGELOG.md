@@ -6,6 +6,14 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- `manifest-index.json` / bundle `index` entries now carry `complete`, `scope`
+  and `limitations`, so partial scans (truncation, partial posts, hash budget,
+  unreadable or oversized files, scan-window-only duplicate pairing, omitted
+  self-test checks) are never mistaken for a complete audit; the CLI warns for
+  each incomplete file. Cross-window duplicate detection is tracked in #88.
+
 ## [0.11.0] - 2026-10-05
 
 Media audit, duplicate media, offline broken-link scanning, a deterministic

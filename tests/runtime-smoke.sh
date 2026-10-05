@@ -67,7 +67,12 @@ wp_cli() {
 	php -d "memory_limit=${WP_CLI_MEMORY_LIMIT:-512M}" "$WP_CLI_BIN" "$@"
 }
 
-mysql_args=(-h "$WP_DB_HOST" -u "$WP_DB_USER")
+# WP_DB_HOST may carry a port ("127.0.0.1:33306") for local runs against a
+# disposable container; the mysql CLI needs host and port split.
+mysql_args=(-h "${WP_DB_HOST%%:*}" -u "$WP_DB_USER")
+if [ "${WP_DB_HOST#*:}" != "$WP_DB_HOST" ]; then
+	mysql_args+=(-P "${WP_DB_HOST#*:}")
+fi
 if [ -n "$WP_DB_PASSWORD" ]; then
 	mysql_args+=("-p${WP_DB_PASSWORD}")
 fi
@@ -528,6 +533,9 @@ for action in plugin_activated ai_user_created application_password_created heal
 		exit 1
 	fi
 done
+
+log "Running in-WordPress integration suite (tests/integration)."
+wp_cli eval-file "$PLUGIN_DIR/tests/integration/run.php" --user=admin --path="$WP_DIR"
 
 log "Testing audit log retention pruner."
 # Insert 5 old rows, then enough recent fillers so the floor (most-recent-100

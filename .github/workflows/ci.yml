@@ -86,8 +86,13 @@ jobs:
       - name: Install dev dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
 
+      # PHPUnit 9 exits 0 on "No tests executed!", which once hid a
+      # mis-configured suite. Fail unless at least one test actually ran.
       - name: Run PHPUnit
-        run: composer test
+        run: |
+          set -o pipefail
+          composer test 2>&1 | tee /tmp/phpunit.out
+          grep -Eq '^OK \([1-9][0-9]* tests?,' /tmp/phpunit.out || { echo "PHPUnit executed no tests or did not report OK"; exit 1; }
 
   structure:
     name: Plugin structure

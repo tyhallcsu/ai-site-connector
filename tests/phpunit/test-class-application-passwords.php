@@ -30,11 +30,12 @@ class ApplicationPasswordsTest extends TestCase {
 	}
 
 	public function test_revoke_fires_do_action_signal(): void {
+		// WP_Mock defines do_action itself (the bootstrap stub never loads),
+		// so assert the signal through WP_Mock's action expectations.
+		WP_Mock::expectAction( 'ai_site_connector_application_password_revoked', 42, 'uuid-abc' );
+
 		$res = \AI_Site_Connector_Application_Passwords::revoke( 42, 'uuid-abc' );
 		$this->assertTrue( $res );
-
-		$this->assertArrayHasKey( 'ai_site_connector_application_password_revoked', $GLOBALS['__did_actions'] );
-		$this->assertSame( array( 42, 'uuid-abc' ), $GLOBALS['__did_actions']['ai_site_connector_application_password_revoked'][0] );
 		$this->assertSame( array( 42, 'uuid-abc' ), \WP_Application_Passwords::$deleted_with );
 	}
 }

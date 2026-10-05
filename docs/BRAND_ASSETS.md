@@ -6,6 +6,8 @@ These assets provide a clean, original brand mark for AI Site Connector across t
 
 The visual system uses a shield for authorized site access, connected nodes for REST/API automation, and a small terminal cue for AI coding agent workflows. It avoids the WordPress logo, Claude/OpenAI marks, and any third-party trademarked artwork.
 
+The illustrated README now uses three generated PNGs documented in [README artwork provenance](README_ARTWORK.md). The original vector identity and exports below remain available; the runtime admin mark is unchanged.
+
 ## Files
 
 - `assets/brand/ai-site-connector-mark.svg` — **runtime asset.** Compact square mark for admin UI; loaded by the Tools → AI Site Connector page header. Must be present in the plugin install or the admin header image will be broken (PHP still works fine).
@@ -26,7 +28,7 @@ The release ZIP build script (`bin/build-release-zip.sh`) bundles the SVG files 
 
 ## Safety And Legal Notes
 
-The artwork is original vector artwork authored for this repo. It contains no embedded raster images, no stock assets, no external font files, no copied third-party logos, and no copied trademarks.
+The original SVG artwork listed above is vector artwork authored for this repo. It contains no embedded raster images, no stock assets, no external font files, no copied third-party logos, and no copied trademarks.
 
 The brand assets ship under the same [MIT License](../LICENSE) as the rest of the plugin code — anyone may use, modify, and redistribute. They should **not** be presented as official WordPress, Claude, OpenAI, Anthropic, or Automattic branding.
 

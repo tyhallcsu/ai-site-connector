@@ -9,13 +9,13 @@ This document explains the security posture of the AI Site Connector plugin and 
 | WordPress administrator (`manage_options`) | Trusted     | Only this role can use the wizard, mint App Passwords, or revoke. |
 | AI service user (`ai_site_operator` etc.)  | Limited     | Capability set defined by `ai_site_connector_operator_caps`. |
 | Application Password holder (the AI tool)  | Untrusted   | Same authority as the user it belongs to, no more.           |
-| Public REST consumers                      | Untrusted   | Only `/health` is reachable unauthenticated, and it returns no secrets. |
+| Public REST consumers                      | Untrusted   | Minimal `/health`, `/openapi.json`, and discovery are public. The connection-pack download uses a secret single-use token rather than user authentication. |
 
 ## Threat model — what the plugin defends against
 
-- **Plaintext password leakage at rest.** The plugin never persists the plaintext Application Password. Only metadata (uuid, name, created, last_used) is stored — and that storage is owned by WP core, not this plugin.
+- **Credential storage.** WordPress core stores a hash of the Application Password. The plugin temporarily stores the plaintext connection pack in an admin flash transient (60 seconds) and, for optional one-time downloads, a site transient (five minutes). These may be stored in the database or object cache. Display/download consumption deletes the corresponding transient; expiration is not a secure-erasure guarantee for storage or backups.
 - **CSRF on credential mint/revoke.** Every form posts through `admin-post.php` with a nonce verified by `check_admin_referer()`.
-- **Privilege escalation through endpoints.** Every plugin REST endpoint declares an explicit `permission_callback` requiring an authenticated user with a documented capability. There is no `__return_true` permission callback on any write or sensitive endpoint.
+- **Privilege escalation through endpoints.** Authenticated routes declare capability checks. Public health/OpenAPI routes and the token-protected connection-pack download intentionally have public callbacks; the download handler validates and consumes the token. Plugin tool permissions add checks on the routes that use the permission guard, not on every WordPress REST route.
 - **Credential creation over HTTP.** `create_for_user()` refuses to mint a password unless `is_ssl()` is true OR `WP_DEBUG` / `AI_SITE_CONNECTOR_ALLOW_HTTP` is set.
 - **Username collision / impersonation.** `create_user()` rejects existing usernames and emails.
 - **Audit gap.** Activation, deactivation, user creation, password creation, password revocation, and authenticated health access are all logged to `{prefix}ai_site_connector_log`.
@@ -39,7 +39,7 @@ This document explains the security posture of the AI Site Connector plugin and 
 | `/wp-json/ai-site-connector/v1/pages`      | `edit_pages`          | GET    |
 | `/wp-json/ai-site-connector/v1/posts`      | `edit_posts`          | GET    |
 
-There are no `POST` / `PUT` / `DELETE` routes registered by this plugin. To write content, AI agents use core REST routes (`/wp-json/wp/v2/posts`, `/media`, etc.) under the user's existing capabilities.
+The table above covers the original read endpoints. The plugin also registers POST routes for MCP, cache purge, media sideload, and credential rotation. See the [current endpoint reference](../README.md#rest-endpoints-added-by-this-plugin) for authentication and tool-permission requirements. Agents can also write through core REST routes (`/wp-json/wp/v2/posts`, `/media`, etc.) under the user’s capabilities. The plugin’s read-only tool setting is not a universal restriction on those core routes.
 
 ## Things this plugin will never add
 

@@ -29,6 +29,9 @@ build/
 dist/
 *.zip
 
+# Local PHPUnit result cache
+tests/.cache/
+
 # Backups
 *.bak
 *.orig

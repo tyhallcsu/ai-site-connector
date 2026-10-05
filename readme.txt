@@ -2,9 +2,9 @@
 Contributors: sharmanhall
 Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
-Tested up to: 6.9
+Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.9.1
+Stable tag: 0.10.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,14 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.10.0 =
+* New read-only diagnostics, each as a REST route, MCP tool and WP-CLI command: MCP self-test, REST route inventory, page builder detector, redirect export (Rank Math, Redirection, AIOSEO, Yoast Premium).
+* New content inventory export (posts, pages, CPTs with terms and SEO fields; JSON or CSV; paginated and filterable).
+* New SEO abstraction for Rank Math, Yoast, SEOPress, AIOSEO 4 and native fallback; writes are dry-run by default and gated by the update_seo permission.
+* Export routes list only items the caller may access, and never-published drafts are no longer dropped by date filters.
+* `Tested up to:` raised to 7.1 — the runtime smoke and integration suite pass on WordPress 7.1.2 (current stable).
+* CI: PHPUnit now actually runs (it had been discovering zero tests); in-WordPress integration suite and release ZIP install/upgrade test added.
+
 = 0.9.1 =
 * Compatibility + connection-pack UX patch. Closes #55 and #62.
 * `Tested up to:` raised from 6.5 to 6.9 after the green `wordpress-runtime` CI job (which exercises `WP_VERSION=latest` = 6.9.x) confirmed v0.9.0 boots and passes smoke against current WordPress stable (closes #55).

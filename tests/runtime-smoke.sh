@@ -116,6 +116,7 @@ wp_cli core install \
 	--skip-email \
 	--quiet
 
+log "Installed WordPress $(wp_cli core version --path="$WP_DIR")."
 log "Activating AI Site Connector."
 PLUGIN_DIR="$WP_DIR/wp-content/plugins/ai-site-connector"
 mkdir -p "$PLUGIN_DIR"

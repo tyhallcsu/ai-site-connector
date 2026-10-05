@@ -481,6 +481,7 @@ tests/package-smoke.sh
 
 - Open **Tools → AI Site Connector → Credentials**, click **Revoke** on the row.
 - Or `wp ai-connector revoke-password --username=ai-agent --uuid=<uuid>`.
+- To cut off every AI client at once without touching credentials: `wp ai-connector disable --user=admin`. Every route in this plugin's REST namespace except `/health` — including the MCP endpoint — returns `503` until `wp ai-connector enable --user=admin`. `/health` reports `"enabled": false`, `wp ai-connector status` shows the state, and both changes are audit-logged. Application Passwords keep working for core `/wp/v2` routes, so revoke them as well if the goal is to remove access entirely.
 - Or open the user's profile in `/wp-admin/users.php` and revoke from the **Application Passwords** section. Both UIs operate on the same WP core data.
 
 ## Troubleshooting

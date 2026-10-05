@@ -33,6 +33,8 @@ class AI_Site_Connector_CLI {
 			array( 'app_passwords',    AI_Site_Connector_Plugin::app_passwords_available() ? 'available' : 'unavailable' ),
 			array( 'rest_reachable',   AI_Site_Connector_Plugin::rest_reachable() ? 'yes' : 'no' ),
 			array( 'plugin_version',   AI_SITE_CONNECTOR_VERSION ),
+			array( 'connector',        AI_Site_Connector_Permissions::is_disabled() ? 'disabled' : 'enabled' ),
+			array( 'read_only_mode',   AI_Site_Connector_Permissions::is_read_only() ? 'on' : 'off' ),
 			array( 'cli_user',         $user && $user->ID ? $user->user_login : '—' ),
 		);
 		\WP_CLI\Utils\format_items( 'table', array_map( function( $r ) { return array( 'key' => $r[0], 'value' => $r[1] ); }, $rows ), array( 'key', 'value' ) );
@@ -1015,6 +1017,55 @@ class AI_Site_Connector_CLI {
 		}
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir
 		@rmdir( $dir );
+	}
+
+	/**
+	 * Disable AI access through this plugin site-wide.
+	 *
+	 * Every route in the plugin's REST namespace except /health, including
+	 * the MCP endpoint, returns 503 until re-enabled. Application Passwords
+	 * are not revoked (use revoke-password for that). Requires an
+	 * administrator --user; asks for confirmation unless --yes.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--yes]
+	 * : Skip the confirmation prompt.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *   wp ai-connector disable --user=admin
+	 */
+	public function disable( $args, $assoc ) {
+		self::require_admin_context();
+		WP_CLI::confirm( 'Disable AI Site Connector for all AI clients on this site?', $assoc );
+		if ( ! AI_Site_Connector_Permissions::set_disabled( true, 'wp-cli' ) ) {
+			WP_CLI::success( 'AI Site Connector was already disabled.' );
+			return;
+		}
+		WP_CLI::success( sprintf( 'AI Site Connector routes and MCP disabled on %s. Application Passwords still authenticate to core /wp/v2 — run `wp ai-connector revoke-password` to cut access completely. `wp ai-connector enable` restores the plugin routes.', get_site_url() ) );
+	}
+
+	/**
+	 * Re-enable AI access through this plugin.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--yes]
+	 * : Skip the confirmation prompt.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *   wp ai-connector enable --user=admin
+	 */
+	public function enable( $args, $assoc ) {
+		self::require_admin_context();
+		WP_CLI::confirm( 'Re-enable AI Site Connector for AI clients on this site?', $assoc );
+		if ( ! AI_Site_Connector_Permissions::set_disabled( false, 'wp-cli' ) ) {
+			WP_CLI::success( 'AI Site Connector was already enabled.' );
+			return;
+		}
+		WP_CLI::success( sprintf( 'AI Site Connector enabled on %s.', get_site_url() ) );
 	}
 
 	/**

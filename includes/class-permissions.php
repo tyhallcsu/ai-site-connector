@@ -21,6 +21,7 @@ class AI_Site_Connector_Permissions {
 
 	const OPTION_KEY       = 'ai_site_connector_tool_permissions';
 	const READ_ONLY_OPTION = 'ai_site_connector_read_only_mode';
+	const DISABLED_OPTION  = 'ai_site_connector_disabled';
 
 	const TOOL_READ_CONTENT          = 'read_content';
 	const TOOL_WRITE_CONTENT         = 'write_content';
@@ -33,6 +34,7 @@ class AI_Site_Connector_Permissions {
 	const TOOL_DESTRUCTIVE_OPERATION = 'destructive_operations';
 
 	public static function register_hooks() {
+		add_filter( 'rest_pre_dispatch', array( __CLASS__, 'block_when_disabled' ), 5, 3 );
 		add_action( 'admin_post_ai_site_connector_save_permissions', array( __CLASS__, 'handle_save' ) );
 	}
 
@@ -139,6 +141,71 @@ class AI_Site_Connector_Permissions {
 	 * Is global read-only mode on? When true, every non-read tool is
 	 * implicitly denied regardless of its individual setting.
 	 */
+	/**
+	 * Site-wide switch (`wp ai-connector disable|enable`). When disabled,
+	 * every route in this plugin's REST namespace except /health — including
+	 * the MCP endpoint — returns 503, and every tool check denies.
+	 * Application Passwords themselves are not revoked.
+	 */
+	public static function is_disabled() {
+		return (bool) get_option( self::DISABLED_OPTION, false );
+	}
+
+	/**
+	 * Turn the switch on or off and audit who did it.
+	 *
+	 * @param bool $disabled New state.
+	 * @param string $via    Short label for the audit log (e.g. 'wp-cli').
+	 * @return bool True when the state changed.
+	 */
+	public static function set_disabled( $disabled, $via = '' ) {
+		$disabled = (bool) $disabled;
+		if ( self::is_disabled() === $disabled ) {
+			return false;
+		}
+		update_option( self::DISABLED_OPTION, $disabled ? 1 : 0, false );
+		if ( class_exists( 'AI_Site_Connector_Audit_Log' ) ) {
+			AI_Site_Connector_Audit_Log::record(
+				$disabled ? 'connector_disabled' : 'connector_enabled',
+				array(
+					'message' => sprintf(
+						'AI Site Connector %1$s by user %2$d%3$s.',
+						$disabled ? 'disabled' : 'enabled',
+						get_current_user_id(),
+						'' !== $via ? ' via ' . $via : ''
+					),
+				)
+			);
+		}
+		return true;
+	}
+
+	/**
+	 * rest_pre_dispatch gate for the plugin namespace while disabled.
+	 *
+	 * @param mixed           $result  Short-circuit value.
+	 * @param WP_REST_Server  $server  Server.
+	 * @param WP_REST_Request $request Request.
+	 * @return mixed
+	 */
+	public static function block_when_disabled( $result, $server, $request ) {
+		if ( null !== $result || ! self::is_disabled() ) {
+			return $result;
+		}
+		// WordPress matches routes case-insensitively, so compare that way
+		// too or /AI-Site-Connector/v1/mcp would slip past the gate.
+		$route  = strtolower( untrailingslashit( (string) $request->get_route() ) );
+		$prefix = '/' . strtolower( AI_SITE_CONNECTOR_REST_NAMESPACE );
+		if ( 0 !== strpos( $route . '/', $prefix . '/' ) || $route === $prefix . '/health' ) {
+			return $result;
+		}
+		return new WP_Error(
+			'ai_site_connector_disabled',
+			__( 'AI Site Connector is disabled on this site by an administrator.', 'ai-site-connector' ),
+			array( 'status' => 503 )
+		);
+	}
+
 	public static function is_read_only() {
 		return (bool) get_option( self::READ_ONLY_OPTION, false );
 	}
@@ -165,6 +232,11 @@ class AI_Site_Connector_Permissions {
 
 		$meta    = $catalog[ $tool ];
 		$is_read = 'read' === $meta['category'];
+
+		if ( self::is_disabled() ) {
+			// Not filterable: the switch must not be overridable by a snippet.
+			return false;
+		}
 
 		if ( self::is_read_only() && ! $is_read ) {
 			return self::apply_filter( $tool, false, $context, 'read_only_mode' );
@@ -201,6 +273,10 @@ class AI_Site_Connector_Permissions {
 		}
 
 		$meta = $catalog[ $tool ];
+
+		if ( self::is_disabled() ) {
+			return self::denied( $tool, 'connector_disabled', __( 'AI Site Connector is disabled on this site by an administrator.', 'ai-site-connector' ) );
+		}
 
 		if ( self::is_read_only() && 'read' !== $meta['category'] ) {
 			return self::denied( $tool, 'read_only_mode', __( 'Site is in read-only mode for AI tools.', 'ai-site-connector' ) );

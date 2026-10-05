@@ -22,6 +22,11 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   --dir=<path>` — eight manifests + sha256 index, byte-identical across runs
   of an unchanged site, per-section caps and failure isolation, no secrets.
 
+- Site-wide switch (#75): `wp ai-connector disable|enable` (administrator
+  `--user`, confirmation unless `--yes`, audit-logged). While disabled every
+  route in the plugin namespace except `/health` — including MCP — returns
+  503; `/health` reports `enabled`; `wp ai-connector status` shows the state.
+
 ### Changed
 
 - Content inventory and the link scanner scope their queries to the caller's

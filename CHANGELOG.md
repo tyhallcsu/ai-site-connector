@@ -46,6 +46,14 @@ behaviour changes; no database changes.
 - Upgrade from 0.12.1 by replacing the plugin files (self-updater or ZIP).
   To roll back, reinstall the 0.12.1 ZIP.
 
+### Known issue
+
+- #114 (present since the rollback feature was added, not new in 0.12.2):
+  the Overview **Rollback** button does not validate a backup before
+  replacing the installed plugin. If a pre-update backup was interrupted,
+  rolling back to it can leave the plugin missing or broken. Until a fix
+  ships, roll back by reinstalling a release ZIP instead.
+
 ## [0.12.1] - 2026-10-05
 
 Patch from the v0.12.0 release audit. **Behaviour change:** MCP

@@ -2,6 +2,32 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-05 — v0.10.0 released; M3 (#64/#65) in review
+
+- PR #81 squash-merged → `9c07f10`. Main CI on `9c07f10`: 19/19 check runs
+  `success` (verified via the check-runs API before tagging).
+- Tagged `v0.10.0` → `9c07f10` (annotated tag object `bb4e1e3`). Release
+  workflow run 37342852174: every gate step succeeded (version fields, tag on
+  main, all CI checks, no existing release, build, package smoke, checksum,
+  publish). Release: https://github.com/tyhallcsu/ai-site-connector/releases/tag/v0.10.0
+  — stable (not prerelease), `releases/latest` = v0.10.0, assets
+  `ai-site-connector-v0.10.0.zip` (237050 B) + `.zip.sha256`.
+- Downloaded asset: `shasum -c` OK, sha256
+  `2783dea6b5383c7dd566ac0cacc57715c3b7a94fc8b0a847e9433dcc873706dd`; embeds
+  0.10.0 in header + constant; top-level entries match the allowlist; no
+  tests/dev docs. `tests/zip-upgrade-smoke.sh` against the **published** ZIP:
+  clean install OK; v0.9.1 → v0.10.0 via v0.9.1's own updater +
+  `wp plugin update` OK.
+- Release-availability comments posted on #63 #67 #68 #69 #71 #72 #75.
+- M3 media audit + duplicates: local integration 52/52, then second-pass
+  review (6 P2 + 2 P3, all fixed with regression tests): suffix-variant
+  grouping of unrelated numbered series, duplicate `_wp_attached_file` rows
+  creating self-duplicates, scaled/-N names defeating title/suspicious
+  checks, disabled big-image threshold disabling the dimension check,
+  per-window grouping now documented + `unhashed` list, primed post caches
+  and lower scan/hash ceilings for non-admins, suspicious-name false
+  positives, aligned attachment status sets. Local integration 54/54.
+
 ## 2026-10-05 — M2 merged; export consistency merged; 0.10.0 release prep
 
 - PR #79 (M2, #63) squash-merged → `2949c89`; CI run 37339837499 on

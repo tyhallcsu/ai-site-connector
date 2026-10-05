@@ -309,6 +309,8 @@ All endpoints under `/wp-json/ai-site-connector/v1/`. Permission-gated tools suc
 | `GET /export/page/<id>`           | Authenticated, `edit_posts`       | Single post/page body with featured-image reference. |
 | `GET /export/site-manifest`       | Authenticated, `manage_options`   | Counts + recent + detected plugins in one call. |
 | `GET /export/content-inventory`   | Authenticated, `edit_posts`       | Paginated posts/pages/CPT inventory with terms and SEO fields; JSON or CSV. See below. |
+| `GET /media/audit`                | Authenticated, `upload_files`     | Media SEO/hygiene audit (alt/title/caption/description, unattached, oversized, suspicious filename, missing file). See below. |
+| `GET /media/duplicates`           | Authenticated, `upload_files`     | Duplicate media by filename and SHA-256; never deletes. See below. |
 
 ### Write and credential administration
 
@@ -351,6 +353,13 @@ MCP tool errors (denied, invalid input) are returned as `isError: true` results 
 - Ordered by ID; `total` and `next_offset` for paging (`--all` in WP-CLI walks every page).
 - `format=csv` returns `{format:"csv", csv:"…"}` with the same pagination fields; cells starting with `= + - @` are prefixed with `'` to block spreadsheet formula injection.
 - Only items the caller can `edit_post` are listed; the rest are counted in `omitted_forbidden`.
+
+### Media audit and duplicate media
+
+Both gated by `upload_files` + the `export_manifest` permission; both list only media the caller can access (attached media follows its parent post; unattached media needs `upload_files`). Neither modifies or deletes anything.
+
+- **Audit** — `GET /media/audit` · MCP `wp_media_audit` · `wp ai-connector media-audit`. Per attachment: `attachment_id, url, filename, mime_type, file_size, width, height, uploaded_gmt, attached_post_id, has_alt/title/caption/description, issues[]`. Issue codes: `missing_alt` (images only), `missing_title`, `title_is_filename` (also against the pre-`-scaled`/`-N` name), `missing_caption`, `missing_description`, `unattached`, `oversized_dimensions` (default: WordPress big-image threshold, 2560 px — also when scaling is disabled), `oversized_file` (default 1 MB), `suspicious_filename` (camera/screenshot defaults, bare hashes, `image (1)` copies), `missing_file`. `mime=image|all`, `only_issues` (default true), `limit` 1–500, `offset`, `summary` counts, `next_offset`.
+- **Duplicates** — `GET /media/duplicates` · MCP `wp_media_duplicates` · `wp ai-connector media-duplicates`. `by_filename` groups (`exact`, or `suffix_variant` — WordPress `-1`/`-scaled` re-uploads, only when the unsuffixed original is present, so `slide-1`/`slide-2` series are not flagged) and `by_hash` groups (SHA-256). Only files whose byte size collides are hashed; files over `max_file_bytes` (≤ 50 MB) are listed in `skipped_large`; at most 500 MB is hashed per call, the rest listed in `unhashed` (`hash_budget_exhausted`). Scans up to `max_scan` attachments (≤ 20 000 for administrators, ≤ 5 000 / 100 MB for other roles) in ID order; `next_after_id` continues the scan, but groups only pair files within one call's window — use a `max_scan` at least the library size for complete results. Files are read only when they resolve inside the uploads directory; missing/unreadable files are listed in `unreadable`.
 
 ### SEO plugin abstraction (`AI_Site_Connector_SEO`)
 

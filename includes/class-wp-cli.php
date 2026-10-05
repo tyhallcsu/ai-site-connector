@@ -709,6 +709,119 @@ class AI_Site_Connector_CLI {
 	}
 
 	/**
+	 * Audit media for SEO/hygiene issues. Read-only.
+	 *
+	 * Runs as the --user given (media that user cannot access is omitted).
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--limit=<n>]
+	 * : 1-500. Default: 100.
+	 *
+	 * [--offset=<n>]
+	 * : Default: 0.
+	 *
+	 * [--mime=<mime>]
+	 * : image|all. Default: image.
+	 *
+	 * [--all-items]
+	 * : Include attachments without issues.
+	 *
+	 * [--format=<format>]
+	 * : table|csv|json. Default: table.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *   wp ai-connector media-audit --user=admin --format=csv > media-audit.csv
+	 */
+	public function media_audit( $args, $assoc ) {
+		$format = self::format( $assoc, array( 'table', 'csv', 'json' ) );
+		$result = AI_Site_Connector_Media_Audit::audit(
+			array(
+				'limit'       => isset( $assoc['limit'] ) ? (int) $assoc['limit'] : AI_Site_Connector_Media_Audit::DEFAULT_LIMIT,
+				'offset'      => isset( $assoc['offset'] ) ? (int) $assoc['offset'] : 0,
+				'mime'        => isset( $assoc['mime'] ) ? (string) $assoc['mime'] : 'image',
+				'only_issues' => ! \WP_CLI\Utils\get_flag_value( $assoc, 'all-items', false ),
+			)
+		);
+		if ( is_wp_error( $result ) ) {
+			WP_CLI::error( $result->get_error_message() );
+		}
+		if ( 'json' === $format ) {
+			WP_CLI::log( wp_json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+			return;
+		}
+		$rows = array();
+		foreach ( $result['items'] as $item ) {
+			$rows[] = array(
+				'attachment_id' => $item['attachment_id'],
+				'filename'      => $item['filename'],
+				'mime_type'     => $item['mime_type'],
+				'width'         => $item['width'],
+				'height'        => $item['height'],
+				'file_size'     => $item['file_size'],
+				'issues'        => implode( ',', $item['issues'] ),
+			);
+		}
+		\WP_CLI\Utils\format_items( $format, $rows, array( 'attachment_id', 'filename', 'mime_type', 'width', 'height', 'file_size', 'issues' ) );
+		if ( 'table' === $format ) {
+			WP_CLI::log( sprintf( 'total=%d scanned=%d clean=%d next_offset=%s', $result['total'], $result['scanned'], $result['clean'], null === $result['next_offset'] ? 'none' : $result['next_offset'] ) );
+		}
+	}
+
+	/**
+	 * Find duplicate media by filename and content hash. Read-only; never deletes.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--max_scan=<n>]
+	 * : Attachments to scan, 1-20000. Default: 5000.
+	 *
+	 * [--after_id=<id>]
+	 * : Resume after this attachment ID.
+	 *
+	 * [--format=<format>]
+	 * : table|json. Default: table.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *   wp ai-connector media-duplicates --user=admin --format=json
+	 */
+	public function media_duplicates( $args, $assoc ) {
+		$format = self::format( $assoc, array( 'table', 'json' ) );
+		$result = AI_Site_Connector_Media_Audit::duplicates(
+			array(
+				'max_scan' => isset( $assoc['max_scan'] ) ? (int) $assoc['max_scan'] : AI_Site_Connector_Media_Audit::DUP_DEFAULT_SCAN,
+				'after_id' => isset( $assoc['after_id'] ) ? (int) $assoc['after_id'] : 0,
+			)
+		);
+		if ( is_wp_error( $result ) ) {
+			WP_CLI::error( $result->get_error_message() );
+		}
+		if ( 'json' === $format ) {
+			WP_CLI::log( wp_json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+			return;
+		}
+		$rows = array();
+		foreach ( $result['by_filename'] as $g ) {
+			$rows[] = array(
+				'kind'           => 'filename:' . $g['match'],
+				'key'            => $g['filename'],
+				'attachment_ids' => implode( ',', $g['attachment_ids'] ),
+			);
+		}
+		foreach ( $result['by_hash'] as $g ) {
+			$rows[] = array(
+				'kind'           => 'sha256',
+				'key'            => $g['sha256'],
+				'attachment_ids' => implode( ',', $g['attachment_ids'] ),
+			);
+		}
+		\WP_CLI\Utils\format_items( 'table', $rows, array( 'kind', 'key', 'attachment_ids' ) );
+		WP_CLI::log( sprintf( 'scanned=%d hashed=%d unreadable=%d next_after_id=%s', $result['scanned'], $result['hashed_files'], count( $result['unreadable'] ), null === $result['next_after_id'] ? 'none' : $result['next_after_id'] ) );
+	}
+
+	/**
 	 * Validate --format against an allow-list.
 	 */
 	private static function format( $assoc, array $allowed ) {

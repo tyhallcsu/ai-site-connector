@@ -27,6 +27,8 @@
  *   wp_page_builder  — page builder detection (site + per-post)
  *   wp_redirects     — redirect plugin detection + export
  *   wp_content_inventory — paginated posts/pages/CPT inventory
+ *   wp_media_audit       — media SEO/hygiene audit
+ *   wp_media_duplicates  — duplicate media by filename and hash
  *
  * Constants:
  *   AI_SITE_CONNECTOR_MCP_DISABLE — when true, the route is not registered.
@@ -262,6 +264,36 @@ class AI_Site_Connector_MCP_Server {
 				),
 			),
 			array(
+				'name'        => 'wp_media_audit',
+				'description' => 'Audit media for missing alt/title/caption/description, unattached, oversized dimensions or bytes, suspicious filenames, missing files. Optional: limit (1-500), offset, mime (image|all), only_issues (default true), max_dimension, max_bytes. Read-only.',
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'limit'         => array( 'type' => 'integer' ),
+						'offset'        => array( 'type' => 'integer' ),
+						'mime'          => array(
+							'type' => 'string',
+							'enum' => array( 'image', 'all' ),
+						),
+						'only_issues'   => array( 'type' => 'boolean' ),
+						'max_dimension' => array( 'type' => 'integer' ),
+						'max_bytes'     => array( 'type' => 'integer' ),
+					),
+				),
+			),
+			array(
+				'name'        => 'wp_media_duplicates',
+				'description' => 'Find duplicate media by filename and SHA-256 content hash (bounded scan; resume with after_id = next_after_id). Never deletes. Optional: max_scan (1-20000, default 5000), after_id, max_file_bytes. Read-only.',
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'max_scan'       => array( 'type' => 'integer' ),
+						'after_id'       => array( 'type' => 'integer' ),
+						'max_file_bytes' => array( 'type' => 'integer' ),
+					),
+				),
+			),
+			array(
 				'name'        => 'wp_redirects',
 				'description' => 'Detect redirect plugins (Rank Math, Redirection, AIOSEO, Yoast Premium) and export their redirects. Optional: limit (1-1000, default 500), offset. Read-only; admin only.',
 				'inputSchema' => array(
@@ -408,6 +440,10 @@ class AI_Site_Connector_MCP_Server {
 				return self::dispatch_checked( 'GET', '/diagnostics/page-builder', self::pick( $args, array( 'post_ids' ) ) );
 			case 'wp_content_inventory':
 				return self::dispatch_checked( 'GET', '/export/content-inventory', self::pick( $args, array( 'post_type', 'status', 'modified_after', 'modified_before', 'limit', 'offset', 'include_terms', 'include_seo', 'format' ) ) );
+			case 'wp_media_audit':
+				return self::dispatch_checked( 'GET', '/media/audit', self::pick( $args, array( 'limit', 'offset', 'mime', 'only_issues', 'max_dimension', 'max_bytes' ) ) );
+			case 'wp_media_duplicates':
+				return self::dispatch_checked( 'GET', '/media/duplicates', self::pick( $args, array( 'max_scan', 'after_id', 'max_file_bytes' ) ) );
 			case 'wp_redirects':
 				return self::dispatch_checked( 'GET', '/diagnostics/redirects', self::pick( $args, array( 'limit', 'offset' ) ) );
 			default:

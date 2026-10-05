@@ -33,6 +33,18 @@ Status values: **fixed** (code + regression test on the PR head),
 | 2.7 | P3 | Guard's direct-row restore can overwrite a concurrent save | fixed: restore is conditional on `post_modified_gmt` equal to the value this call wrote (captured from `wp_insert_post_data` at the last priority — a first attempt read it back after the concurrent write and was caught by the new test); otherwise nothing is restored and `restore_failed` includes `post_columns` | `review 2: …guard never clobbers a concurrent save` |
 | 2.8 | P3 | `prune()` can delete recovery (`pending`/`revert_incomplete`) snapshots | fixed: prune skips them | `content-update review 2: …` (prune) |
 
+## Review 3 — focused (rollback authz, concurrency, failure consistency, row recovery, honesty) on `dff1ef7`
+
+| # | Sev | Finding | Disposition | Test |
+|---|-----|---------|-------------|------|
+| 3.1 | P1 | A side field spanning several taxonomies / meta keys that failed part-way was not in `written`, so it was never restored and the response claimed a clean revert | fixed: the field is recorded before it is applied, so a failure restores it in full from `before_raw` (update and rollback paths) | `content-update review 3: …` (category restored when post_tag fails) |
+| 3.2 | P2 | Interrupted (`pending`) publish recovery restored the generated slug/date without a conflict check | fixed: without recorded post-update side values, recovery refuses (`status` conflict) unless the side columns are unchanged | `review 3: interrupted publish with an edited slug…` |
+| 3.3 | P2 | Guard row restore matched only `post_modified_gmt` (1 s precision) — a same-second concurrent save could be overwritten; the 2.7 test faked a future timestamp | fixed: WHERE matches every guarded column as this call wrote it plus the modified time, captured from `wp_insert_post_data` for this post only (the earlier capture also caught the revision insert — found by the new test); test uses a same-second concurrent save | `review 2: …guard never clobbers a concurrent save`, `review 3: …dirty rollback…` |
+| 3.4 | P2 | Rollback failure ignored `columns_dirty`, claimed `reapplied`, left the snapshot unrecoverable | fixed: `restore_failed: [post_columns]`, `reapplied: false`, snapshot set to `revert_incomplete` | `review 3: …dirty rollback reported honestly` |
+| 3.5 | P2 | Rollback did not re-check slug uniqueness | fixed: restored slug (and restored side `post_name` when returning to publish/private) must be unique, else `asc_slug_conflict` | `content-update review 3: …` (slug reuse) |
+| 3.6 | P3 | A `pending` snapshot whose update is still running was treated as interrupted | fixed: `pending` is recoverable only after a 300 s grace period (`asc_snapshot_in_progress`) | `content-update review 3: …` (fresh pending) |
+| 3.7 | P3 | A successful guard row restore leaves traces (revision, `post_modified`, `_wp_old_slug`, plugin `save_post` side effects) | accepted: documented below | — |
+
 ## Guarantees (and non-guarantees)
 
 What the implementation guarantees, and what it does not:
@@ -51,9 +63,16 @@ What the implementation guarantees, and what it does not:
   leaves the snapshot `pending` — recoverable via rollback, not automatic.
 - **Later edits are never overwritten** by rollback (field-level conflict
   check incl. publish-generated slug/date) or by the guard's row restore
-  (conditional on the row still being this call's write).
+  (conditional on every guarded column still holding the value this call wrote).
 - **No silent side effects on untouched columns** from the caller's save
   filters: such updates and rollbacks are refused up front.
 
 Not covered: changing scheduled (`future`) posts' status; trash/delete;
 creating terms; concurrent writers that bypass WordPress APIs.
+
+Known traces after a detected-and-restored failure (3.7): the revision
+created by the failed save, the bumped `post_modified`, `_wp_old_slug` /
+`_wp_old_date` meta and any changes other plugins made in their own
+`save_post` hooks remain. Interrupted publishes cannot restore the generated
+slug/date automatically when they have been edited since (reported as a
+conflict). A `pending` snapshot is treated as interrupted only after 300 s.

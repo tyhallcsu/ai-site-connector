@@ -41,6 +41,7 @@ class AI_Site_Connector_Content_Update {
 	const INDEX_META      = '_ai_site_connector_snapshot';
 	const OPTION_PREFIX   = 'ai_site_connector_snapshot_';
 	const MAX_SNAPSHOTS   = 10;
+	const PENDING_GRACE   = 300; // Seconds before a pending snapshot counts as interrupted.
 	const MAX_CONTENT     = 1048576; // 1 MB per text field.
 	const FIELDS          = array( 'title', 'excerpt', 'content', 'slug', 'status', 'featured_image', 'terms', 'seo' );
 	const ALLOWED_STATUS  = array( 'draft', 'pending', 'publish', 'private' );
@@ -214,6 +215,10 @@ class AI_Site_Connector_Content_Update {
 			return self::error( 'asc_snapshot_not_rollbackable', sprintf( 'Snapshot is %s and cannot be rolled back.', $snap['state'] ), 409 );
 		}
 		$interrupted = 'applied' !== $snap['state'];
+		if ( 'pending' === $snap['state'] && time() - strtotime( $snap['created_gmt'] . ' UTC' ) < self::PENDING_GRACE ) {
+			// It may still be running; recovering now would race it.
+			return self::error( 'asc_snapshot_in_progress', 'This update may still be in progress; retry recovery in a few minutes.', 409 );
+		}
 
 		$restore   = array();
 		$conflicts = array();
@@ -236,7 +241,13 @@ class AI_Site_Connector_Content_Update {
 			$side = $snap['fields']['_status_side'];
 			// The slug/date WordPress set on publish may have been edited since;
 			// restoring them would overwrite that edit.
-			if ( is_array( $side['after_raw'] ) && self::canon( self::read_columns( $post->ID, self::STATUS_SIDE_COLUMNS ) ) !== self::canon( $side['after_raw'] ) ) {
+			$now_side = self::canon( self::read_columns( $post->ID, self::STATUS_SIDE_COLUMNS ) );
+			// Interrupted updates never recorded the slug/date WordPress set,
+			// so they cannot tell a later edit apart: refuse unless unchanged.
+			$side_conflict = is_array( $side['after_raw'] )
+				? $now_side !== self::canon( $side['after_raw'] )
+				: $now_side !== self::canon( $side['before_raw'] );
+			if ( $side_conflict ) {
 				unset( $restore['status'] );
 				$conflicts[] = 'status';
 			} else {
@@ -284,6 +295,14 @@ class AI_Site_Connector_Content_Update {
 				$reapply[ $field ] = $restore[ $field ];
 			}
 			$again = true === self::apply_plan( $post->ID, $reapply, 'after_raw' );
+			if ( ! empty( $applied['columns_dirty'] ) ) {
+				$again                    = false;
+				$result['restore_failed'] = array( 'post_columns' );
+			}
+			if ( ! $again ) {
+				// Mixed state: keep the snapshot recoverable field by field.
+				self::set_snapshot_state( (string) $snapshot_id, 'revert_incomplete' );
+			}
 			$result['reason']       = 'rollback_failed';
 			$result['failed_field'] = $applied['failed'];
 			$result['reapplied']    = $again;
@@ -613,7 +632,23 @@ class AI_Site_Connector_Content_Update {
 				return self::error( 'asc_untouched_field_would_change', sprintf( 'Rolling back would alter %s, which this rollback does not restore. Ask an administrator to roll back.', $col ), 409, array( 'field' => $col ) );
 			}
 		}
+		$slugs = array();
+		if ( isset( $restore['slug'] ) ) {
+			$slugs[] = (string) $restore['slug']['before_raw'];
+		}
+		if ( isset( $restore['_status_side'] ) && is_array( $restore['_status_side']['before_raw'] ) && isset( $restore['status'] )
+			&& in_array( (string) $restore['status']['before_raw'], array( 'publish', 'private' ), true ) ) {
+			$slugs[] = (string) $restore['_status_side']['before_raw']['post_name'];
+		}
+		foreach ( array_filter( $slugs ) as $slug ) {
+			if ( wp_unique_post_slug( $slug, $post->ID, 'publish', $post->post_type, $post->post_parent ) !== $slug ) {
+				return self::error( 'asc_slug_conflict', sprintf( 'slug "%s" is now used by another post; rolling back would duplicate it.', $slug ), 409 );
+			}
+		}
 		foreach ( $restore as $field => $row ) {
+			if ( '_status_side' === $field ) {
+				continue;
+			}
 			$value = $row['before_raw'];
 			if ( 'status' === $field ) {
 				$check = self::check_status( $post, (string) $value );
@@ -661,13 +696,15 @@ class AI_Site_Connector_Content_Update {
 			if ( ! isset( $plan[ $field ] ) ) {
 				continue;
 			}
+			// Listed before applying: a side field spans several taxonomies or
+			// meta keys, and a failure part-way must still be restored in full.
+			$written[] = $field;
 			if ( ! self::apply_side_field( $post_id, $field, $plan[ $field ][ $key ] ) ) {
 				return array(
 					'failed'  => $field,
 					'written' => $written,
 				);
 			}
-			$written[] = $field;
 		}
 
 		$columns = array();
@@ -690,12 +727,16 @@ class AI_Site_Connector_Content_Update {
 			}
 			// Record the exact post_modified_gmt this call writes, so the guard
 			// restore below can tell its own write from a later one.
-			$written_mod = null;
-			$capture     = static function ( $data ) use ( &$written_mod ) {
-				$written_mod = isset( $data['post_modified_gmt'] ) ? (string) $data['post_modified_gmt'] : null;
+			// Only this post's own write: wp_update_post() also inserts a
+			// revision through the same filter. The filter sees slashed data.
+			$written_row = null;
+			$capture     = static function ( $data, $postarr ) use ( &$written_row, $post_id ) {
+				if ( null === $written_row && isset( $postarr['ID'] ) && (int) $postarr['ID'] === (int) $post_id ) {
+					$written_row = wp_unslash( $data );
+				}
 				return $data;
 			};
-			add_filter( 'wp_insert_post_data', $capture, PHP_INT_MAX );
+			add_filter( 'wp_insert_post_data', $capture, PHP_INT_MAX, 2 );
 			$res = wp_update_post( wp_slash( $args ), true );
 			remove_filter( 'wp_insert_post_data', $capture, PHP_INT_MAX );
 			clean_post_cache( $post_id );
@@ -727,16 +768,24 @@ class AI_Site_Connector_Content_Update {
 					// mismatch would otherwise alter the restore too.
 					// Conditional on the row still being the one this call
 					// wrote, so a concurrent save is never overwritten.
+					// The WHERE clause matches every guarded column (and the
+					// modified time) as this call wrote them, so a concurrent
+					// save within the same second is not overwritten either.
 					global $wpdb;
-					// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-					$rows = null === $written_mod ? 0 : $wpdb->update(
-						$wpdb->posts,
-						$guard_before,
-						array(
+					$rows = 0;
+					if ( is_array( $written_row ) && isset( $written_row['post_modified_gmt'] ) ) {
+						$where = array(
 							'ID'                => $post_id,
-							'post_modified_gmt' => $written_mod,
-						)
-					);
+							'post_modified_gmt' => (string) $written_row['post_modified_gmt'],
+						);
+						foreach ( self::GUARDED_COLUMNS as $col ) {
+							if ( array_key_exists( $col, $written_row ) ) {
+								$where[ $col ] = (string) $written_row[ $col ];
+							}
+						}
+						// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+						$rows = $wpdb->update( $wpdb->posts, $guard_before, $where );
+					}
 					clean_post_cache( $post_id );
 					if ( 1 !== (int) $rows && self::canon( self::read_columns( $post_id, self::GUARDED_COLUMNS ) ) !== self::canon( $guard_before ) ) {
 						return array(

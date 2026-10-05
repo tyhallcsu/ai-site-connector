@@ -231,7 +231,7 @@ asc_it(
 			);
 			asc_assert_same( 'write_failed', $mid['reason'], 'reason' );
 			asc_assert_same( 'featured_image', $mid['failed_field'], 'failed field' );
-			asc_assert_same( array( 'terms' ), $mid['restored'], 'restored fields' );
+			asc_assert_same( array( 'terms', 'featured_image' ), $mid['restored'], 'restored fields (the failed side field is restored in full too)' );
 			asc_assert_same( 'Stable', get_post_field( 'post_title', $post ), 'title written after an earlier failure' );
 			asc_assert_same( $orig_terms, wp_get_object_terms( $post, 'category', array( 'fields' => 'ids' ) ), 'terms not restored' );
 			$snaps = AI_Site_Connector_Content_Update::snapshots( $post );
@@ -489,7 +489,8 @@ asc_it(
 			);
 			$key  = AI_Site_Connector_Content_Update::OPTION_PREFIX . $u['snapshot_id'];
 			$snap = get_option( $key );
-			$snap['state'] = 'pending';
+			$snap['state']       = 'pending';
+			$snap['created_gmt'] = gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS ); // Past the in-progress grace period.
 			foreach ( $snap['fields'] as &$row ) {
 				$row['after_raw'] = null;
 			}
@@ -572,7 +573,8 @@ asc_it(
 			$concurrent = static function ( $id ) use ( $other ) {
 				global $wpdb;
 				if ( (int) $id === (int) $other ) {
-					$wpdb->update( $wpdb->posts, array( 'post_title' => 'Saved by someone else', 'post_modified_gmt' => '2099-01-01 00:00:00' ), array( 'ID' => $id ) ); // phpcs:ignore WordPress.DB
+					// Same second, same post_modified_gmt: only the title differs.
+					$wpdb->update( $wpdb->posts, array( 'post_title' => 'Saved by someone else' ), array( 'ID' => $id ) ); // phpcs:ignore WordPress.DB
 				}
 			};
 			add_action( 'wp_insert_post', $concurrent );
@@ -599,6 +601,153 @@ asc_it(
 			wp_delete_post( $post, true );
 			wp_delete_post( $other, true );
 			asc_it_delete_user( $author );
+		}
+	}
+);
+
+asc_it(
+	'content-update review 3: partial side fields restored; interrupted side columns; slug reuse; in-progress pending; honest rollback failure',
+	function () {
+		global $wpdb;
+		$cat  = term_exists( 'asc-it-r3-cat', 'category' );
+		$cat  = $cat ? $cat : wp_insert_term( 'ASC IT R3 cat', 'category', array( 'slug' => 'asc-it-r3-cat' ) );
+		$tag  = term_exists( 'asc-it-r3-tag', 'post_tag' );
+		$tag  = $tag ? $tag : wp_insert_term( 'ASC IT R3 tag', 'post_tag', array( 'slug' => 'asc-it-r3-tag' ) );
+		$post = asc_it_post( array( 'post_title' => 'R3', 'post_name' => 'asc-it-r3-old' ) );
+		$taker = 0;
+		$orig_cats = wp_get_object_terms( $post, 'category', array( 'fields' => 'ids' ) );
+		try {
+			// 3.1: category is written, post_tag then fails -> category must be restored.
+			$extra = static function ( $object_id, $terms, $tt_ids, $taxonomy ) use ( $post ) {
+				if ( (int) $object_id === (int) $post && 'post_tag' === $taxonomy ) {
+					remove_all_actions( 'set_object_terms' );
+					wp_set_object_terms( $object_id, array( 'asc-it-r3-intruder' ), 'post_tag', true );
+				}
+			};
+			add_action( 'set_object_terms', $extra, 10, 4 );
+			try {
+				$r = asc_it_with_write(
+					function () use ( $post, $cat, $tag ) {
+						return asc_it_cu( $post, array( 'terms' => array( 'category' => array( (int) $cat['term_id'] ), 'post_tag' => array( (int) $tag['term_id'] ) ) ), array( 'dry_run' => false ) );
+					}
+				);
+			} finally {
+				remove_action( 'set_object_terms', $extra, 10 );
+			}
+			asc_assert_same( 'write_failed', $r['reason'], 'multi-taxonomy failure reason' );
+			asc_assert_same( $orig_cats, wp_get_object_terms( $post, 'category', array( 'fields' => 'ids' ) ), 'partially written taxonomy left behind' );
+			$intruder = get_term_by( 'slug', 'asc-it-r3-intruder', 'post_tag' );
+			if ( $intruder ) {
+				wp_delete_term( $intruder->term_id, 'post_tag' );
+			}
+
+			// 3.5: slug changed, another post takes the old slug -> rollback refuses.
+			$u = asc_it_with_write(
+				function () use ( $post ) {
+					return asc_it_cu( $post, array( 'slug' => 'asc-it-r3-new' ), array( 'dry_run' => false ) );
+				}
+			);
+			$taker = asc_it_post( array( 'post_name' => 'asc-it-r3-old' ) );
+			$rb    = AI_Site_Connector_Content_Update::rollback( $post, $u['snapshot_id'] );
+			asc_assert( is_wp_error( $rb ) && 'asc_slug_conflict' === $rb->get_error_code(), 'rollback would duplicate a slug' );
+
+			// 3.6: a pending snapshot younger than the grace period is not "interrupted".
+			$v    = asc_it_with_write(
+				function () use ( $post ) {
+					return asc_it_cu( $post, array( 'title' => 'Pending check' ), array( 'dry_run' => false ) );
+				}
+			);
+			$key  = AI_Site_Connector_Content_Update::OPTION_PREFIX . $v['snapshot_id'];
+			$snap = get_option( $key );
+			$snap['state'] = 'pending';
+			update_option( $key, $snap, false );
+			$pend = AI_Site_Connector_Content_Update::rollback( $post, $v['snapshot_id'] );
+			asc_assert( is_wp_error( $pend ) && 'asc_snapshot_in_progress' === $pend->get_error_code(), 'fresh pending snapshot treated as interrupted' );
+		} finally {
+			foreach ( array( $post, $taker ) as $id ) {
+				if ( $id ) {
+					wp_delete_post( $id, true );
+				}
+			}
+			wp_delete_term( (int) $cat['term_id'], 'category' );
+			wp_delete_term( (int) $tag['term_id'], 'post_tag' );
+		}
+	}
+);
+
+asc_it(
+	'content-update review 3: interrupted publish with an edited slug is a conflict; dirty rollback reported honestly',
+	function () {
+		global $wpdb;
+		$draft = asc_it_post( array( 'post_status' => 'draft', 'post_title' => 'R3 draft' ) );
+		$other = asc_it_post( array( 'post_title' => 'R3 other', 'post_excerpt' => 'Base' ) );
+		try {
+			// 3.2: publish, simulate an interruption (after_raw unknown), then a human edits the slug.
+			$p    = asc_it_with_write(
+				function () use ( $draft ) {
+					return asc_it_cu( $draft, array( 'status' => 'publish' ), array( 'dry_run' => false ) );
+				}
+			);
+			$key  = AI_Site_Connector_Content_Update::OPTION_PREFIX . $p['snapshot_id'];
+			$snap = get_option( $key );
+			$snap['state']       = 'pending';
+			$snap['created_gmt'] = gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS );
+			foreach ( $snap['fields'] as &$row ) {
+				$row['after_raw'] = null;
+			}
+			unset( $row );
+			update_option( $key, $snap, false );
+			wp_update_post( array( 'ID' => $draft, 'post_name' => 'r3-human-slug' ) );
+			$rec = asc_it_with_write(
+				function () use ( $draft, $p ) {
+					return AI_Site_Connector_Content_Update::rollback( $draft, $p['snapshot_id'], false );
+				}
+			);
+			asc_assert_same( 'conflict', $rec['reason'], 'interrupted publish recovery overwrote side columns' );
+			asc_assert_same( 'r3-human-slug', get_post_field( 'post_name', $draft ), 'human slug lost' );
+
+			// 3.4: rollback whose column step trips the guard while another writer saves.
+			$u      = asc_it_with_write(
+				function () use ( $other ) {
+					return asc_it_cu( $other, array( 'title' => 'R3 mine' ), array( 'dry_run' => false ) );
+				}
+			);
+			$tamper = static function ( $data ) {
+				$data['post_excerpt'] .= ' (tampered)';
+				return $data;
+			};
+			$conc   = static function ( $id ) use ( $other ) {
+				global $wpdb;
+				if ( (int) $id === (int) $other ) {
+					$wpdb->update( $wpdb->posts, array( 'post_title' => 'R3 someone else' ), array( 'ID' => $id ) ); // phpcs:ignore WordPress.DB
+				}
+			};
+			add_action( 'wp_insert_post', $conc );
+			try {
+				$rb = asc_it_with_filter(
+					'wp_insert_post_data',
+					$tamper,
+					function () use ( $other, $u ) {
+						return asc_it_with_write(
+							function () use ( $other, $u ) {
+								return AI_Site_Connector_Content_Update::rollback( $other, $u['snapshot_id'], false );
+							}
+						);
+					}
+				);
+			} finally {
+				remove_action( 'wp_insert_post', $conc );
+			}
+			asc_assert_same( 'rollback_failed', $rb['reason'], 'reason' );
+			asc_assert_same( array( 'post_columns' ), $rb['restore_failed'], 'dirty columns not reported' );
+			asc_assert_same( false, $rb['reapplied'], 'reapplied claimed despite dirty columns' );
+			$snap2 = get_option( AI_Site_Connector_Content_Update::OPTION_PREFIX . $u['snapshot_id'] );
+			asc_assert_same( 'revert_incomplete', $snap2['state'], 'snapshot not left recoverable' );
+			clean_post_cache( $other );
+			asc_assert_same( 'R3 someone else', get_post_field( 'post_title', $other ), 'concurrent save overwritten' );
+		} finally {
+			wp_delete_post( $draft, true );
+			wp_delete_post( $other, true );
 		}
 	}
 );

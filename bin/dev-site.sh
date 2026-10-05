@@ -15,6 +15,9 @@
 #   bin/dev-site.sh wp ARGS...             run WP-CLI against the dev site
 #   bin/dev-site.sh with-admin -- CMD...   run CMD with ASC_DEV_URL, ASC_DEV_ADMIN_USER and
 #                                          ASC_DEV_ADMIN_PASSWORD set (never printed)
+#   bin/dev-site.sh backups                list database snapshots (one is taken before
+#                                          every deploy and rollback; newest 10 kept)
+#   bin/dev-site.sh restore-db FILE --yes-overwrite-dev-db   restore a snapshot
 #   bin/dev-site.sh mail                   show captured outbound mail
 #   bin/dev-site.sh debug-log              show the WordPress debug log
 #   bin/dev-site.sh logs                   follow the web server log
@@ -154,12 +157,32 @@ verify_install() {
 	note "verified $(wc -l < "$dir/expected" | tr -d ' ') installed files against the artifact"
 }
 
+# Dump with the MySQL container's own client: the CLI image's MariaDB client
+# cannot authenticate against MySQL 8 (caching_sha2_password without TLS).
+# Prints the backup path; exits non-zero (nothing changed yet) on failure.
 backup_db() {
 	local label="$1" file
 	file="$STATE/backups/$(date -u +%Y%m%dT%H%M%SZ)-$label.sql"
-	wp_cli db export "$file" --quiet >/dev/null
+	compose exec -T db sh -c 'MYSQL_PWD=wordpress mysqldump --single-transaction --no-tablespaces -uwordpress wordpress' \
+		| in_web sh -c "cat > '$file' && chown www-data:www-data '$file'" \
+		|| die "database backup failed; the site was not changed"
+	in_web test -s "$file" || die "database backup $file is empty; the site was not changed"
 	in_web sh -c "ls -1t '$STATE'/backups/*.sql 2>/dev/null | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -f"
 	echo "$file"
+}
+
+cmd_restore_db() {
+	local file="${1:-}"
+	[ -n "$file" ] || die "usage: bin/dev-site.sh restore-db $STATE/backups/FILE.sql --yes-overwrite-dev-db"
+	[ "${2:-}" = "--yes-overwrite-dev-db" ] \
+		|| die "restore-db replaces the whole dev database. Re-run with --yes-overwrite-dev-db."
+	require_running
+	in_web test -s "$file" || die "no such backup: $file"
+	local safety
+	safety="$(backup_db "pre-restore")"
+	in_web cat "$file" | compose exec -T db sh -c 'MYSQL_PWD=wordpress mysql -uwordpress wordpress' \
+		|| die "restore failed; the pre-restore snapshot is $safety"
+	note "restored $file (the previous database is saved as $safety). Plugin files were not changed."
 }
 
 install_artifact() {
@@ -333,7 +356,7 @@ cmd_destroy() {
 }
 
 usage() {
-	sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+	awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "${BASH_SOURCE[0]}"
 }
 
 command="${1:-}"
@@ -351,6 +374,11 @@ case "$command" in
 		wp_cli "$@"
 		;;
 	with-admin) cmd_with_admin "$@" ;;
+	backups)
+		require_running
+		in_web sh -c "ls -lt '$STATE/backups/' | tail -n +2"
+		;;
+	restore-db) cmd_restore_db "$@" ;;
 	mail)
 		require_running
 		in_web sh -c "tail -n 50 '$STATE/mail.log' 2>/dev/null || echo '(no mail captured yet)'"

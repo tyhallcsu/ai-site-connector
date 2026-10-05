@@ -17,10 +17,11 @@ x-wp-env: &wp-env
   WORDPRESS_DB_PASSWORD: wordpress
   WORDPRESS_DB_NAME: wordpress
   ASC_DEV_PORT: "${ASC_DEV_PORT:-8790}"
+  # The image's wp-config.php defines WP_DEBUG from this variable.
+  WORDPRESS_DEBUG: "1"
   # Evaluated by the image's wp-config.php on every request and CLI run.
   WORDPRESS_CONFIG_EXTRA: |
     define( 'WP_ENVIRONMENT_TYPE', 'local' );
-    define( 'WP_DEBUG', true );
     define( 'WP_DEBUG_LOG', '/asc-dev-state/debug.log' );
     define( 'WP_DEBUG_DISPLAY', false );
     define( 'AI_SITE_CONNECTOR_ALLOW_HTTP', true );

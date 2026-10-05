@@ -1,65 +1,61 @@
 # Handoff — AI Site Connector
 
-**Updated:** 2026-10-05, after the low-credits save-first reconciliation (America/Denver)
-**Repo:** tyhallcsu/ai-site-connector · **Primary checkout:** `/Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector` (standalone repo, not the parent)
-**Rules:** `docs/development/OPERATING_BRIEF.md` · **Plan:** `docs/development/ROADMAP.md` · **Log:** `docs/development/WORK_LOG.md`
+**Updated:** 2026-10-05 ~20:20 UTC (14:20 America/Denver) · **Session:** `asc-dev-audit-ship` (dev audit + ship)
+**Repo:** tyhallcsu/ai-site-connector (public, standalone — the parent `ess-custom-plugins` dir is not a repo)
+**Primary checkout:** `/Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector` (on `main` @ `16f5816`, 1 behind origin — fast-forward it before use)
+**Session worktree:** `.claude/worktrees/asc-dev-audit-ship` · active branch `feature/dev-site` (owner: this session)
+**Rules:** `docs/development/OPERATING_BRIEF.md` · **Dev site:** `docs/development/DEV_SITE.md` · **Plan:** `docs/development/ROADMAP.md` · **Log:** `docs/development/WORK_LOG.md`
 
-## Verified state (gh/git, 2026-10-05)
+## Verified state
 
-| Item | Value |
-|------|-------|
-| Latest `origin/main` | `bd35dac` — docs: checkpoint after v0.12.1 release (#94) |
-| Latest published release | **v0.12.1** — tag → `450fdcd`; https://github.com/tyhallcsu/ai-site-connector/releases/tag/v0.12.1; stable, `releases/latest`; ZIP 283922 B, sha256 `768b7064858d0a35f01c74332b001bd22adbfae041c1686f94188058eca3e021`; verified (checksum, versions, contents, clean install, upgrade from published v0.12.0) |
-| Earlier releases | v0.12.0 → `441df7f` (sha256 `66391168…e23f`), v0.11.0 → `6645155` (`95b337b1…86f3`), v0.10.0 → `9c07f10` (`2783dea6…06dd`) — all verified the same way |
-| Unreleased on main | docs only (#94 checkpoint; this policy PR) — no code since v0.12.1 |
-| Release candidate | none |
-| Open issues | none |
+| Item | Value | Evidence |
+|------|-------|----------|
+| `origin/main` | `9112f8e` — design: new plugin icon (#96, Codex session) | `git fetch`; post-merge CI run 37366878299 still queued during a GitHub Actions incident |
+| Latest release | **v0.12.1** → `450fdcd`; ZIP sha256 `768b7064…e021` | `gh release view` digest |
+| Unreleased on main | #95 docs, #96 brand assets (no PHP change) | `git log v0.12.1..origin/main` |
+| Dev site | http://localhost:8790 — local Docker, **deployed `9112f8e`** (origin/main), ZIP sha256 `adc52dc3…fd8c`, 70 files verified | `bin/dev-site.sh status` 20:17 UTC |
+| Remote dev target | none exists — owner decision tracked in #97 | config/registry search |
+
+## Startup reconciliation (2026-10-05)
+
+- `repo-reconcile` skill, report-only: no stashes, no dirty files; all 19 local branches equal merged PR heads (#38, #76, #78–#95) — nothing unique to preserve. Nothing deleted.
+- Untracked, user-owned, left alone in the primary checkout: `03-dev-audit-discover-and-ship.md` (this session's prompt), `ai-site-connector-autonomous-development-prompt.md`, `composer.lock`.
+- New since the last handoff: PR #96 (Codex) merged 12 s after opening with CI never run → #99.
+- `refresh-client-context` skill: no client mapping exists for this plugin (no `.imessage-sync`/`.notes-calls-sync` state, no `~/clients` registry entry). Not bootstrapped: this is a public reusable plugin repo, and client message trails must not land here. Product/operator context = repo docs, issues and the operator's WordPress registry (production client sites only; none is a dev target).
+
+## Issues filed this session
+
+| # | Type | Title | State |
+|---|------|-------|-------|
+| #97 | environment | No development WordPress target configured | open — owner decision (remote dev site?) |
+| #98 | enhancement | Persistent local dev site with exact-SHA deploy/rollback | PR #100 (draft) |
+| #99 | investigation | main has no required checks; #96 merged before CI ran | open — needs owner (admin setting) |
+| #101 | enhancement | Byte-reproducible release ZIP | open — ready |
 
 ## Open PRs
 
 | PR | Branch | State |
 |----|--------|-------|
-| (this) | `docs/checkpoint-policy` | docs-only: save-first policy in OPERATING_BRIEF.md + this handoff correction |
+| #100 | `feature/dev-site` | draft; implements #98; local runs pass (up, deploy release, deploy main, refusal, rollback) |
 
-## Completed milestones
+## Audit coverage
 
-| Milestone | PR | Merge SHA | Evidence |
-|-----------|----|-----------|----------|
-| M0 CI truthfulness + harness | #78 | `2dd96bc` | PHPUnit OK (40), integration 3/3 |
-| M1 diagnostics + SEO abstraction | #76 | `c7f689b` | 34/34; closed #67 #68 #69 #71 #72 |
-| M2 content inventory | #79 | `2949c89` | 43/43; closed #63 |
-| Export consistency | #80 | `4d948e0` | 46/46 incl. WP 5.6 |
-| v0.10.0 prep + release pipeline | #81 | `9c07f10` | released v0.10.0 |
-| M3 media audit + duplicates | #82 | `4f44c85` | 54/54; closed #64 #65 |
-| M4 broken links | #83 | `c270434` | 62/62; closed #66 |
-| M5 export bundle | #84 | `8dbb1d0` | 69/69; closed #73 #74 |
-| M6 disable/enable | #85 | `d81b62d` | 71/71 on WP 5.6–7.1.2; closed #75 |
-| v0.11.0 prep | #86 | `6645155` | released v0.11.0 (verified above) |
-| Export coverage reporting | #89 | `1098ee4` | 72/72 on WP 5.6–7.1.2 |
-| v0.12.0 prep | #91 | `441df7f` | released v0.12.0 (verified) |
-| v0.12.1 prep | #93 | `450fdcd` | released v0.12.1 (verified) |
-| Release-audit fixes | #92 | `94169ad` | 88/88; MCP write gate verified red-before-green |
-| M7 safe content update | #87 | `d378e50` | 86/86 on WP 5.6–7.1.2; closed #70; 4 reviews |
-| Library-wide duplicate scan | #90 | `c255de3` | 73/73 on WP 5.6–7.1.2; closed #88; reviewed (1 P1 + 7 P2 + 3 P3 fixed) |
-| #59 superseded branch | — | — | branch deleted; evidence in issue |
-
-## Save-first reconciliation (2026-10-05)
-
-- Every local branch tip equals the head of a merged PR (#38, #76, #78–#94); squash merges mean their content is on `main`. Remote feature branches were auto-deleted on merge. No unpushed commits, no stashes, one worktree (primary checkout), no running subagents.
-- Untracked and user-owned, deliberately not committed: `ai-site-connector-autonomous-development-prompt.md` (copy of the committed operating brief) and `composer.lock`.
-- Session scratchpad drafts were all merged; nothing essential remains only there. Local test runner = the commands in "How to test locally".
-- Context refresh: not applicable to this repo (no client-context sync configured); none pending.
-- Pre-existing local branch `feature/mcp-admin-tools-audit-media-cache-export` (not created by this session) matches merged PR #38.
+| Area | Status |
+|------|--------|
+| Dev environment / deploy path | done → #97 #98 #101 |
+| Repo process / CI gates | done → #99 |
+| Fresh install + onboarding UI (headless) | next |
+| Admin tabs, diagnostics, connection test, REST/MCP/CLI parity | not yet |
+| Content update preview/rollback on fixtures | not yet |
+| Inventory/export/media/link audits on fixtures | not yet |
 
 ## Next three actions
 
-The ready backlog is complete (all queue issues #59, #63–#75 and #88 closed; four releases published and verified). New work needs new issues.
+1. Finish PR #100: commit runbook + fixes, CI green on head (Actions incident permitting), mark ready, merge, re-verify `status` on dev.
+2. Headless Playwright journey on dev: login → AI Site Connector admin → onboarding/connection setup → diagnostics; file issues for real findings.
+3. Pick the next ready issue (#101 or an audit finding), branch from main, draft PR early.
 
-1. Optional: live-site upgrades are a separate, explicitly authorised step (not done by this session; a celememorate.com maintainer session asked and was told it needs its own user's authorisation).
-2. Optional follow-ups worth filing if wanted: CLI parity for content update (REST/MCP only today); MCP `wp_create_post`/`wp_update_post` could be retired in favour of `wp_update_content`.
-3. Keep `docs/development/M7_REVIEW.md` current if the content-update tool changes.
-
-Resume: `cd /Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector && git fetch && gh pr list -R tyhallcsu/ai-site-connector`. If the scratchpad worktree is gone: `git worktree prune`, then add a new worktree for `feature/content-update` outside the parent `ess-custom-plugins` tree.
+Resume: `cd <worktree> && git fetch && gh pr list -R tyhallcsu/ai-site-connector && bin/dev-site.sh status`
 
 ## How to test locally
 
@@ -72,9 +68,8 @@ bash tests/zip-upgrade-smoke.sh "$(bin/build-release-zip.sh | tail -n1)"
 
 Port 8765 may be held by another project's server (not ours — leave it). WP 5.6 needs PHP ≤ 8.0 (CI covers it).
 
-## Workers / services / unrelated files
+## Workers / services
 
-- Active subagents: 0.
-- Docker container `asc-mysql-test` (MySQL 8.0, 127.0.0.1:33306) — disposable; `docker rm -f asc-mysql-test`.
-- Untracked `ai-site-connector-autonomous-development-prompt.md` (copy of the committed brief) and `composer.lock` in the primary checkout are not ours to commit — leave them.
-- A parallel Codex session has merged docs PRs before (#77); `git fetch` and check open PRs before editing README/docs.
+- Subagents: 0 active.
+- Docker: `asc-dev` compose project (persistent dev site: `asc-dev-db-1`, `asc-dev-wordpress-1`) — keep; stop with `bin/dev-site.sh stop`. `asc-mysql-test` is not running (disposable).
+- A parallel Codex session merged #96; `git fetch` and check open PRs before editing README/docs/assets.

@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.10.0
+Stable tag: 0.11.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,15 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.11.0 =
+* New: media SEO audit and duplicate media detection (filename + SHA-256; never deletes).
+* New: offline broken internal link scanner (resolves links against the database and uploads; never makes HTTP requests).
+* New: deterministic, GitHub-ready manifest bundle (eight manifests + sha256 index; byte-identical across runs; no secrets; `wp ai-connector export --dir`).
+* New: `wp ai-connector disable|enable` site-wide switch for AI access through this plugin (REST + MCP return 503; /health reports state).
+* Each tool is available as a REST route, an MCP tool and a WP-CLI command.
+* Changed: content inventory and link scanner only count the caller's own posts for users who cannot edit others' posts.
+* Fixed: MCP tool dispatch no longer fatals on WordPress < 5.7 when a request is refused before dispatch.
+
 = 0.10.0 =
 * New read-only diagnostics, each as a REST route, MCP tool and WP-CLI command: MCP self-test, REST route inventory, page builder detector, redirect export (Rank Math, Redirection, AIOSEO, Yoast Premium).
 * New content inventory export (posts, pages, CPTs with terms and SEO fields; JSON or CSV; paginated and filterable).

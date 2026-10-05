@@ -1,6 +1,6 @@
 # Handoff — AI Site Connector
 
-**Updated:** 2026-10-05 ~20:36 UTC (14:36 America/Denver) · **Mode:** owner add-on "continuous low-usage" (single agent, no subagents; new features stay in backlog) · **Session:** `asc-dev-audit-ship` (dev audit + ship)
+**Updated:** 2026-10-05 ~20:45 UTC (14:45 America/Denver) · **State: PAUSED** — all merges blocked by a GitHub Actions incident; peer budget note: weekly usage 74% (resets 2026-10-07) · **Mode:** owner add-on "continuous low-usage" (single agent, no subagents; new features stay in backlog) · **Session:** `asc-dev-audit-ship` (dev audit + ship)
 **Repo:** tyhallcsu/ai-site-connector (public, standalone — the parent `ess-custom-plugins` dir is not a repo)
 **Primary checkout:** `/Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector` (on `main` @ `16f5816`, 1 behind origin — fast-forward it before use)
 **Session worktree:** `.claude/worktrees/asc-dev-audit-ship` · branches `feature/dev-site` (PR #100) and `fix/admin-ui-audit` (PR #107), both owned by this session
@@ -37,6 +37,8 @@
 | #104 | bug | Connection Test REST self-test returns to Overview | PR #107 |
 | #105 | bug | Notices render inside the page header | PR #107 |
 | #106 | enhancement | Live sign-in check in wp-admin (CLI self-test parity) | backlog |
+| #108 | enhancement | WP-CLI safe content update + rollback | backlog |
+| #109 | investigation | Steer MCP agents to wp_update_content (no removal) | backlog |
 
 ## Open PRs
 
@@ -53,15 +55,16 @@
 | Repo process / CI gates | done → #99 |
 | Fresh install + onboarding UI (headless) | done → #104 #105 #106 (wizard → pack w/ live pre-flight ✓ → 8 snippet formats) |
 | Admin tabs: layout, a11y, console/HTTP errors (`bin/dev-site.sh audit`) | done → #102 #103 |
-| Diagnostics, REST/MCP/CLI parity | partial (CLI self-test 6/6 on dev) |
+| Diagnostics, REST/MCP/CLI parity | partial (CLI self-test 6/6 on dev) → #106 #108 #109 |
+| Link / media / duplicate scans on seeded fixtures (CLI, `--user` required) | done, no defects: 1 broken link `not_found`, `missing_alt: 1`, duplicate pair by sha256 (ids 5, 6) |
 | Content update preview/rollback on fixtures | not yet |
-| Inventory/export/media/link audits on fixtures | not yet |
+| Inventory / export bundle on fixtures | not yet |
 
 ## Next three actions
 
 1. When Actions recovers: confirm main CI on `9112f8e`, then CI on #100 and #107 heads (19 checks each); mark ready; squash-merge #100 then #107 (rebase #107 if handoff conflicts).
 2. After #107 merges: `bin/dev-site.sh deploy` (merge SHA), `bin/dev-site.sh audit` → expect 0 findings; comment evidence on #102–#105.
-3. Next uncovered audit: `bin/dev-site.sh seed` + inventory/link/media/duplicate scans vs the known fixtures; file real findings.
+3. Next uncovered audit (only when budget allows): content-update dry-run/rollback via REST on the `asc-fixture-*` posts; inventory + export bundle.
 
 Resume: `cd <worktree> && git fetch && gh pr list -R tyhallcsu/ai-site-connector && bin/dev-site.sh status`
 
@@ -79,5 +82,6 @@ Port 8765 may be held by another project's server (not ours — leave it). WP 5.
 ## Workers / services
 
 - Subagents: 0 active.
-- Docker: `asc-dev` compose project (persistent dev site: `asc-dev-db-1`, `asc-dev-wordpress-1`) — keep; stop with `bin/dev-site.sh stop`. `asc-mysql-test` is not running (disposable).
+- Docker: `asc-dev` compose project (persistent dev site: `asc-dev-db-1`, `asc-dev-wordpress-1`) — running, keep; stop with `bin/dev-site.sh stop`. Dev data: AI user `ai-agent` (id 2) with one Application Password, `asc-fixture-*` content. `asc-mysql-test` stopped (disposable).
+- Sandbox note: `deploy`, `rollback`, `audit` and PHPCS need a writable `TMPDIR` (session scratchpad); `audit` used `ASC_DEV_CACHE` pointing at a scratchpad Playwright install.
 - A parallel Codex session merged #96; `git fetch` and check open PRs before editing README/docs/assets.

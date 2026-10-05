@@ -200,3 +200,36 @@ Stop only when I stop you, the runtime genuinely prevents further execution, eve
 At an actual stopping point, report what shipped, merged PRs, releases/assets, remaining open issues/blockers, unsynced work, and the exact handoff path/resume action. Do not claim checks passed or work is complete without evidence.
 
 START NOW: inspect the existing checkout, reconcile live issues/PRs and CI, save the initial handoff, then execute the first ready milestone. Keep implementing, reviewing, merging, checkpointing, discovering issues, and releasing under these rules.
+
+## 12. Save first, checkpoint often (added 2026-10-05)
+
+Credits or session time can run out without warning, so preserving work
+takes priority over finishing it.
+
+- Before more implementation, testing, review or CI polling, verify that
+  nothing essential exists only locally: uncommitted files, unpushed commits,
+  stashes, temporary worktrees or scratchpads, or an agent conversation.
+- Each workstream keeps its own feature branch and owning PR. Unfinished or
+  untested work is committed and pushed to that branch with an honest **draft**
+  PR; failing or pending checks are stated, not hidden. Never push unfinished
+  work to `main`.
+- During work: write changes to files as you go; update `handoff.md`, commit
+  and push after each meaningful small batch, and at the next safe command
+  boundary once about five minutes of unsaved work has accumulated — and
+  always before a long test run, review, branch/worktree switch, risky
+  operation or context compaction. Save useful failures and investigation
+  conclusions too.
+- Use incremental commits on the same PR: no PR per save, no empty commits,
+  no repeated amends, no auto-commit daemon, no CI changes just to support
+  checkpointing.
+- Prove a save before claiming it: the commit is on origin, the PR exists and
+  points at that head, `handoff.md` and supporting files are in the remote
+  branch, and remaining dirty/untracked files are accounted for. If a push
+  fails, keep a local recovery copy and report the exact blocker and retry
+  command instead of retrying endlessly.
+- Low credits never relax merge gates: merge only after current-head tests,
+  required review and normal protections pass. Incomplete work stays pushed
+  and draft. When the backlog is complete, pause rather than invent work.
+- When conserving credits, launch no new subagents; ask existing ones to save
+  partial results and stop at a safe boundary.
+

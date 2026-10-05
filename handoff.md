@@ -1,6 +1,6 @@
 # Handoff — AI Site Connector
 
-**Updated:** 2026-10-05 (America/Denver)
+**Updated:** 2026-10-05, after the low-credits save-first reconciliation (America/Denver)
 **Repo:** tyhallcsu/ai-site-connector · **Primary checkout:** `/Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector` (standalone repo, not the parent)
 **Rules:** `docs/development/OPERATING_BRIEF.md` · **Plan:** `docs/development/ROADMAP.md` · **Log:** `docs/development/WORK_LOG.md`
 
@@ -8,16 +8,18 @@
 
 | Item | Value |
 |------|-------|
-| Latest `origin/main` | `450fdcd` — chore(release): v0.12.1 (#93) (plus this checkpoint) |
+| Latest `origin/main` | `bd35dac` — docs: checkpoint after v0.12.1 release (#94) |
 | Latest published release | **v0.12.1** — tag → `450fdcd`; https://github.com/tyhallcsu/ai-site-connector/releases/tag/v0.12.1; stable, `releases/latest`; ZIP 283922 B, sha256 `768b7064858d0a35f01c74332b001bd22adbfae041c1686f94188058eca3e021`; verified (checksum, versions, contents, clean install, upgrade from published v0.12.0) |
 | Earlier releases | v0.12.0 → `441df7f` (sha256 `66391168…e23f`), v0.11.0 → `6645155` (`95b337b1…86f3`), v0.10.0 → `9c07f10` (`2783dea6…06dd`) — all verified the same way |
-| Unreleased on main | nothing (docs checkpoint only) |
+| Unreleased on main | docs only (#94 checkpoint; this policy PR) — no code since v0.12.1 |
 | Release candidate | none |
 | Open issues | none |
 
 ## Open PRs
 
-None.
+| PR | Branch | State |
+|----|--------|-------|
+| (this) | `docs/checkpoint-policy` | docs-only: save-first policy in OPERATING_BRIEF.md + this handoff correction |
 
 ## Completed milestones
 
@@ -40,6 +42,14 @@ None.
 | M7 safe content update | #87 | `d378e50` | 86/86 on WP 5.6–7.1.2; closed #70; 4 reviews |
 | Library-wide duplicate scan | #90 | `c255de3` | 73/73 on WP 5.6–7.1.2; closed #88; reviewed (1 P1 + 7 P2 + 3 P3 fixed) |
 | #59 superseded branch | — | — | branch deleted; evidence in issue |
+
+## Save-first reconciliation (2026-10-05)
+
+- Every local branch tip equals the head of a merged PR (#38, #76, #78–#94); squash merges mean their content is on `main`. Remote feature branches were auto-deleted on merge. No unpushed commits, no stashes, one worktree (primary checkout), no running subagents.
+- Untracked and user-owned, deliberately not committed: `ai-site-connector-autonomous-development-prompt.md` (copy of the committed operating brief) and `composer.lock`.
+- Session scratchpad drafts were all merged; nothing essential remains only there. Local test runner = the commands in "How to test locally".
+- Context refresh: not applicable to this repo (no client-context sync configured); none pending.
+- Pre-existing local branch `feature/mcp-admin-tools-audit-media-cache-export` (not created by this session) matches merged PR #38.
 
 ## Next three actions
 

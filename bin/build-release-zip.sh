@@ -52,6 +52,8 @@ rsync -a \
 	--exclude='phpunit.xml.dist' \
 	--exclude='assets/brand/*.png' \
 	--exclude='TESTING_CHECKLIST.md' \
+	--exclude='/handoff.md' \
+	--exclude='/docs/development/' \
 	"$ROOT_DIR/" "$STAGE_DIR/"
 
 (

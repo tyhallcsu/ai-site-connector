@@ -76,8 +76,9 @@ class UrlGuardTest extends TestCase {
 	}
 
 	public function test_check_outbound_safe_rejects_bad_scheme(): void {
-		WP_Mock::userFunction( 'apply_filters', array( 'return' => false ) );
-		$result = \AI_Site_Connector_Url_Guard::check_outbound_safe( 'file:///etc/passwd' );
+		// file:///etc/passwd has no host, so it fails the malformed check
+		// first; use a hostful non-http scheme to reach the scheme gate.
+		$result = \AI_Site_Connector_Url_Guard::check_outbound_safe( 'ftp://example.com/file' );
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'asc_url_bad_scheme', $result->get_error_code() );
 	}
@@ -88,21 +89,23 @@ class UrlGuardTest extends TestCase {
 	}
 
 	public function test_check_outbound_safe_rejects_loopback_literal(): void {
-		WP_Mock::userFunction( 'apply_filters', array( 'return' => false ) );
 		$result = \AI_Site_Connector_Url_Guard::check_outbound_safe( 'http://127.0.0.1:80/' );
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'asc_url_internal', $result->get_error_code() );
 	}
 
 	public function test_check_outbound_safe_rejects_metadata_endpoint(): void {
-		WP_Mock::userFunction( 'apply_filters', array( 'return' => false ) );
 		$result = \AI_Site_Connector_Url_Guard::check_outbound_safe( 'http://169.254.169.254/latest/meta-data/' );
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'asc_url_internal', $result->get_error_code() );
 	}
 
 	public function test_check_outbound_safe_filter_can_allow_a_host(): void {
-		WP_Mock::userFunction( 'apply_filters', array( 'return' => true ) );
+		// WP_Mock defines apply_filters itself, so userFunction() cannot
+		// replace it; register the filter reply through WP_Mock instead.
+		WP_Mock::onFilter( 'ai_site_connector_url_guard_allow_host' )
+			->with( false, '10.0.0.5', 'http://10.0.0.5/internal', '' )
+			->reply( true );
 		$result = \AI_Site_Connector_Url_Guard::check_outbound_safe( 'http://10.0.0.5/internal' );
 		$this->assertTrue( $result );
 	}

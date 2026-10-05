@@ -12,7 +12,7 @@
 	cacheResultFile="../.cache/phpunit.result.cache">
 	<testsuites>
 		<testsuite name="ai-site-connector-unit">
-			<directory>.</directory>
+			<directory prefix="test-" suffix=".php">.</directory>
 		</testsuite>
 	</testsuites>
 </phpunit>

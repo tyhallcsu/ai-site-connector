@@ -81,6 +81,8 @@ forbid_path 'ai-site-connector/TESTING_CHECKLIST\.md$'
 forbid_path 'ai-site-connector/assets/brand/.*\.png$'
 forbid_path 'ai-site-connector/(connection-pack\.json|[^/]+-connection-pack\.json|.*\.connection-pack\.json)$'
 forbid_path 'ai-site-connector/\.env'
+forbid_path 'ai-site-connector/handoff\.md$'
+forbid_path 'ai-site-connector/docs/development/'
 
 VERSION="$(
 	grep -E '^[[:space:]]*\*[[:space:]]*Version:' "$ROOT_DIR/ai-site-connector.php" \

@@ -1,0 +1,86 @@
+# Persistent LOCAL development WordPress for AI Site Connector.
+#
+# Drive it through bin/dev-site.sh rather than calling docker compose
+# directly. The project name is fixed, so every checkout or worktree talks to
+# the same containers and named volumes. Nothing here is shipped in the
+# release ZIP (bin/ is excluded by bin/build-release-zip.sh).
+#
+# Isolation: the site binds to 127.0.0.1 only, uses WP_ENVIRONMENT_TYPE=local,
+# shares nothing with production, and a dev-only mu-plugin captures outbound
+# mail to /asc-dev-state/mail.log instead of sending it.
+
+name: asc-dev
+
+x-wp-env: &wp-env
+  WORDPRESS_DB_HOST: db
+  WORDPRESS_DB_USER: wordpress
+  WORDPRESS_DB_PASSWORD: wordpress
+  WORDPRESS_DB_NAME: wordpress
+  ASC_DEV_PORT: "${ASC_DEV_PORT:-8790}"
+  # Evaluated by the image's wp-config.php on every request and CLI run.
+  WORDPRESS_CONFIG_EXTRA: |
+    define( 'WP_ENVIRONMENT_TYPE', 'local' );
+    define( 'WP_DEBUG', true );
+    define( 'WP_DEBUG_LOG', '/asc-dev-state/debug.log' );
+    define( 'WP_DEBUG_DISPLAY', false );
+    define( 'AI_SITE_CONNECTOR_ALLOW_HTTP', true );
+    define( 'DISALLOW_FILE_EDIT', true );
+
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress
+      MYSQL_RANDOM_ROOT_PASSWORD: "1"
+    volumes:
+      - db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uwordpress -pwordpress --silent"]
+      interval: 3s
+      timeout: 5s
+      retries: 60
+    restart: unless-stopped
+
+  wordpress:
+    image: wordpress:7.1-php8.2-apache
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *wp-env
+    # Apache listens on the published port inside the container too, so the
+    # site URL (http://localhost:PORT) also works for WordPress's own loopback
+    # requests (Site Health, the plugin's REST reachability check).
+    command:
+      - bash
+      - -c
+      - |
+        sed -ri "s/^Listen 80$$/Listen $${ASC_DEV_PORT}/" /etc/apache2/ports.conf
+        sed -ri "s/<VirtualHost \*:80>/<VirtualHost *:$${ASC_DEV_PORT}>/" /etc/apache2/sites-available/000-default.conf
+        exec docker-entrypoint.sh apache2-foreground
+    ports:
+      - "127.0.0.1:${ASC_DEV_PORT:-8790}:${ASC_DEV_PORT:-8790}"
+    volumes:
+      - wp:/var/www/html
+      - state:/asc-dev-state
+    restart: unless-stopped
+
+  cli:
+    image: wordpress:cli-php8.2
+    profiles: ["cli"]
+    # The CLI image's www-data is uid 82; match the Apache image's uid 33 so
+    # files WP-CLI writes stay writable by the web server.
+    user: "33:33"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *wp-env
+    volumes:
+      - wp:/var/www/html
+      - state:/asc-dev-state
+
+volumes:
+  db:
+  wp:
+  state:

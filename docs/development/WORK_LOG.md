@@ -2,6 +2,20 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-05 — v0.11.0 released; M7 draft #87; export coverage
+
+- PR #86 squash-merged → `6645155`; main CI 19/19 success (check-runs API)
+  before tagging. Tag `v0.11.0` → `6645155`; release run 37350399627 success.
+  Published asset verified: sha256 `95b337b1…86f3` OK, versions 0.11.0, clean
+  contents (no M7), clean install + upgrade from published v0.10.0 (exit 0).
+  Availability comments on #64 #65 #66 #73 #74 #75.
+- M7 checkpoint pushed: draft PR #87 (`ad4a914`) with
+  `docs/development/M7_REVIEW.md` mapping all review findings.
+- Export coverage: index entries now carry `complete`/`scope`/`limitations`
+  so partial scans are never presented as complete audits; README states the
+  inventory is published-only, not a full-site inventory. Opened #88
+  (cross-window duplicate detection, with fixture). Local 72/72.
+
 ## 2026-10-05 — M6 merged; 0.11.0 release prep; M7 redesign under review
 
 - PR #85 (M6, #75) squash-merged → `d81b62d`; CI run 37349217489 on

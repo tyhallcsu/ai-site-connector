@@ -779,9 +779,6 @@ class AI_Site_Connector_CLI {
 	 * [--max_scan=<n>]
 	 * : Attachments to scan, 1-20000. Default: 5000.
 	 *
-	 * [--after_id=<id>]
-	 * : Resume after this attachment ID.
-	 *
 	 * [--format=<format>]
 	 * : table|json. Default: table.
 	 *
@@ -791,15 +788,24 @@ class AI_Site_Connector_CLI {
 	 */
 	public function media_duplicates( $args, $assoc ) {
 		$format = self::format( $assoc, array( 'table', 'json' ) );
-		$result = AI_Site_Connector_Media_Audit::duplicates(
-			array(
-				'max_scan' => isset( $assoc['max_scan'] ) ? (int) $assoc['max_scan'] : AI_Site_Connector_Media_Audit::DUP_DEFAULT_SCAN,
-				'after_id' => isset( $assoc['after_id'] ) ? (int) $assoc['after_id'] : 0,
-			)
-		);
-		if ( is_wp_error( $result ) ) {
-			WP_CLI::error( $result->get_error_message() );
-		}
+		$scan_id = '';
+		$calls   = 0;
+		do {
+			if ( ++$calls > 1000 ) {
+				AI_Site_Connector_Media_Audit::abandon_scan( $scan_id );
+				WP_CLI::error( 'Duplicate scan did not complete within 1000 calls.' );
+			}
+			$result = AI_Site_Connector_Media_Audit::duplicates(
+				array(
+					'scan_id'  => $scan_id,
+					'max_scan' => isset( $assoc['max_scan'] ) ? (int) $assoc['max_scan'] : AI_Site_Connector_Media_Audit::DUP_DEFAULT_SCAN,
+				)
+			);
+			if ( is_wp_error( $result ) ) {
+				WP_CLI::error( $result->get_error_message() );
+			}
+			$scan_id = $result['scan_id'];
+		} while ( ! $result['complete'] );
 		if ( 'json' === $format ) {
 			WP_CLI::log( wp_json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
 			return;
@@ -820,7 +826,7 @@ class AI_Site_Connector_CLI {
 			);
 		}
 		\WP_CLI\Utils\format_items( 'table', $rows, array( 'kind', 'key', 'attachment_ids' ) );
-		WP_CLI::log( sprintf( 'scanned=%d hashed=%d unreadable=%d next_after_id=%s', $result['scanned'], $result['hashed_files'], count( $result['unreadable'] ), null === $result['next_after_id'] ? 'none' : $result['next_after_id'] ) );
+		WP_CLI::log( sprintf( 'library-wide: scanned=%d hashed=%d unreadable=%d calls=%d', $result['scanned'], $result['hashed_files'], count( $result['unreadable'] ), $result['calls'] ) );
 	}
 
 	/**

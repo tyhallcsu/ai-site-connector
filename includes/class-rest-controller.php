@@ -310,7 +310,7 @@ class AI_Site_Connector_REST_Controller {
 				'permission'       => AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST,
 				'method'           => 'GET',
 				'route'            => '/media/duplicates',
-				'description'      => 'Find duplicate media by filename (exact and WordPress -1/-scaled variants) and by SHA-256 of locally readable files, hashing only size collisions within byte budgets. Reports missing/unreadable files. Never deletes anything. Read-only.',
+				'description'      => 'Find duplicate media across the whole library by filename (exact and WordPress -1/-scaled re-uploads) and SHA-256 of locally readable files, hashing only size collisions. Resumable: repeat with the returned scan_id until complete is true (groups are only reported when complete). Reports missing/unreadable files. Never deletes anything. Read-only.',
 				'risk_level'       => 'read',
 				'read_only'        => true,
 				'supports_dry_run' => false,
@@ -318,7 +318,7 @@ class AI_Site_Connector_REST_Controller {
 					'type'       => 'object',
 					'properties' => array(
 						'max_scan'       => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => AI_Site_Connector_Media_Audit::DUP_MAX_SCAN ),
-						'after_id'       => array( 'type' => 'integer', 'minimum' => 0 ),
+						'scan_id'        => array( 'type' => 'string' ),
 						'max_file_bytes' => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => AI_Site_Connector_Media_Audit::DUP_MAX_FILE_BYTES ),
 					),
 				),
@@ -751,10 +751,17 @@ class AI_Site_Connector_REST_Controller {
 						'maximum' => AI_Site_Connector_Media_Audit::DUP_MAX_SCAN,
 						'default' => AI_Site_Connector_Media_Audit::DUP_DEFAULT_SCAN,
 					),
+					'scan_id'        => array(
+						'type'        => 'string',
+						'pattern'     => '^([0-9]{14}-[A-Za-z0-9]{8}-u[0-9]+)?$',
+						'default'     => '',
+						'description' => 'Continue a scan; omit to start one. Repeat until complete is true.',
+					),
 					'after_id'       => array(
-						'type'    => 'integer',
-						'minimum' => 0,
-						'default' => 0,
+						'type'        => 'integer',
+						'minimum'     => 0,
+						'default'     => 0,
+						'description' => 'No longer supported (scans are library-wide); use scan_id.',
 					),
 					'max_file_bytes' => array(
 						'type'    => 'integer',
@@ -1253,6 +1260,7 @@ class AI_Site_Connector_REST_Controller {
 		}
 		$res = AI_Site_Connector_Media_Audit::duplicates(
 			array(
+				'scan_id'        => (string) $request->get_param( 'scan_id' ),
 				'max_scan'       => (int) $request->get_param( 'max_scan' ),
 				'after_id'       => (int) $request->get_param( 'after_id' ),
 				'max_file_bytes' => (int) $request->get_param( 'max_file_bytes' ),

@@ -57,6 +57,9 @@ delete_option( 'ai_site_connector_disabled' );
 $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( 'ai_site_connector_snapshot_' ) . '%' ) );
 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 $wpdb->delete( $wpdb->postmeta, array( 'meta_key' => '_ai_site_connector_snapshot' ) );
+// Unfinished duplicate-scan states (attachment IDs and filenames).
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( 'ai_site_connector_dupscan_' ) . '%' ) );
 
 // 4. Unschedule the daily prune (deactivation already did this, but if
 // uninstall is called without prior deactivation — possible via wp-cli's

@@ -2,6 +2,25 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-05 — v0.12.2 released
+
+- PR #115 → `72e268e`. PR CI run 37377009311 on head `f91972d`: 19/19.
+  ZIP install + upgrade v0.12.1 → v0.12.2; integration 91/91 on 6 WordPress
+  builds; PHPUnit 40. Main CI run 37377306710 on `72e268e`: 19/19.
+- Tag `v0.12.2` → `72e268e`; release run 37377593413 succeeded; stable;
+  `releases/latest` = v0.12.2. Asset `ai-site-connector-v0.12.2.zip`:
+  1,132,005 B, sha256
+  `826eba735e422335361d0cc114d373a0118ea2a186564e36c18ec08219084e8e`
+  (checksum file verified). It embeds 0.12.2 and holds 70 files with no
+  dev paths.
+- Dev site: upgraded published v0.12.1 → published v0.12.2 (digest
+  matched, 70 files verified); `audit` 22/22 clean; #102/#104/#105
+  rechecked; CLI self-test 6/6. Shipped issues commented.
+- Release body notes known issue #114 (pre-existing P1 rollback
+  validation). ZIP size jump from #96's raster-backed SVGs filed as #125.
+- Another session (essremodel) filed #111–#124 during this window,
+  including P1s #114 and #119. Not touched here; no PRs open for them.
+
 ## 2026-10-05 — dev site, admin audit fixes, outage-time merges, 0.12.2 prep
 
 - No dev target existed (#97). Added the local dev site, `bin/dev-site.sh`

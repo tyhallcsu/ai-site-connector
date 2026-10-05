@@ -1,20 +1,20 @@
 # Handoff — AI Site Connector
 
-**Updated:** 2026-10-05 ~22:30 UTC (16:30 America/Denver) · **State:** 0.12.3 release prep (P1 fixes #114, #119 merged in #134) · **Mode:** continuous low-usage (single agent; new features stay in backlog) · **Session:** `asc-dev-audit-ship`
+**Updated:** 2026-10-05 ~23:25 UTC (17:25 America/Denver) · **State:** v0.12.3 released and verified on dev; queue closed out; paused for the owner · **Mode:** continuous low-usage (single agent; new features stay in backlog) · **Session:** `asc-dev-audit-ship`
 **Repo:** tyhallcsu/ai-site-connector (public, standalone — the parent `ess-custom-plugins` dir is not a repo)
 **Primary checkout:** `/Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector`. Its local `main` is at `16f5816`, 5 commits behind `origin/main` (read from its refs 21:48 UTC; not modified by this session; fast-forward before use)
-**Session worktree:** `.claude/worktrees/asc-dev-audit-ship` · branch `chore/release-0.12.3` (release prep)
+**Session worktree:** `.claude/worktrees/asc-dev-audit-ship` · branch `docs/handoff-0.12.3` (this checkpoint)
 **Rules:** `docs/development/OPERATING_BRIEF.md` · **Dev site:** `docs/development/DEV_SITE.md` · **Plan:** `docs/development/ROADMAP.md` · **Log:** `docs/development/WORK_LOG.md`
 
 ## Verified state
 
 | Item | Value | Evidence |
 |------|-------|----------|
-| `origin/main` | `422f953` — #134 safe rollback + namespaced MCP URLs, on `843ffec` | `gh pr view 134` merge commit |
-| Latest release | **v0.12.2** → tag on `72e268e`; stable; `releases/latest`; ZIP 1,132,005 B, sha256 `826eba73…4e8e` (checksum, version, contents verified) | release run 37377593413; `gh release view` |
-| Unreleased on main | #134 (fixes P1 #114, #119) → v0.12.3 prepared in this PR | commits since tag v0.12.2 |
-| Dev site | http://localhost:8790 — **published v0.12.2** (`72e268e`), upgraded from published v0.12.1; 70 files verified; `audit` 22/22 clean; CLI self-test 6/6 | `bin/dev-site.sh status` / `audit` 21:44 UTC |
-| CI | GitHub CI verified: `15b43de` run 37375258741 19/19; release PR head `f91972d` run 37377009311 19/19 (upgrade v0.12.1 → v0.12.2); `72e268e` run 37377306710 19/19. Earlier outage-time merges used owner-authorized local CI (one-off exception) | `gh run view` |
+| `origin/main` | `4bef824` — chore(release): v0.12.3 (#135), on `422f953` (#134 P1 fixes) | `gh pr view 135` merge commit |
+| Latest release | **v0.12.3** → tag on `4bef824`; stable; `releases/latest`; ZIP 1,135,602 B, sha256 `01b973c2…94afe`; checksum, embedded 0.12.3, 70 files, no dev paths and both fixes present all verified | release run 37380756899 |
+| Unreleased on main | nothing | commits since tag v0.12.3 |
+| Dev site | http://localhost:8790 — **published v0.12.3** (`4bef824`), 70 files verified. #114: a verified 0.12.2 backup plus an empty 0.12.0 dir present, only 0.12.2 offered. UI Rollback to 0.12.2 via the admin-post handler gave byte-identical files and audit started → roll-away backup → completed; then restored to v0.12.3. #119: the generated snippet URL `…/wp-json/ai-site-connector/v1/mcp`, HTTP `initialize` with the snippet's header → 200 | `bin/dev-site.sh status`; audit ids 17–19 |
+| CI | #134 run 37379827867 19/19 (integration 97/97 × 6 WP builds); #135 run 37380234124 19/19 (upgrade v0.12.2 → v0.12.3); main `4bef824` run 37380505933 19/19 | `gh run view` |
 | Remote dev target | none exists — owner decision tracked in #97 | config/registry search |
 
 ## Startup reconciliation (2026-10-05)
@@ -64,9 +64,9 @@
 
 ## Next three actions
 
-1. Release-prep PR for 0.12.3: CI green on its head → squash-merge → wait for main CI 19/19 on the merge SHA (the publisher requires it) → `git tag -a v0.12.3` → push the tag.
-2. Verify the published asset; on dev, `deploy --release v0.12.3`, run the UI rollback round trip with a verified 0.12.2 backup plus a hidden partial one, and check the generated MCP URL initializes over HTTP.
-3. Owner decisions #97, #99. Backlog: #101 #106 #108 #109 #125 and the other session's P2/P3 issues #111–#113, #116–#118, #120–#124.
+1. Owner decisions #97 (remote dev site?) and #99 (required checks on `main`).
+2. Next fixes from the other session's audit (P2): #111 #113 #116 #117 #118 #120 #121, after checking with that session; features #112 #122–#124 stay in the backlog.
+3. Backlog: #101 #106 #108 #109 #125. Dev site holds fixture data plus extra `ai-agent` Application Passwords from verification runs (dev only).
 
 Resume: `cd <worktree> && git fetch && gh pr list -R tyhallcsu/ai-site-connector && bin/dev-site.sh status`
 

@@ -40,10 +40,11 @@ class AI_Site_Connector_Connection_Formats {
 		$health_url  = isset( $pack['plugin_health_endpoint'] ) ? (string) $pack['plugin_health_endpoint'] : '';
 		$site_host   = isset( $pack['site_host'] ) ? (string) $pack['site_host'] : 'wordpress';
 		$server_name = self::sanitize_server_name( $site_host );
+		$mcp_url     = self::mcp_endpoint( $pack );
 
 		return array(
-			self::claude_desktop_mcp( $server_name, $rest_base, $user, $pass ),
-			self::cursor_mcp( $server_name, $rest_base, $user, $pass ),
+			self::claude_desktop_mcp( $server_name, $mcp_url, $user, $pass ),
+			self::cursor_mcp( $server_name, $mcp_url, $user, $pass ),
 			self::n8n_instructions( $site_url, $user, $pass ),
 			self::curl_snippet( $rest_base, $user, $pass ),
 			self::python_snippet( $rest_base, $user, $pass ),
@@ -63,8 +64,8 @@ class AI_Site_Connector_Connection_Formats {
 	 * examples/mcp-server/README.md.
 	 * ------------------------------------------------------------------ */
 
-	private static function claude_desktop_mcp( $server_name, $rest_base, $user, $pass ) {
-		$config = self::mcp_config_shape( $server_name, $rest_base, $user, $pass );
+	private static function claude_desktop_mcp( $server_name, $mcp_url, $user, $pass ) {
+		$config = self::mcp_config_shape( $server_name, $mcp_url, $user, $pass );
 		$code   = wp_json_encode( $config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
 
 		return array(
@@ -79,8 +80,8 @@ class AI_Site_Connector_Connection_Formats {
 		);
 	}
 
-	private static function cursor_mcp( $server_name, $rest_base, $user, $pass ) {
-		$config = self::mcp_config_shape( $server_name, $rest_base, $user, $pass );
+	private static function cursor_mcp( $server_name, $mcp_url, $user, $pass ) {
+		$config = self::mcp_config_shape( $server_name, $mcp_url, $user, $pass );
 		$code   = wp_json_encode( $config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
 
 		return array(
@@ -95,8 +96,24 @@ class AI_Site_Connector_Connection_Formats {
 		);
 	}
 
-	private static function mcp_config_shape( $server_name, $rest_base, $user, $pass ) {
-		$mcp_url    = rtrim( (string) $rest_base, '/' ) . '/mcp';
+	/**
+	 * The plugin's MCP endpoint for a pack. Packs carry `mcp_endpoint` (built
+	 * with rest_url(), so plain permalinks and subdirectory installs work);
+	 * older packs fall back to the REST root plus the plugin namespace. The REST
+	 * root alone is not the MCP route (#119).
+	 *
+	 * @param array $pack Connection pack.
+	 * @return string
+	 */
+	public static function mcp_endpoint( array $pack ) {
+		if ( ! empty( $pack['mcp_endpoint'] ) ) {
+			return (string) $pack['mcp_endpoint'];
+		}
+		$rest_base = isset( $pack['rest_api_base'] ) ? (string) $pack['rest_api_base'] : '';
+		return trailingslashit( $rest_base ) . AI_SITE_CONNECTOR_REST_NAMESPACE . '/mcp';
+	}
+
+	private static function mcp_config_shape( $server_name, $mcp_url, $user, $pass ) {
 		$basic_auth = 'Basic ' . base64_encode( $user . ':' . $pass );
 
 		return array(

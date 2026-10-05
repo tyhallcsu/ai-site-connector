@@ -587,7 +587,8 @@ class AI_Site_Connector_MCP_Server {
 		$gate = AI_Site_Connector_Permissions::require_permission( AI_Site_Connector_Permissions::TOOL_WRITE_CONTENT );
 		if ( is_wp_error( $gate ) ) {
 			$data = $gate->get_error_data();
-			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+			// JSON-encoded into the MCP result, never echoed as HTML.
+			// phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped
 			throw new AI_Site_Connector_MCP_Tool_Error(
 				array(
 					'status'  => 403,
@@ -596,6 +597,7 @@ class AI_Site_Connector_MCP_Server {
 					'reason'  => is_array( $data ) && isset( $data['reason'] ) ? (string) $data['reason'] : '',
 				)
 			);
+			// phpcs:enable
 		}
 	}
 

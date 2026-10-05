@@ -76,6 +76,11 @@ class AI_Site_Connector_MCP_Server {
 	}
 
 	public static function permission() {
+		// Defence in depth behind the REST gate: several MCP tools dispatch
+		// straight to core /wp/v2 routes.
+		if ( AI_Site_Connector_Permissions::is_disabled() ) {
+			return new WP_Error( 'ai_site_connector_disabled', __( 'AI Site Connector is disabled on this site by an administrator.', 'ai-site-connector' ), array( 'status' => 503 ) );
+		}
 		if ( ! is_user_logged_in() ) {
 			return new WP_Error( 'rest_forbidden', __( 'MCP requires authentication (Basic Auth with an Application Password).', 'ai-site-connector' ), array( 'status' => 401 ) );
 		}
@@ -342,6 +347,9 @@ class AI_Site_Connector_MCP_Server {
 			return new WP_REST_Response( self::jsonrpc_error( $id, self::JSONRPC_INVALID_PARM, 'Missing tool name' ), 200 );
 		}
 
+		if ( AI_Site_Connector_Permissions::is_disabled() ) {
+			return new WP_REST_Response( self::jsonrpc_error( $id, self::JSONRPC_INTERNAL, 'AI Site Connector is disabled on this site.' ), 503 );
+		}
 		try {
 			$content = self::dispatch_tool( $name, $args );
 		} catch ( AI_Site_Connector_MCP_Tool_Error $e ) {

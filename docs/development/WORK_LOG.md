@@ -2,6 +2,25 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-05 — M5 merged; M6 (#75 disable/enable) in review
+
+- PR #84 (M5) squash-merged → `8dbb1d0`; CI run 37346467734 on `3c65437`:
+  integration 69/69 on WP 5.6–7.1.2. Closed #73 #74.
+- M6 site-wide switch. Second-pass review: 2 P1 — WordPress matches REST
+  routes case-insensitively (`'@^' . $route . '$@i'`, verified in WP 7.1.2
+  source) so a case-sensitive gate let `/AI-Site-Connector/v1/mcp` through,
+  and MCP tools that dispatch straight to `/wp/v2` had no switch check of
+  their own; plus blocked requests stamped as "last successful request", a
+  misleading CLI message (Application Passwords still work on core routes),
+  a filter able to override the switch, tests that could leave the site
+  disabled, and multisite scope not named. All fixed with regression tests
+  (mixed-case REST + real-HTTP `?rest_route=` MCP probes). Existing
+  app-password route scopes are an allowlist, so case variants fail closed
+  there (no bypass).
+- Local port 8765 was held by another project's server (not ours, left
+  alone); local smoke now uses 8775. One local smoke run failed at
+  `ai-connector status` and did not reproduce in three subsequent runs.
+
 ## 2026-10-05 — M4 merged; M5 (#73/#74) in review
 
 - PR #83 (M4, #66) squash-merged → `c270434`; CI run 37345095645 on

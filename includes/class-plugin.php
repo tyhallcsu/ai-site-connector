@@ -75,6 +75,8 @@ class AI_Site_Connector_Plugin {
 			WP_CLI::add_command( 'ai-connector media-duplicates', array( 'AI_Site_Connector_CLI', 'media_duplicates' ) );
 			WP_CLI::add_command( 'ai-connector broken-links', array( 'AI_Site_Connector_CLI', 'broken_links' ) );
 			WP_CLI::add_command( 'ai-connector export', array( 'AI_Site_Connector_CLI', 'export' ) );
+			WP_CLI::add_command( 'ai-connector disable', array( 'AI_Site_Connector_CLI', 'disable' ) );
+			WP_CLI::add_command( 'ai-connector enable', array( 'AI_Site_Connector_CLI', 'enable' ) );
 		}
 	}
 

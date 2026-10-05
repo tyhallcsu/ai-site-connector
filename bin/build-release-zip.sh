@@ -25,6 +25,19 @@ ZIP_PATH="$BUILD_DIR/ai-site-connector-v${VERSION}.zip"
 rm -rf "$STAGE_DIR" "$ZIP_PATH"
 mkdir -p "$STAGE_DIR"
 
+# Package tracked files only, so ignored or untracked local files (editor
+# cruft, hook logs, CI scratch files) can never reach the ZIP: copy the
+# tracked tree (working-copy contents) to a temp dir, then apply the exclude
+# list below to that copy.
+SOURCE_DIR="$ROOT_DIR"
+if git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+	TRACKED_DIR="$(mktemp -d)"
+	trap 'rm -rf "$TRACKED_DIR"' EXIT
+	git -C "$ROOT_DIR" ls-files -z \
+		| rsync -a --from0 --files-from=- "$ROOT_DIR/" "$TRACKED_DIR/"
+	SOURCE_DIR="$TRACKED_DIR"
+fi
+
 rsync -a \
 	--exclude='.git/' \
 	--exclude='.github/' \
@@ -54,7 +67,7 @@ rsync -a \
 	--exclude='TESTING_CHECKLIST.md' \
 	--exclude='/handoff.md' \
 	--exclude='/docs/development/' \
-	"$ROOT_DIR/" "$STAGE_DIR/"
+	"$SOURCE_DIR/" "$STAGE_DIR/"
 
 (
 	cd "$BUILD_DIR"

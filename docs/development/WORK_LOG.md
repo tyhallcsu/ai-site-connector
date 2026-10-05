@@ -23,6 +23,16 @@ Concise, dated, evidence-backed. Newest first.
   release, publishes ZIP + `.sha256` with CHANGELOG notes. Checklist
   rewritten to match (it said `## [vX.Y.Z]` and `gh release create`, which
   contradicted the workflow). actionlint clean.
+- Second-pass review of the release pipeline (adversarial reviewer): fixed
+  all findings — the CI-gate step wrote `checks.tsv` into the workspace,
+  which the rsync-based build would have shipped inside the published ZIP;
+  the build now packages tracked files only (`git ls-files`; also dropped a
+  local hook's `artifacts/evidence.log` from local builds) and package-smoke
+  enforces a top-level allowlist. Release gate now requires every CI check
+  run for the SHA (PHP/WP matrices included) plus key jobs present; strict
+  "release not found" check + `overwrite_files: false`; version format
+  validated and passed via env; upgrade test now goes through the previous
+  release's own updater + `wp plugin update` (Plugin_Upgrader).
 - Local release gates for 0.10.0 (WP 7.1.2): check-version OK; PHPUnit OK
   (40); phpcs 0; security-grep clean; package smoke passed; integration 46/46;
   ZIP clean install + upgrade v0.9.1 → v0.10.0 passed. Local ZIP sha256

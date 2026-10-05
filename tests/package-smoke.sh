@@ -84,6 +84,16 @@ forbid_path 'ai-site-connector/assets/brand/.*\.png$'
 forbid_path 'ai-site-connector/(connection-pack\.json|[^/]+-connection-pack\.json|.*\.connection-pack\.json)$'
 forbid_path 'ai-site-connector/\.env'
 forbid_path 'ai-site-connector/handoff\.md$'
+
+# Allowlist of top-level entries: anything else (stray scratch files, logs,
+# local directories) fails the build.
+unexpected="$(awk -F/ 'NF >= 2 && $2 != "" { print $2 }' "$LISTING" | sort -u \
+	| grep -vxE 'ai-site-connector\.php|uninstall\.php|readme\.txt|README\.md|CHANGELOG\.md|SECURITY\.md|LICENSE|assets|docs|examples|includes|scripts' || true)"
+if [ -n "$unexpected" ]; then
+	echo "Release ZIP contains unexpected top-level entries:" >&2
+	printf '%s\n' "$unexpected" >&2
+	exit 1
+fi
 forbid_path 'ai-site-connector/docs/development/'
 
 VERSION="$(

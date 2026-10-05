@@ -83,7 +83,35 @@ wp_cli plugin install "$PREV_ZIP" --activate --quiet
 assert_active_version "$PREV_VERSION"
 wp_cli ai-connector create-user --username=zip-smoke-agent --quiet >/dev/null
 before_rows="$(wp_cli db query "SELECT COUNT(*) FROM wp_ai_site_connector_log" --skip-column-names)"
-wp_cli plugin install "$NEW_ZIP" --force --quiet
+# Real update path: seed the previous release's updater cache with the new
+# ZIP (a local path, which WP_Upgrader::download_package accepts), let its
+# pre_set_site_transient_update_plugins hook inject the update, then run
+# Plugin_Upgrader through `wp plugin update`.
+NEW_ZIP_ABS="$(cd "$(dirname "$NEW_ZIP")" && pwd)/$(basename "$NEW_ZIP")"
+ASC_NEW_VERSION="$NEW_VERSION" ASC_NEW_ZIP="$NEW_ZIP_ABS" wp_cli eval '
+	set_site_transient(
+		"ai_site_connector_remote_release",
+		array(
+			"version"       => getenv( "ASC_NEW_VERSION" ),
+			"zip_url"       => getenv( "ASC_NEW_ZIP" ),
+			"asset_name"    => basename( getenv( "ASC_NEW_ZIP" ) ),
+			"body"          => "",
+			"published_at"  => gmdate( "c" ),
+			"is_prerelease" => false,
+			"html_url"      => "",
+		),
+		HOUR_IN_SECONDS
+	);
+	delete_site_transient( "update_plugins" );
+	wp_update_plugins();
+	$t = get_site_transient( "update_plugins" );
+	$r = isset( $t->response[ AI_SITE_CONNECTOR_BASENAME ] ) ? $t->response[ AI_SITE_CONNECTOR_BASENAME ] : null;
+	if ( ! $r || getenv( "ASC_NEW_VERSION" ) !== $r->new_version ) {
+		fwrite( STDERR, "updater did not offer the new version\n" );
+		exit( 1 );
+	}
+'
+wp_cli plugin update ai-site-connector
 assert_active_version "$NEW_VERSION"
 wp_cli user get zip-smoke-agent --field=user_login >/dev/null || { echo "AI user lost on upgrade" >&2; exit 1; }
 after_rows="$(wp_cli db query "SELECT COUNT(*) FROM wp_ai_site_connector_log" --skip-column-names)"

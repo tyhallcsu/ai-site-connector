@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.11.0
+Stable tag: 0.12.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,11 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.12.0 =
+* New: safe content update and rollback (REST + MCP). Dry-run by default; real writes need the default-off write_content permission (SEO fields also update_seo). Validates permissions, status transitions, slugs, terms and images; shows exactly what would be stored; snapshots before writing; restores on detected failure; rollback refuses to overwrite later edits.
+* Changed: duplicate media detection is library-wide and resumable (scan_id / complete); after_id is no longer supported.
+* Changed: export manifests report complete / scope / limitations per file.
+
 = 0.11.0 =
 * New: media SEO audit and duplicate media detection (filename + SHA-256; never deletes).
 * New: offline broken internal link scanner (resolves links against the database and uploads; never makes HTTP requests).

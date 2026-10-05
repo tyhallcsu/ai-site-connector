@@ -2,6 +2,22 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-05 — #89, #90, #87 merged; 0.12.0 release prep
+
+- #89 (export coverage) → `1098ee4`; #90 (library-wide duplicate scan,
+  closes #88) → `c255de3` after review (1 P1 visibility-after-permission-
+  change + 7 P2 + 3 P3 fixed); #87 (M7 safe content update, closes #70) →
+  `d378e50` after four reviews (31 findings, ledger
+  `docs/development/M7_REVIEW.md`). CI on each final head green on WP 5.6,
+  6.5, 6.8, 6.9, 7.0, 7.1.2 (73/73, 86/86).
+- No open issues or PRs remain.
+- 0.12.0 local gates (WP 7.1.2): versions consistent, PHPUnit OK (40),
+  phpcs 0, security-grep, package smoke, actionlint, integration 86/86,
+  clean install + v0.11.0 → v0.12.0 via v0.11.0's updater (exit 0).
+- Answered a question from the celememorate.com maintainer session about
+  updating the plugin there: no rollout constraint from this session;
+  live-site updates require that session's user's authorization.
+
 ## 2026-10-05 — v0.11.0 released; M7 draft #87; export coverage
 
 - PR #86 squash-merged → `6645155`; main CI 19/19 success (check-runs API)

@@ -61,9 +61,7 @@ class AI_Site_Connector_Export {
 		$items   = array();
 		$omitted = 0;
 		foreach ( $attachments as $att ) {
-			// An attachment inherits its parent's visibility (read_post maps
-			// through to the parent), matching what the Media Library shows.
-			if ( ! current_user_can( 'read_post', $att->ID ) ) {
+			if ( ! self::can_read_attachment( $att ) ) {
 				++$omitted;
 				continue;
 			}
@@ -115,6 +113,22 @@ class AI_Site_Connector_Export {
 			'sha256'        => $sha256,
 			'modified_gmt'  => self::gmt_date( $att->post_modified_gmt, $att->post_modified ),
 		);
+	}
+
+	/**
+	 * Attached media follows its parent post's visibility; unattached media
+	 * is visible to anyone who can use the Media Library. Explicit because
+	 * read_post only maps inherit-status attachments to the parent on newer
+	 * WordPress versions (on 5.6 it falls through to edit_post).
+	 *
+	 * @param WP_Post $att Attachment.
+	 */
+	public static function can_read_attachment( $att ) {
+		$parent = (int) $att->post_parent;
+		if ( $parent > 0 && get_post( $parent ) ) {
+			return current_user_can( 'read_post', $parent );
+		}
+		return current_user_can( 'upload_files' ) || current_user_can( 'edit_post', $att->ID );
 	}
 
 	/**

@@ -31,6 +31,7 @@ class AI_Site_Connector_Plugin {
 		AI_Site_Connector_Audit_Webhook::register_hooks();
 		AI_Site_Connector_Permissions::register_hooks();
 		AI_Site_Connector_Diagnostics::register_hooks();
+		AI_Site_Connector_SEO::register_hooks();
 		AI_Site_Connector_Cache::register_hooks();
 		AI_Site_Connector_Media::register_hooks();
 		AI_Site_Connector_Export::register_hooks();
@@ -65,6 +66,10 @@ class AI_Site_Connector_Plugin {
 			WP_CLI::add_command( 'ai-connector generate-password', array( 'AI_Site_Connector_CLI', 'generate_password' ) );
 			WP_CLI::add_command( 'ai-connector revoke-password', array( 'AI_Site_Connector_CLI', 'revoke_password' ) );
 			WP_CLI::add_command( 'ai-connector rotate-password', array( 'AI_Site_Connector_CLI', 'rotate_password' ) );
+			WP_CLI::add_command( 'ai-connector mcp-self-test', array( 'AI_Site_Connector_CLI', 'mcp_self_test' ) );
+			WP_CLI::add_command( 'ai-connector routes', array( 'AI_Site_Connector_CLI', 'routes' ) );
+			WP_CLI::add_command( 'ai-connector page-builder', array( 'AI_Site_Connector_CLI', 'page_builder' ) );
+			WP_CLI::add_command( 'ai-connector redirects', array( 'AI_Site_Connector_CLI', 'redirects' ) );
 		}
 	}
 

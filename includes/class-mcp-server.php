@@ -22,6 +22,10 @@
  *   wp_list_pages    — list pages by status
  *   wp_list_plugins  — list installed plugins
  *   wp_list_themes   — list installed themes
+ *   wp_self_test     — MCP-surface pass/warn/fail self-test
+ *   wp_rest_routes   — REST route inventory
+ *   wp_page_builder  — page builder detection (site + per-post)
+ *   wp_redirects     — redirect plugin detection + export
  *
  * Constants:
  *   AI_SITE_CONNECTOR_MCP_DISABLE — when true, the route is not registered.
@@ -206,6 +210,46 @@ class AI_Site_Connector_MCP_Server {
 				'description' => 'List installed themes (via the plugin REST endpoint).',
 				'inputSchema' => array( 'type' => 'object', 'properties' => new stdClass(), 'additionalProperties' => false ),
 			),
+			array(
+				'name'        => 'wp_self_test',
+				'description' => 'Structured pass/warn/fail self-test of this MCP surface (REST, MCP route, caller capabilities, writable dirs, SEO/page-builder detection, audit log, SEO dry-run invariant). Read-only; admin only.',
+				'inputSchema' => array( 'type' => 'object', 'properties' => new stdClass(), 'additionalProperties' => false ),
+			),
+			array(
+				'name'        => 'wp_rest_routes',
+				'description' => 'Inventory of registered REST routes with methods, argument metadata and permission-callback presence. Optional: namespace (exact, e.g. wp/v2). Read-only; admin only.',
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'namespace' => array( 'type' => 'string' ),
+					),
+				),
+			),
+			array(
+				'name'        => 'wp_page_builder',
+				'description' => 'Detect page builders site-wide, plus per-post evidence for up to 100 post_ids. Read-only; admin only.',
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'post_ids' => array(
+							'type'     => 'array',
+							'items'    => array( 'type' => 'integer' ),
+							'maxItems' => 100,
+						),
+					),
+				),
+			),
+			array(
+				'name'        => 'wp_redirects',
+				'description' => 'Detect redirect plugins (Rank Math, Redirection, AIOSEO, Yoast Premium) and export their redirects. Optional: limit (1-1000, default 500), offset. Read-only; admin only.',
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'limit'  => array( 'type' => 'integer' ),
+						'offset' => array( 'type' => 'integer' ),
+					),
+				),
+			),
 		);
 	}
 
@@ -218,6 +262,24 @@ class AI_Site_Connector_MCP_Server {
 
 		try {
 			$content = self::dispatch_tool( $name, $args );
+		} catch ( AI_Site_Connector_MCP_Tool_Error $e ) {
+			// Tool-level failure (denied, invalid input): per the MCP spec this
+			// is a successful JSON-RPC result carrying isError=true.
+			return new WP_REST_Response(
+				self::jsonrpc_result(
+					$id,
+					array(
+						'content' => array(
+							array(
+								'type' => 'text',
+								'text' => (string) wp_json_encode( $e->payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ),
+							),
+						),
+						'isError' => true,
+					)
+				),
+				200
+			);
 		} catch ( Exception $e ) {
 			AI_Site_Connector_Audit_Log::record(
 				'mcp_tool_failed',
@@ -316,9 +378,51 @@ class AI_Site_Connector_MCP_Server {
 					}
 				}
 				return self::dispatch( 'POST', '/wp/v2/' . self::pt_rest_base( $pt ) . '/' . $id, $body );
+			case 'wp_self_test':
+				return self::dispatch_checked( 'GET', '/diagnostics/self-test' );
+			case 'wp_rest_routes':
+				return self::dispatch_checked( 'GET', '/diagnostics/rest-routes', self::pick( $args, array( 'namespace' ) ) );
+			case 'wp_page_builder':
+				return self::dispatch_checked( 'GET', '/diagnostics/page-builder', self::pick( $args, array( 'post_ids' ) ) );
+			case 'wp_redirects':
+				return self::dispatch_checked( 'GET', '/diagnostics/redirects', self::pick( $args, array( 'limit', 'offset' ) ) );
 			default:
 				throw new InvalidArgumentException( 'Unknown tool: ' . esc_html( $name ) );
 		}
+	}
+
+	private static function pick( array $args, array $keys ) {
+		return array_intersect_key( $args, array_flip( $keys ) );
+	}
+
+	/**
+	 * Dispatch to one of this plugin's routes and surface HTTP errors as an
+	 * MCP tool error instead of a "successful" error payload.
+	 *
+	 * @throws AI_Site_Connector_MCP_Tool_Error When the route returns >= 400.
+	 */
+	private static function dispatch_checked( $method, $route, array $params = array() ) {
+		$req = new WP_REST_Request( $method, '/' . AI_SITE_CONNECTOR_REST_NAMESPACE . $route );
+		if ( 'GET' === $method ) {
+			$req->set_query_params( $params );
+		} else {
+			$req->set_body_params( $params );
+		}
+		$resp = rest_do_request( $req );
+		$data = $resp->get_data();
+		if ( $resp->get_status() >= 400 ) {
+			// The payload is JSON-encoded into the MCP result, never echoed as HTML.
+			// phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped
+			throw new AI_Site_Connector_MCP_Tool_Error(
+				array(
+					'status'  => (int) $resp->get_status(),
+					'code'    => is_array( $data ) && isset( $data['code'] ) ? (string) $data['code'] : 'error',
+					'message' => is_array( $data ) && isset( $data['message'] ) ? (string) $data['message'] : 'Request failed.',
+				)
+			);
+			// phpcs:enable
+		}
+		return $data;
 	}
 
 	private static function list_posts( array $args, $default_pt ) {
@@ -380,5 +484,19 @@ class AI_Site_Connector_MCP_Server {
 			'id'      => $id,
 			'error'   => $err,
 		);
+	}
+}
+
+/**
+ * Tool-level failure carried back to the client as `isError: true`.
+ */
+class AI_Site_Connector_MCP_Tool_Error extends Exception {
+
+	/** @var array JSON-safe error payload: { status, code, message }. */
+	public $payload;
+
+	public function __construct( array $payload ) {
+		parent::__construct( isset( $payload['message'] ) ? (string) $payload['message'] : 'Tool error' );
+		$this->payload = $payload;
 	}
 }

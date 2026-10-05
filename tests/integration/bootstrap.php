@@ -82,6 +82,118 @@ function asc_it_as_user( $user_id, $fn ) {
 	}
 }
 
+/**
+ * Create a user fixture with a role; returns the user ID.
+ */
+function asc_it_user( $role ) {
+	$id = wp_insert_user(
+		array(
+			'user_login' => 'asc_it_' . $role . '_' . wp_generate_password( 6, false ),
+			'user_pass'  => wp_generate_password( 24 ),
+			'user_email' => 'asc-it-' . $role . '-' . wp_generate_password( 6, false ) . '@example.test',
+			'role'       => $role,
+		)
+	);
+	asc_assert( is_int( $id ), 'could not create ' . $role . ' fixture' );
+	return $id;
+}
+
+function asc_it_delete_user( $id ) {
+	require_once ABSPATH . 'wp-admin/includes/user.php';
+	wp_delete_user( $id );
+}
+
+/**
+ * Create a post fixture; returns the post ID.
+ */
+function asc_it_post( $args = array() ) {
+	$id = wp_insert_post(
+		array_merge(
+			array(
+				'post_title'   => 'ASC IT fixture',
+				'post_content' => 'Fixture body.',
+				'post_status'  => 'publish',
+				'post_type'    => 'post',
+			),
+			$args
+		),
+		true
+	);
+	asc_assert( is_int( $id ) && $id > 0, 'could not create post fixture' );
+	return $id;
+}
+
+/**
+ * Run $fn with a filter attached, always detaching it afterwards.
+ */
+function asc_it_with_filter( $hook, $callback, $fn, $priority = 10, $accepted_args = 1 ) {
+	add_filter( $hook, $callback, $priority, $accepted_args );
+	try {
+		return $fn();
+	} finally {
+		remove_filter( $hook, $callback, $priority );
+	}
+}
+
+/**
+ * Run $fn with tool permissions overridden, restoring the stored option.
+ */
+function asc_it_with_permissions( array $overrides, $fn ) {
+	$key  = AI_Site_Connector_Permissions::OPTION_KEY;
+	$prev = get_option( $key, null );
+	update_option( $key, array_merge( (array) $prev, $overrides ) );
+	try {
+		return $fn();
+	} finally {
+		if ( null === $prev ) {
+			delete_option( $key );
+		} else {
+			update_option( $key, $prev );
+		}
+	}
+}
+
+/**
+ * Send a JSON-RPC message to the MCP endpoint in-process.
+ *
+ * @return array Decoded JSON-RPC response.
+ */
+function asc_it_mcp( $method, $params = array() ) {
+	$req = new WP_REST_Request( 'POST', '/' . AI_SITE_CONNECTOR_REST_NAMESPACE . '/mcp' );
+	$req->set_header( 'content-type', 'application/json' );
+	$req->set_body(
+		wp_json_encode(
+			array(
+				'jsonrpc' => '2.0',
+				'id'      => 1,
+				'method'  => $method,
+				'params'  => (object) $params,
+			)
+		)
+	);
+	return (array) rest_do_request( $req )->get_data();
+}
+
+/**
+ * Decode the JSON text payload of an MCP tools/call result.
+ *
+ * @return array { is_error: bool, data: mixed }
+ */
+function asc_it_mcp_call( $tool, $arguments = array() ) {
+	$res = asc_it_mcp(
+		'tools/call',
+		array(
+			'name'      => $tool,
+			'arguments' => (object) $arguments,
+		)
+	);
+	asc_assert( isset( $res['result']['content'][0]['text'] ), 'MCP tools/call returned no content: ' . wp_json_encode( $res ) );
+	return array(
+		'is_error' => ! empty( $res['result']['isError'] ),
+		'data'     => json_decode( $res['result']['content'][0]['text'], true ),
+	);
+}
+
 function asc_it_run() {
 	$filter = (string) getenv( 'ASC_IT_FILTER' );
 	$pass   = 0;

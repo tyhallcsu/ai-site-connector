@@ -4,6 +4,26 @@ All notable changes to AI Site Connector are documented here. The format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Diagnostics tools, each as REST route + MCP tool + WP-CLI command over one
+  shared service: MCP self-test (#72), REST route inventory (#71), page
+  builder detector (#69), redirect export (#67).
+- `AI_Site_Connector_SEO` abstraction (#68): plugin-neutral reads for Rank
+  Math, Yoast, SEOPress, AIOSEO 4 (custom table) and native fallback; guarded,
+  dry-run-by-default writes with per-post `edit_post` checks.
+- In-WordPress integration suite (`tests/integration/`) run by the runtime
+  smoke job.
+
+### Fixed
+
+- CI: PHPUnit discovered zero tests and still passed; it now runs 40 tests
+  and fails on an empty run. Three latent test-harness bugs fixed.
+- Local `composer phpcs` scanned zero files when the checkout path contained
+  `/GitHub/`.
+
 ## [0.9.1] - 2026-05-11
 
 Compatibility + connection-pack UX patch. Closes #55 and #62.

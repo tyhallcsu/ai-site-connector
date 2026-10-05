@@ -541,14 +541,14 @@ RewriteRule .* - [E=HTTP_AUTHORIZATION:%1]
 
 ## Brand assets
 
-The illustrated README uses `readme-hero.png`, `readme-connect.png`, and `readme-control.png`. These are conceptual artwork, not product screenshots. The existing logo and runtime mark are preserved. [Artwork provenance](docs/README_ARTWORK.md).
+The illustrated README uses `readme-hero.png`, `readme-connect.png`, and `readme-control.png`. These are conceptual artwork, not product screenshots. The plugin uses a matching mint-and-cyan connection icon across admin and updater surfaces. [Artwork provenance](docs/README_ARTWORK.md).
 
 - `assets/brand/ai-site-connector-mark.svg` — compact icon/mark; **shipped at runtime** (rendered by the Tools → AI Site Connector admin page header).
 - `assets/brand/ai-site-connector-logo.svg` — horizontal logo with wordmark; for README, repo, social previews.
 - `assets/brand/ai-site-connector-readme-banner.svg` — README banner with the tagline "Secure REST API access for AI coding agents".
 - `assets/brand/ai-site-connector-logo-256.png` / `-logo-512.png` / `-banner.png` — optional PNG exports for surfaces that don't render SVG (excluded from the plugin install ZIP to keep the distribution lean).
 
-The assets are original vector artwork authored for this repo. They contain no embedded stock images, no copied third-party logos, and no trademarked logo reuse. Released under the same [MIT License](LICENSE) as the rest of the plugin — fork, modify, ship.
+The icon is original generated raster artwork, embedded in self-contained SVG assets and exported as PNGs. The assets contain no copied third-party logos or stock imagery. Released under the same [MIT License](LICENSE) as the rest of the plugin — fork, modify, ship.
 
 See [docs/BRAND_ASSETS.md](docs/BRAND_ASSETS.md) for file notes and PNG export commands.
 

@@ -4,9 +4,9 @@
 
 These assets provide a clean, original brand mark for AI Site Connector across the GitHub README, WordPress admin/plugin screens, release notes, and repo/social previews.
 
-The visual system uses a shield for authorized site access, connected nodes for REST/API automation, and a small terminal cue for AI coding agent workflows. It avoids the WordPress logo, Claude/OpenAI marks, and any third-party trademarked artwork.
+The visual system uses two bold mint-and-cyan connection links on a rounded navy tile. It avoids the WordPress logo, Claude/OpenAI marks, and any third-party trademarked artwork.
 
-The illustrated README now uses three generated PNGs documented in [README artwork provenance](README_ARTWORK.md). The original vector identity and exports below remain available; the runtime admin mark is unchanged.
+The illustrated README now uses three generated PNGs documented in [README artwork provenance](README_ARTWORK.md). The icon was replaced across all six identity assets in October 2026; the illustrated README chapter artwork remains separate.
 
 ## Files
 
@@ -17,18 +17,18 @@ The illustrated README now uses three generated PNGs documented in [README artwo
 - `assets/brand/ai-site-connector-logo-256.png` — optional 256px PNG export of the compact mark. Repo display only; excluded from the plugin install ZIP.
 - `assets/brand/ai-site-connector-banner.png` — optional PNG export of the README banner. Repo display only; excluded from the plugin install ZIP.
 
-The release ZIP build script (`bin/build-release-zip.sh`) bundles the SVG files and excludes only the optional PNG exports, so the install footprint stays small while the SVG mark renders crisply at any zoom level in the admin.
+The release ZIP build script (`bin/build-release-zip.sh`) bundles the SVG files and excludes only the optional PNG exports, while the self-contained SVG mark embeds the 512px generated PNG for offline admin rendering. It is a raster-backed SVG, not resolution-independent vector artwork.
 
 ## Usage Notes
 
-- Prefer SVG for GitHub, documentation, and WordPress admin use because it stays crisp at every size.
+- Use the self-contained SVG for the existing runtime path and PNG exports for updater/plugin-details surfaces. The embedded icon has a native resolution of 512px.
 - Use the compact mark when the available space is square or narrow.
 - Use the README banner at the top of repo documentation or social preview contexts where a wide aspect ratio is useful.
-- Keep sufficient whitespace around the mark so the shield and connected nodes remain legible.
+- Keep sufficient whitespace around the mark so the connection links remain legible.
 
 ## Safety And Legal Notes
 
-The original SVG artwork listed above is vector artwork authored for this repo. It contains no embedded raster images, no stock assets, no external font files, no copied third-party logos, and no copied trademarks.
+The icon was generated with OpenAI image generation on 2026-10-05. SVG assets embed the same raster icon alongside the existing vector wordmark/layout; PNG exports use that same identity. No stock assets or third-party logos were supplied. See [icon provenance](ICON_ARTWORK.md).
 
 The brand assets ship under the same [MIT License](../LICENSE) as the rest of the plugin code — anyone may use, modify, and redistribute. They should **not** be presented as official WordPress, Claude, OpenAI, Anthropic, or Automattic branding.
 

@@ -509,6 +509,17 @@ class AI_Site_Connector_MCP_Server {
 			$req->set_body_params( $params );
 		}
 		$resp = rest_do_request( $req );
+		if ( is_wp_error( $resp ) ) {
+			// WordPress < 5.7 returns rest_pre_dispatch errors unconverted.
+			$err_data = $resp->get_error_data();
+			$resp     = new WP_REST_Response(
+				array(
+					'code'    => $resp->get_error_code(),
+					'message' => $resp->get_error_message(),
+				),
+				is_array( $err_data ) && isset( $err_data['status'] ) ? (int) $err_data['status'] : 500
+			);
+		}
 		$data = $resp->get_data();
 		if ( $resp->get_status() >= 400 ) {
 			// The payload is JSON-encoded into the MCP result, never echoed as HTML.

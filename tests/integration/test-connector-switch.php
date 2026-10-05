@@ -23,7 +23,7 @@ asc_it(
 					$res = asc_it_rest( 'GET', $route );
 					asc_assert_same( 503, $res->get_status(), "{$route} while disabled" );
 					// Case variants route to the same handler in WordPress.
-					$res = rest_do_request( new WP_REST_Request( 'GET', '/' . strtoupper( AI_SITE_CONNECTOR_REST_NAMESPACE ) . strtoupper( $route ) ) );
+					$res = asc_it_response( rest_do_request( new WP_REST_Request( 'GET', '/' . strtoupper( AI_SITE_CONNECTOR_REST_NAMESPACE ) . strtoupper( $route ) ) ) );
 					asc_assert_same( 503, $res->get_status(), "{$route} while disabled" );
 					asc_assert_same( 'ai_site_connector_disabled', $res->get_data()['code'], "{$route} error code" );
 				}
@@ -37,7 +37,7 @@ asc_it(
 				$req = new WP_REST_Request( 'POST', '/AI-Site-Connector/v1/mcp' );
 				$req->set_header( 'content-type', 'application/json' );
 				$req->set_body( wp_json_encode( array( 'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list' ) ) );
-				asc_assert_same( 503, rest_do_request( $req )->get_status(), 'mixed-case MCP route while disabled' );
+				asc_assert_same( 503, asc_it_response( rest_do_request( $req ) )->get_status(), 'mixed-case MCP route while disabled' );
 
 				asc_assert_same( false, AI_Site_Connector_Permissions::can( AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS ), 'can() denies' );
 				$allow = static function () {
@@ -51,7 +51,7 @@ asc_it(
 				asc_assert( is_wp_error( $deny ), 'require_permission denies' );
 
 				// Core WordPress routes are not this plugin's to block.
-				asc_assert_same( 200, rest_do_request( new WP_REST_Request( 'GET', '/wp/v2/posts' ) )->get_status(), 'core REST unaffected' );
+				asc_assert_same( 200, asc_it_response( rest_do_request( new WP_REST_Request( 'GET', '/wp/v2/posts' ) ) )->get_status(), 'core REST unaffected' );
 			}
 		);
 		asc_assert_same( 200, asc_it_rest( 'GET', '/diagnostics/self-test' )->get_status(), 'enabled again' );

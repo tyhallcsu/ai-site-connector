@@ -15,8 +15,8 @@ acceptance gates, and release grouping. Operating rules:
 | M4 | Broken internal link scanner + CLI | #66 (+#75 partial) | M0 | merged #83 (`c270434`) |
 | M5 | Export bundle + deterministic manifests + CLI `export` | #73 #74 (+#75 partial) | M1–M4 | merged #84 (`8dbb1d0`); coverage reporting follow-up |
 | M6 | WP-CLI remainder (`status`, `enable`/`disable` guards) — close #75 | #75 | M1–M5 | merged #85 (`d81b62d`) |
-| M7 | Safe content update (dry-run, snapshot, rollback) | #70 | M1 (SEO write), backup manager | draft #87; review-2 items open |
-| M9 | Cross-window duplicate detection | #88 | M3 | queued |
+| M7 | Safe content update (dry-run, snapshot, rollback) | #70 | M1 (SEO write), backup manager | merged #87 (`d378e50`) |
+| M9 | Cross-window duplicate detection | #88 | M3 | merged #90 (`c255de3`) |
 | M8 | Superseded branch cleanup | #59 | — | done (branch deleted, #59 closed) |
 
 ## Acceptance gates (every milestone)
@@ -35,7 +35,8 @@ acceptance gates, and release grouping. Operating rules:
 - **0.10.0** — shipped 2026-10-05: M0–M2 + export consistency + release
   pipeline (tag `v0.10.0` → `9c07f10`).
 - **0.11.0** — shipped 2026-10-05: M3–M6 (tag `v0.11.0` → `6645155`).
-- **0.12.0** — M7 safe content update (+ export coverage reporting).
+- **0.12.0** — shipped: M7 safe content update, library-wide duplicates, export coverage (tag → `441df7f`).
+- **0.12.1** — shipped: release-audit fixes incl. MCP post-write gate (tag → `450fdcd`).
 - **0.11.0** — M5 + M6 (export bundle/manifests, CLI completion).
 - **0.12.0** — M7 (first new write surface; default-off).
 

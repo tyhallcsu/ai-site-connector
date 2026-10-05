@@ -2,6 +2,15 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-05 — v0.12.1 released; backlog complete
+
+- PR #93 → `450fdcd`; main CI 19/19. Tag `v0.12.1` → `450fdcd`; release run
+  37359135722 success. Published asset: sha256
+  `768b7064858d0a35f01c74332b001bd22adbfae041c1686f94188058eca3e021` OK,
+  versions 0.12.1, MCP write gate present, clean top-level; published ZIP
+  clean install + upgrade from published v0.12.0 (exit 0).
+- Open issues: 0. Open PRs: 0 (besides this checkpoint).
+
 ## 2026-10-05 — v0.12.0 released; final audit; 0.12.1 prep
 
 - PR #91 → `441df7f`; main CI 19/19; tag `v0.12.0` → `441df7f`; release run

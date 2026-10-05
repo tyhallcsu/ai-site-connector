@@ -1,20 +1,20 @@
 # Handoff — AI Site Connector
 
-**Updated:** 2026-10-05 ~21:40 UTC (15:40 America/Denver) · **State:** v0.12.2 release prep (PR from `chore/release-0.12.2`); GitHub CI on main `15b43de` verified 19/19 · **Mode:** continuous low-usage (single agent; new features stay in backlog) · **Session:** `asc-dev-audit-ship`
+**Updated:** 2026-10-05 ~21:50 UTC (15:50 America/Denver) · **State:** v0.12.2 released and verified; closeout done; paused for the owner · **Mode:** continuous low-usage (single agent; new features stay in backlog) · **Session:** `asc-dev-audit-ship`
 **Repo:** tyhallcsu/ai-site-connector (public, standalone — the parent `ess-custom-plugins` dir is not a repo)
-**Primary checkout:** `/Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector` (on `main` @ `16f5816`, 1 behind origin — fast-forward it before use)
-**Session worktree:** `.claude/worktrees/asc-dev-audit-ship` · branch `chore/release-0.12.2` (release prep). Primary checkout not touched by this session
+**Primary checkout:** `/Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector`. Its local `main` is at `16f5816`, 5 commits behind `origin/main` (read from its refs 21:48 UTC; not modified by this session; fast-forward before use)
+**Session worktree:** `.claude/worktrees/asc-dev-audit-ship` · branch `docs/checkpoint-0.12.2` (this checkpoint); no other branches of this session on origin
 **Rules:** `docs/development/OPERATING_BRIEF.md` · **Dev site:** `docs/development/DEV_SITE.md` · **Plan:** `docs/development/ROADMAP.md` · **Log:** `docs/development/WORK_LOG.md`
 
 ## Verified state
 
 | Item | Value | Evidence |
 |------|-------|----------|
-| `origin/main` | `15b43de` — #110 handoff checkpoint, on `72b70fe` (#107) and `80a887a` (#100) | `gh pr view` merge commits |
-| Latest release | **v0.12.1** → `450fdcd`; ZIP sha256 `768b7064…e021` | `gh release view` digest |
-| Unreleased on main | #96 icon, #100 dev tooling (not in the ZIP), **#107 admin fixes** → v0.12.2 prepared in this PR | commits since tag v0.12.1 |
-| Dev site | http://localhost:8790 — **deployed `72b70fe`** (origin/main), ZIP sha256 `00680619…a295`, 70 files verified; `audit` 22/22 tab views clean | `bin/dev-site.sh status` / `audit` 21:18 UTC |
-| CI | **GitHub CI verified on `15b43de`**: run 37375258741, 19/19 success. PHPUnit 40 tests; integration 91/91 on WP latest (PHP 8.3) and 5.6/6.5/6.8/6.9/7.0 (PHP 8.0); ZIP smoke; install + upgrade. Before that, #100/#107 were merged on owner-authorized local CI during the Actions outage, a one-off exception and not policy. Run 37366878299 (`9112f8e`) shows failure only from 10 outage cancellations | `gh run view` job list + log grep |
+| `origin/main` | `72e268e` — chore(release): v0.12.2 (#115) | `gh pr view 115` merge commit |
+| Latest release | **v0.12.2** → tag on `72e268e`; stable; `releases/latest`; ZIP 1,132,005 B, sha256 `826eba73…4e8e` (checksum, version, contents verified) | release run 37377593413; `gh release view` |
+| Unreleased on main | nothing besides docs | commits since tag v0.12.2 |
+| Dev site | http://localhost:8790 — **published v0.12.2** (`72e268e`), upgraded from published v0.12.1; 70 files verified; `audit` 22/22 clean; CLI self-test 6/6 | `bin/dev-site.sh status` / `audit` 21:44 UTC |
+| CI | GitHub CI verified: `15b43de` run 37375258741 19/19; release PR head `f91972d` run 37377009311 19/19 (upgrade v0.12.1 → v0.12.2); `72e268e` run 37377306710 19/19. Earlier outage-time merges used owner-authorized local CI (one-off exception) | `gh run view` |
 | Remote dev target | none exists — owner decision tracked in #97 | config/registry search |
 
 ## Startup reconciliation (2026-10-05)
@@ -39,6 +39,7 @@
 | #106 | enhancement | Live sign-in check in wp-admin (CLI self-test parity) | backlog |
 | #108 | enhancement | WP-CLI safe content update + rollback | backlog |
 | #109 | investigation | Steer MCP agents to wp_update_content (no removal) | backlog |
+| #125 | performance | Release ZIP 4x larger from raster-backed brand SVGs | backlog |
 
 ## Open PRs
 
@@ -46,6 +47,7 @@
 |----|--------|-------|
 | #100 | `feature/dev-site` | merged → `80a887a` |
 | #107 | `fix/admin-ui-audit` | merged → `72b70fe`; dev evidence on PR |
+| #115 | `chore/release-0.12.2` | merged → `72e268e`; tagged and released v0.12.2 |
 
 ## Audit coverage
 
@@ -62,9 +64,9 @@
 
 ## Next three actions
 
-1. Release-prep PR: CI green on its head (zip upgrade should test v0.12.1 → 0.12.2) → squash-merge → `git tag -a v0.12.2` on the merge SHA → push the tag; `release-zip.yml` is the only publisher.
-2. Verify the published asset (digest, embedded 0.12.2, contents); on dev, `deploy --release v0.12.1`, then `--release v0.12.2`, then `audit`.
-3. Record the release in WORK_LOG and handoff (one checkpoint PR). Still open: owner decisions #97/#99; backlog #101 #106 #108 #109.
+1. Next patch (0.12.3): the P1s filed by the other session, #114 (rollback validation) and #119 (connection-pack MCP URLs). Check with that session/owner before taking them, then a focused PR each with tests.
+2. Owner decisions still open: #97 (remote dev site?), #99 (required checks on main).
+3. Backlog (not auto-implemented): #101 #106 #108 #109 #125, plus the other session's P2/P3 issues #111–#113, #116–#118, #120–#124.
 
 Resume: `cd <worktree> && git fetch && gh pr list -R tyhallcsu/ai-site-connector && bin/dev-site.sh status`
 

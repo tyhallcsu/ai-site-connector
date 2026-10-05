@@ -318,6 +318,9 @@ All endpoints under `/wp-json/ai-site-connector/v1/`. Permission-gated tools suc
 
 | Endpoint                              | Auth                                                            | Effect |
 | ------------------------------------- | --------------------------------------------------------------- | ------ |
+| `POST /content/update`                | Authenticated, `edit_posts`; real writes need `write_content` (+ `update_seo` for SEO) | **Dry-run by default.** Safe update of one post's title, excerpt, content, slug, status, featured image, terms, SEO fields; returns a before/after diff and a `snapshot_id`. See [Safe content updates](#safe-content-updates). |
+| `POST /content/rollback`              | As above                                                        | Dry-run by default. Rolls back a `snapshot_id`; refuses on conflicts with later edits. |
+| `GET /content/snapshots/<id>`         | Authenticated, `edit_post` on the post                          | Snapshot summaries (no stored values). |
 | `POST /cache/purge`                   | Authenticated, `manage_options` + `purge_cache` permission       | Flushes WP object cache, WP Rocket, LiteSpeed, W3TC, Elementor, Cloudflare (when configured). Returns `{success, purged[], skipped[], warnings[]}`. |
 | `POST /media/sideload`                | Authenticated, `upload_files` + `upload_media` permission        | URL-sideload only (no base64, no multipart). Validates mime via `wp_handle_sideload`, blocks internal/loopback/link-local hosts (v0.9.0+). Sets title/alt/caption/description, optional featured image and Yoast/Rank Math social-image meta. |
 | `POST /credentials/rotate-password`   | Authenticated, `manage_options`                                  | Mints a new Application Password preserving scopes/IP/expiry, revokes the old one, atomic — rolls back on failure. |
@@ -406,6 +409,18 @@ Internal service (not a REST endpoint yet) used by the diagnostics and upcoming 
 ---
 
 ![Stay in control — an illustrated shield, key, and permission controls](assets/brand/readme-control.png)
+
+## Safe content updates
+
+`POST /content/update` · MCP `wp_update_content` — and `POST /content/rollback` · MCP `wp_rollback_content`.
+
+- **Off by default and dry-run by default.** Without `dry_run: false` nothing is written; real writes also need the `write_content` tool permission (default OFF), and SEO fields `update_seo`. Read-only mode and `wp ai-connector disable` block writes.
+- **Fields:** `title`, `excerpt`, `content`, `slug`, `status` (`draft`, `pending`, `publish`, `private`), `featured_image` (attachment ID, `0` removes), `terms` (`{taxonomy: [term ID (int) or slug (string)]}`, existing terms only, replaces the set), `seo` (fields the active SEO plugin supports). Optional `expected_modified_gmt` refuses the update if the post changed since you read it.
+- **Validation under the caller's current permissions:** `edit_post`, publish capability, `assign_terms`, readable image attachment, unique slug, public REST-enabled post types in a core status. Trash, delete, scheduling and term creation are not supported.
+- **What you see is what is stored:** the diff shows values after WordPress' own save filters for your account; if saving would silently alter a field you did not change (e.g. markup your role cannot store), the update is refused.
+- **Snapshot and verified writes:** a rollback snapshot is stored first; meta, terms and thumbnail are written, then all post columns in one save with status last; every step is read back. On a detected failure the written fields are restored and the response lists `restored` / `restore_failed`. This is not a database transaction — hooks fired by the save (e.g. other plugins' publish actions) cannot be undone.
+- **Rollback** restores only the fields the update touched and refuses (`reason: conflict`) if any of them — including the slug/date WordPress set on publish — changed afterwards. Interrupted updates can be recovered field by field after 5 minutes.
+- Full guarantees, limits and the review record: `docs/development/M7_REVIEW.md` (development branch; not shipped in the ZIP).
 
 ## Understand access before enabling writes
 

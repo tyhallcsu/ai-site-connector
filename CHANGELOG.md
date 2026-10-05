@@ -6,6 +6,17 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- Safe content update (#70): `POST /content/update`, `POST /content/rollback`,
+  `GET /content/snapshots/<id>`, MCP `wp_update_content` / `wp_rollback_content`.
+  Dry-run by default; real writes need the default-off `write_content`
+  permission (SEO also `update_seo`); validation under current permissions;
+  stored-value-accurate diffs; snapshot before writing; verified writes with
+  restore-on-failure; conflict-aware, re-authorised rollback. Snapshots are
+  non-autoloaded options, removed when the post is deleted and on uninstall
+  wipe. Four second-pass reviews; see `docs/development/M7_REVIEW.md`.
+
 ### Changed
 
 - `manifest-index.json` / bundle `index` entries now carry `complete`, `scope`

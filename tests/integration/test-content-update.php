@@ -274,7 +274,8 @@ asc_it(
 		$tag     = $tag ? $tag : wp_insert_term( 'Year 2024', 'post_tag', array( 'slug' => '2024' ) );
 		$iframe  = asc_it_post( array( 'post_author' => $author, 'post_title' => 'Embed post' ) );
 		global $wpdb;
-		$wpdb->update( $wpdb->posts, array( 'post_content' => '<iframe src="https://example.test/x"></iframe>' ), array( 'ID' => $iframe ) ); // phpcs:ignore WordPress.DB
+		// No quotes: the refusal must come from kses, not from slashing.
+		$wpdb->update( $wpdb->posts, array( 'post_content' => '<iframe src=x></iframe>' ), array( 'ID' => $iframe ) ); // phpcs:ignore WordPress.DB
 		clean_post_cache( $iframe );
 		$draft = asc_it_post( array( 'post_status' => 'draft', 'post_title' => 'Floating draft' ) );
 		try {
@@ -428,6 +429,176 @@ asc_it(
 			asc_assert_same( 200, $snaps->get_status(), 'snapshots route' );
 		} finally {
 			wp_delete_post( $post, true );
+		}
+	}
+);
+
+asc_it(
+	'content-update review 2: slashing, author write, status-side conflict, future, orphans, prune, size cap, interrupted recovery',
+	function () {
+		$author = asc_it_user( 'author' );
+		$quoted = asc_it_post( array( 'post_author' => $author, 'post_title' => 'Plain', 'post_content' => '<p class="x">ok</p>' ) );
+		$draft  = asc_it_post( array( 'post_status' => 'draft', 'post_title' => 'Draft for side conflict' ) );
+		$future = asc_it_post( array( 'post_status' => 'future', 'post_date' => gmdate( 'Y-m-d H:i:s', time() + WEEK_IN_SECONDS ) ) );
+		$gone   = asc_it_post();
+		try {
+			// 2.1/2.2: a user without unfiltered_html writes a quote; content with quotes is untouched.
+			$w = asc_it_as_user(
+				$author,
+				function () use ( $quoted ) {
+					return asc_it_with_write(
+						function () use ( $quoted ) {
+							return asc_it_cu( $quoted, array( 'title' => "Don't \\ stop" ), array( 'dry_run' => false ) );
+						}
+					);
+				}
+			);
+			asc_assert( ! is_wp_error( $w ) && true === $w['applied'], 'author write failed: ' . wp_json_encode( is_wp_error( $w ) ? $w->get_error_code() : $w ) );
+			asc_assert_same( "Don't \\ stop", get_post_field( 'post_title', $quoted ), 'stored title differs from request' );
+			asc_assert_same( "Don't \\ stop", $w['diff']['title']['after'], 'diff shows a different value than stored' );
+			asc_assert_same( '<p class="x">ok</p>', get_post_field( 'post_content', $quoted ), 'untouched content altered' );
+
+			// 2.3: publish, then a human edits the generated slug; rollback must refuse.
+			$p = asc_it_with_write(
+				function () use ( $draft ) {
+					return asc_it_cu( $draft, array( 'status' => 'publish' ), array( 'dry_run' => false ) );
+				}
+			);
+			wp_update_post( array( 'ID' => $draft, 'post_name' => 'human-chosen-slug' ) );
+			$rb = asc_it_with_write(
+				function () use ( $draft, $p ) {
+					return AI_Site_Connector_Content_Update::rollback( $draft, $p['snapshot_id'], false );
+				}
+			);
+			asc_assert_same( 'conflict', $rb['reason'], 'side-column edit not detected' );
+			asc_assert_same( 'human-chosen-slug', get_post_field( 'post_name', $draft ), 'human slug overwritten' );
+
+			// 2.5: scheduled posts cannot change status (rollback could not restore it).
+			$f = asc_it_cu( $future, array( 'status' => 'draft' ) );
+			asc_assert( is_wp_error( $f ) && 'asc_unsupported_transition' === $f->get_error_code(), 'future status change accepted' );
+
+			// 1.6: size cap.
+			$big = asc_it_cu( $gone, array( 'content' => str_repeat( 'a', AI_Site_Connector_Content_Update::MAX_CONTENT + 1 ) ) );
+			asc_assert( is_wp_error( $big ) && 'asc_too_large' === $big->get_error_code(), 'oversized content accepted' );
+
+			// 1.4: interrupted update (writes happened, snapshot never finalized) is recoverable.
+			$u = asc_it_with_write(
+				function () use ( $gone ) {
+					return asc_it_cu( $gone, array( 'title' => 'Interrupted' ), array( 'dry_run' => false ) );
+				}
+			);
+			$key  = AI_Site_Connector_Content_Update::OPTION_PREFIX . $u['snapshot_id'];
+			$snap = get_option( $key );
+			$snap['state'] = 'pending';
+			foreach ( $snap['fields'] as &$row ) {
+				$row['after_raw'] = null;
+			}
+			unset( $row );
+			update_option( $key, $snap, false );
+			$rec = asc_it_with_write(
+				function () use ( $gone, $u ) {
+					return AI_Site_Connector_Content_Update::rollback( $gone, $u['snapshot_id'], false );
+				}
+			);
+			asc_assert_same( true, $rec['applied'], 'interrupted update not recoverable: ' . wp_json_encode( $rec ) );
+			asc_assert_same( 'ASC IT fixture', get_post_field( 'post_title', $gone ), 'interrupted title not restored' );
+
+			// 2.8: prune keeps recovery snapshots.
+			$keep = asc_it_with_write(
+				function () use ( $gone ) {
+					return asc_it_cu( $gone, array( 'title' => 'Keep me' ), array( 'dry_run' => false ) );
+				}
+			);
+			$k2   = AI_Site_Connector_Content_Update::OPTION_PREFIX . $keep['snapshot_id'];
+			$s2   = get_option( $k2 );
+			$s2['state'] = 'revert_incomplete';
+			update_option( $k2, $s2, false );
+			for ( $i = 0; $i < AI_Site_Connector_Content_Update::MAX_SNAPSHOTS + 2; $i++ ) {
+				asc_it_with_write(
+					function () use ( $gone, $i ) {
+						return asc_it_cu( $gone, array( 'title' => "Churn {$i}" ), array( 'dry_run' => false ) );
+					}
+				);
+			}
+			asc_assert( false !== get_option( $k2 ), 'prune deleted a recovery snapshot' );
+
+			// 2.6: permanent deletion removes snapshot options.
+			wp_delete_post( $gone, true );
+			asc_assert_same( false, get_option( $k2 ), 'snapshot option orphaned after post deletion' );
+		} finally {
+			foreach ( array( $quoted, $draft, $future, $gone ) as $id ) {
+				wp_delete_post( $id, true );
+			}
+			asc_it_delete_user( $author );
+		}
+	}
+);
+
+asc_it(
+	'content-update review 2: rollback refused when save filters would alter content; guard never clobbers a concurrent save',
+	function () {
+		global $wpdb;
+		$author = asc_it_user( 'author' );
+		$post   = asc_it_post( array( 'post_author' => $author, 'post_title' => 'Embed owner' ) );
+		$wpdb->update( $wpdb->posts, array( 'post_content' => '<iframe src=x></iframe>' ), array( 'ID' => $post ) ); // phpcs:ignore WordPress.DB
+		clean_post_cache( $post );
+		$other = asc_it_post( array( 'post_title' => 'Concurrent', 'post_excerpt' => 'Base' ) );
+		try {
+			// 2.4: admin (unfiltered_html) unpublishes; the author's rollback would strip the iframe.
+			$u  = asc_it_with_write(
+				function () use ( $post ) {
+					return asc_it_cu( $post, array( 'status' => 'draft' ), array( 'dry_run' => false ) );
+				}
+			);
+			$rb = asc_it_as_user(
+				$author,
+				function () use ( $post, $u ) {
+					return asc_it_with_write(
+						function () use ( $post, $u ) {
+							return AI_Site_Connector_Content_Update::rollback( $post, $u['snapshot_id'], false );
+						}
+					);
+				}
+			);
+			asc_assert( is_wp_error( $rb ) && 'asc_untouched_field_would_change' === $rb->get_error_code(), 'rollback allowed although kses would strip content' );
+			asc_assert_same( '<iframe src=x></iframe>', get_post_field( 'post_content', $post ), 'content altered' );
+			asc_assert_same( 'draft', get_post_field( 'post_status', $post ), 'status changed by refused rollback' );
+
+			// 2.7: guard trips (tampered excerpt) while another writer saves the row in between.
+			$tamper     = static function ( $data ) {
+				$data['post_excerpt'] .= ' (tampered)';
+				return $data;
+			};
+			$concurrent = static function ( $id ) use ( $other ) {
+				global $wpdb;
+				if ( (int) $id === (int) $other ) {
+					$wpdb->update( $wpdb->posts, array( 'post_title' => 'Saved by someone else', 'post_modified_gmt' => '2099-01-01 00:00:00' ), array( 'ID' => $id ) ); // phpcs:ignore WordPress.DB
+				}
+			};
+			add_action( 'wp_insert_post', $concurrent );
+			try {
+				$g = asc_it_with_filter(
+					'wp_insert_post_data',
+					$tamper,
+					function () use ( $other ) {
+						return asc_it_with_write(
+							function () use ( $other ) {
+								return asc_it_cu( $other, array( 'title' => 'Mine' ), array( 'dry_run' => false ) );
+							}
+						);
+					}
+				);
+			} finally {
+				remove_action( 'wp_insert_post', $concurrent );
+			}
+			clean_post_cache( $other );
+			asc_assert_same( 'write_failed', $g['reason'], 'guard reason' );
+			asc_assert( in_array( 'post_columns', $g['restore_failed'], true ), 'restore failure not reported honestly: ' . wp_json_encode( $g ) );
+			asc_assert_same( 'Saved by someone else', get_post_field( 'post_title', $other ), 'concurrent save overwritten by guard restore' );
+		} finally {
+			wp_delete_post( $post, true );
+			wp_delete_post( $other, true );
+			asc_it_delete_user( $author );
 		}
 	}
 );

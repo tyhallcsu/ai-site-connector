@@ -149,6 +149,9 @@ class AI_Site_Connector_Content_Update {
 		$result = self::apply_plan( $post->ID, $plan, 'after_raw' );
 		if ( true !== $result ) {
 			$restore = self::restore_written( $post->ID, $plan, $result['written'] );
+			if ( ! empty( $result['columns_dirty'] ) ) {
+				$restore[] = 'post_columns';
+			}
 			self::set_snapshot_state( $snapshot_id, empty( $restore ) ? 'reverted' : 'revert_incomplete' );
 			self::audit( 'content_update_failed', $post->ID, sprintf( 'Content update failed at %s; %s.', $result['failed'], empty( $restore ) ? 'all written fields restored' : 'restore incomplete for ' . implode( ',', $restore ) ) );
 			$response['reason']         = 'write_failed';
@@ -230,7 +233,15 @@ class AI_Site_Connector_Content_Update {
 			}
 		}
 		if ( isset( $restore['status'] ) && isset( $snap['fields']['_status_side'] ) ) {
-			$restore['_status_side'] = $snap['fields']['_status_side'];
+			$side = $snap['fields']['_status_side'];
+			// The slug/date WordPress set on publish may have been edited since;
+			// restoring them would overwrite that edit.
+			if ( is_array( $side['after_raw'] ) && self::canon( self::read_columns( $post->ID, self::STATUS_SIDE_COLUMNS ) ) !== self::canon( $side['after_raw'] ) ) {
+				unset( $restore['status'] );
+				$conflicts[] = 'status';
+			} else {
+				$restore['_status_side'] = $side;
+			}
 		}
 
 		$result = array(
@@ -320,6 +331,35 @@ class AI_Site_Connector_Content_Update {
 	// --- validation -----------------------------------------------------------
 
 	/**
+	 * The value WordPress will store for a column when this user saves it.
+	 * Save filters (kses) expect slashed input and return slashed output,
+	 * exactly as wp_insert_post() runs them.
+	 */
+	private static function stored_value( $col, $value, $post_id ) {
+		return (string) wp_unslash( sanitize_post_field( $col, wp_slash( (string) $value ), $post_id, 'db' ) );
+	}
+
+	/**
+	 * Column of title/excerpt/content that saving would alter although the
+	 * caller does not change it, or '' when none would.
+	 *
+	 * @param WP_Post  $post    Post.
+	 * @param string[] $changed Columns being written.
+	 */
+	private static function untouched_change( WP_Post $post, array $changed ) {
+		foreach ( array( 'post_title', 'post_excerpt', 'post_content' ) as $col ) {
+			if ( in_array( $col, $changed, true ) ) {
+				continue;
+			}
+			$current = (string) $post->$col;
+			if ( self::stored_value( $col, $current, $post->ID ) !== $current ) {
+				return $col;
+			}
+		}
+		return '';
+	}
+
+	/**
 	 * @return WP_Post|WP_Error
 	 */
 	private static function target( $post_id ) {
@@ -374,7 +414,7 @@ class AI_Site_Connector_Content_Update {
 			}
 			$col = self::POST_COLUMNS[ $field ];
 			// What WordPress will actually store (kses etc. for this user).
-			$stored = (string) sanitize_post_field( $col, $changes[ $field ], $post->ID, 'db' );
+			$stored = self::stored_value( $col, $changes[ $field ], $post->ID );
 			self::add( $plan, $field, (string) $post->$col, $stored );
 			$columns[ $col ] = $stored;
 		}
@@ -400,6 +440,10 @@ class AI_Site_Connector_Content_Update {
 		if ( array_key_exists( 'status', $changes ) ) {
 			if ( ! is_string( $changes['status'] ) ) {
 				return self::error( 'asc_invalid_status', 'status must be a string.', 400 );
+			}
+			if ( 'future' === $post->post_status && 'future' !== $changes['status'] ) {
+				// Rollback could not restore 'future' (scheduling is out of scope).
+				return self::error( 'asc_unsupported_transition', 'Changing the status of a scheduled post is not supported by this tool.', 400 );
 			}
 			$check = self::check_status( $post, $changes['status'] );
 			if ( is_wp_error( $check ) ) {
@@ -466,19 +510,14 @@ class AI_Site_Connector_Content_Update {
 		// Refuse if that would silently change a column the caller did not
 		// touch — it could not be shown, snapshotted or rolled back.
 		if ( array_intersect_key( $plan, self::POST_COLUMNS ) ) {
-			foreach ( array( 'post_title', 'post_excerpt', 'post_content' ) as $col ) {
-				if ( isset( $columns[ $col ] ) ) {
-					continue;
-				}
-				$current = (string) $post->$col;
-				if ( (string) sanitize_post_field( $col, $current, $post->ID, 'db' ) !== $current ) {
-					return self::error(
-						'asc_untouched_field_would_change',
-						sprintf( 'Saving would alter %s, which you did not change (your account cannot store its current markup). Ask an administrator to make this edit.', $col ),
-						409,
-						array( 'field' => $col )
-					);
-				}
+			$col = self::untouched_change( $post, array_keys( $columns ) );
+			if ( '' !== $col ) {
+				return self::error(
+					'asc_untouched_field_would_change',
+					sprintf( 'Saving would alter %s, which you did not change (your account cannot store its current markup). Ask an administrator to make this edit.', $col ),
+					409,
+					array( 'field' => $col )
+				);
 			}
 		}
 
@@ -555,6 +594,25 @@ class AI_Site_Connector_Content_Update {
 	 * Re-run update-time checks on values a rollback would restore.
 	 */
 	private static function validate_restore( WP_Post $post, array $restore ) {
+		$cols = array();
+		foreach ( self::POST_COLUMNS as $field => $col ) {
+			if ( ! isset( $restore[ $field ] ) ) {
+				continue;
+			}
+			$cols[] = $col;
+			// The value being restored must survive this user's save filters,
+			// or the guard would trip after hooks fired.
+			if ( in_array( $col, array( 'post_title', 'post_excerpt', 'post_content' ), true )
+				&& self::stored_value( $col, $restore[ $field ]['before_raw'], $post->ID ) !== (string) $restore[ $field ]['before_raw'] ) {
+				return self::error( 'asc_restore_would_change', sprintf( 'Your account cannot store the original %s (it contains markup your role cannot save). Ask an administrator to roll back.', $col ), 409, array( 'field' => $col ) );
+			}
+		}
+		if ( $cols ) {
+			$col = self::untouched_change( $post, $cols );
+			if ( '' !== $col ) {
+				return self::error( 'asc_untouched_field_would_change', sprintf( 'Rolling back would alter %s, which this rollback does not restore. Ask an administrator to roll back.', $col ), 409, array( 'field' => $col ) );
+			}
+		}
 		foreach ( $restore as $field => $row ) {
 			$value = $row['before_raw'];
 			if ( 'status' === $field ) {
@@ -630,7 +688,16 @@ class AI_Site_Connector_Content_Update {
 				$args['post_date'] = $guard_before['post_date'];
 				$args['edit_date'] = true;
 			}
+			// Record the exact post_modified_gmt this call writes, so the guard
+			// restore below can tell its own write from a later one.
+			$written_mod = null;
+			$capture     = static function ( $data ) use ( &$written_mod ) {
+				$written_mod = isset( $data['post_modified_gmt'] ) ? (string) $data['post_modified_gmt'] : null;
+				return $data;
+			};
+			add_filter( 'wp_insert_post_data', $capture, PHP_INT_MAX );
 			$res = wp_update_post( wp_slash( $args ), true );
+			remove_filter( 'wp_insert_post_data', $capture, PHP_INT_MAX );
 			clean_post_cache( $post_id );
 			$after        = self::read_columns( $post_id, self::GUARDED_COLUMNS );
 			$allowed      = array_keys( $columns );
@@ -658,10 +725,26 @@ class AI_Site_Connector_Content_Update {
 					// Put the row back exactly as it was. A direct update, not
 					// wp_update_post(): the save filters that caused the
 					// mismatch would otherwise alter the restore too.
+					// Conditional on the row still being the one this call
+					// wrote, so a concurrent save is never overwritten.
 					global $wpdb;
 					// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-					$wpdb->update( $wpdb->posts, $guard_before, array( 'ID' => $post_id ) );
+					$rows = null === $written_mod ? 0 : $wpdb->update(
+						$wpdb->posts,
+						$guard_before,
+						array(
+							'ID'                => $post_id,
+							'post_modified_gmt' => $written_mod,
+						)
+					);
 					clean_post_cache( $post_id );
+					if ( 1 !== (int) $rows && self::canon( self::read_columns( $post_id, self::GUARDED_COLUMNS ) ) !== self::canon( $guard_before ) ) {
+						return array(
+							'failed'          => 'post_columns',
+							'written'         => $written,
+							'columns_dirty'   => true,
+						);
+					}
 				}
 				return array(
 					'failed'  => implode( ',', array_intersect_key( array_flip( self::POST_COLUMNS ), $columns ) ),
@@ -874,11 +957,33 @@ class AI_Site_Connector_Content_Update {
 
 	private static function prune( $post_id ) {
 		$ids = self::snapshot_ids( $post_id );
-		while ( count( $ids ) > self::MAX_SNAPSHOTS ) {
-			$old = array_shift( $ids );
+		$n   = count( $ids );
+		foreach ( $ids as $old ) {
+			if ( $n <= self::MAX_SNAPSHOTS ) {
+				break;
+			}
+			$snap = self::load_snapshot( $old );
+			if ( $snap && in_array( $snap['state'], array( 'pending', 'revert_incomplete' ), true ) ) {
+				continue; // Only record needed to recover an interrupted update.
+			}
 			delete_option( self::OPTION_PREFIX . $old );
 			delete_post_meta( $post_id, self::INDEX_META, $old );
+			--$n;
 		}
+	}
+
+	/**
+	 * Remove a post's snapshot options when the post is permanently deleted
+	 * (they hold copies of its content).
+	 */
+	public static function delete_post_snapshots( $post_id ) {
+		foreach ( self::snapshot_ids( (int) $post_id ) as $id ) {
+			delete_option( self::OPTION_PREFIX . $id );
+		}
+	}
+
+	public static function register_hooks() {
+		add_action( 'before_delete_post', array( __CLASS__, 'delete_post_snapshots' ) );
 	}
 
 	// --- output helpers --------------------------------------------------------

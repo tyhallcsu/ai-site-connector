@@ -70,6 +70,7 @@ class AI_Site_Connector_Plugin {
 			WP_CLI::add_command( 'ai-connector routes', array( 'AI_Site_Connector_CLI', 'routes' ) );
 			WP_CLI::add_command( 'ai-connector page-builder', array( 'AI_Site_Connector_CLI', 'page_builder' ) );
 			WP_CLI::add_command( 'ai-connector redirects', array( 'AI_Site_Connector_CLI', 'redirects' ) );
+			WP_CLI::add_command( 'ai-connector content-inventory', array( 'AI_Site_Connector_CLI', 'content_inventory' ) );
 		}
 	}
 

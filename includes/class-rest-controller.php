@@ -240,6 +240,39 @@ class AI_Site_Connector_REST_Controller {
 				'output_schema'    => array( 'type' => 'object' ),
 			),
 			array(
+				'name'             => 'content_inventory',
+				'permission'       => AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST,
+				'method'           => 'GET',
+				'route'            => '/export/content-inventory',
+				'description'      => 'Paginated inventory of posts, pages and CPTs: ids, slugs, status, dates, permalink, excerpt, featured image, parent, menu order, taxonomy terms and SEO title/description/canonical. Filters: post_type, status, modified_after/before. JSON or CSV. Only posts the caller can edit are listed. Read-only.',
+				'risk_level'       => 'read',
+				'read_only'        => true,
+				'supports_dry_run' => false,
+				'input_schema'     => array(
+					'type'       => 'object',
+					'properties' => array(
+						'post_type'       => array( 'type' => 'string' ),
+						'status'          => array( 'type' => 'string' ),
+						'modified_after'  => array( 'type' => 'string' ),
+						'modified_before' => array( 'type' => 'string' ),
+						'limit'           => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => AI_Site_Connector_Content_Inventory::MAX_LIMIT ),
+						'offset'          => array( 'type' => 'integer', 'minimum' => 0 ),
+						'include_terms'   => array( 'type' => 'boolean' ),
+						'include_seo'     => array( 'type' => 'boolean' ),
+						'format'          => array( 'type' => 'string', 'enum' => array( 'json', 'csv' ) ),
+					),
+				),
+				'output_schema'    => array(
+					'type'       => 'object',
+					'properties' => array(
+						'total'       => array( 'type' => 'integer' ),
+						'next_offset' => array( 'type' => array( 'integer', 'null' ) ),
+						'items'       => array( 'type' => 'array' ),
+						'csv'         => array( 'type' => 'string' ),
+					),
+				),
+			),
+			array(
 				'name'             => 'mcp_self_test',
 				'permission'       => AI_Site_Connector_Permissions::TOOL_VIEW_DIAGNOSTICS,
 				'method'           => 'GET',
@@ -495,6 +528,62 @@ class AI_Site_Connector_REST_Controller {
 					'limit'      => array( 'type' => 'integer', 'default' => 50 ),
 					'since'      => array( 'type' => 'string' ),
 					'post_types' => array( 'type' => 'array', 'default' => array( 'post', 'page' ) ),
+				),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/export/content-inventory',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'route_export_content_inventory' ),
+				'permission_callback' => array( __CLASS__, 'auth_edit_posts' ),
+				'args'                => array(
+					'post_type'       => array(
+						'type'        => 'string',
+						'description' => 'Comma-separated post types. Default: all admin-visible types except attachments.',
+						'default'     => '',
+					),
+					'status'          => array(
+						'type'        => 'string',
+						'description' => 'Comma-separated statuses, or "any" (excludes trash and auto-draft).',
+						'default'     => 'any',
+					),
+					'modified_after'  => array(
+						'type'        => 'string',
+						'description' => 'UTC date/time, exclusive.',
+						'default'     => '',
+					),
+					'modified_before' => array(
+						'type'        => 'string',
+						'description' => 'UTC date/time, exclusive.',
+						'default'     => '',
+					),
+					'limit'           => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => AI_Site_Connector_Content_Inventory::MAX_LIMIT,
+						'default' => AI_Site_Connector_Content_Inventory::DEFAULT_LIMIT,
+					),
+					'offset'          => array(
+						'type'    => 'integer',
+						'minimum' => 0,
+						'default' => 0,
+					),
+					'include_terms'   => array(
+						'type'    => 'boolean',
+						'default' => true,
+					),
+					'include_seo'     => array(
+						'type'    => 'boolean',
+						'default' => true,
+					),
+					'format'          => array(
+						'type'    => 'string',
+						'enum'    => array( 'json', 'csv' ),
+						'default' => 'json',
+					),
 				),
 			)
 		);
@@ -770,6 +859,35 @@ class AI_Site_Connector_REST_Controller {
 			'post_types' => (array) $request->get_param( 'post_types' ),
 		);
 		return rest_ensure_response( AI_Site_Connector_Export::recent_changes( $args ) );
+	}
+
+	public static function route_export_content_inventory( WP_REST_Request $request ) {
+		$check = AI_Site_Connector_Permissions::require_permission( AI_Site_Connector_Permissions::TOOL_EXPORT_MANIFEST );
+		if ( is_wp_error( $check ) ) {
+			return $check;
+		}
+		$res = AI_Site_Connector_Content_Inventory::query(
+			array(
+				'post_type'       => (string) $request->get_param( 'post_type' ),
+				'status'          => (string) $request->get_param( 'status' ),
+				'modified_after'  => (string) $request->get_param( 'modified_after' ),
+				'modified_before' => (string) $request->get_param( 'modified_before' ),
+				'limit'           => (int) $request->get_param( 'limit' ),
+				'offset'          => (int) $request->get_param( 'offset' ),
+				'include_terms'   => (bool) $request->get_param( 'include_terms' ),
+				'include_seo'     => (bool) $request->get_param( 'include_seo' ),
+			)
+		);
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		if ( 'csv' === $request->get_param( 'format' ) ) {
+			// JSON envelope keeps pagination metadata alongside the CSV text.
+			$res['format'] = 'csv';
+			$res['csv']    = AI_Site_Connector_Content_Inventory::to_csv( $res['items'], $res['seo_plugin'] );
+			unset( $res['items'] );
+		}
+		return rest_ensure_response( $res );
 	}
 
 	public static function route_export_page_content( WP_REST_Request $request ) {

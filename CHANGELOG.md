@@ -14,6 +14,9 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `AI_Site_Connector_SEO` abstraction (#68): plugin-neutral reads for Rank
   Math, Yoast, SEOPress, AIOSEO 4 (custom table) and native fallback; guarded,
   dry-run-by-default writes with per-post `edit_post` checks.
+- Content inventory export (#63): `GET /export/content-inventory`, MCP
+  `wp_content_inventory`, `wp ai-connector content-inventory` — paginated,
+  filterable, JSON or formula-safe CSV, terms + SEO fields, per-post access.
 - In-WordPress integration suite (`tests/integration/`) run by the runtime
   smoke job.
 

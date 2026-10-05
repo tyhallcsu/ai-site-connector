@@ -619,6 +619,96 @@ class AI_Site_Connector_CLI {
 	}
 
 	/**
+	 * Export the content inventory. Read-only.
+	 *
+	 * Runs as the --user given (posts that user cannot edit are omitted).
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--post_type=<types>]
+	 * : Comma-separated post types. Default: all admin-visible types except attachments.
+	 *
+	 * [--status=<statuses>]
+	 * : Comma-separated statuses or "any". Default: any.
+	 *
+	 * [--modified_after=<datetime>]
+	 * : UTC date/time, exclusive.
+	 *
+	 * [--modified_before=<datetime>]
+	 * : UTC date/time, exclusive.
+	 *
+	 * [--limit=<n>]
+	 * : 1-500. Default: 100.
+	 *
+	 * [--offset=<n>]
+	 * : Default: 0.
+	 *
+	 * [--all]
+	 * : Page through every result (ignores --offset).
+	 *
+	 * [--format=<format>]
+	 * : table|csv|json. Default: table.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *   wp ai-connector content-inventory --user=admin --post_type=page --format=csv --all > pages.csv
+	 */
+	public function content_inventory( $args, $assoc ) {
+		$format = self::format( $assoc, array( 'table', 'csv', 'json' ) );
+		$query  = array(
+			'post_type'       => isset( $assoc['post_type'] ) ? (string) $assoc['post_type'] : '',
+			'status'          => isset( $assoc['status'] ) ? (string) $assoc['status'] : 'any',
+			'modified_after'  => isset( $assoc['modified_after'] ) ? (string) $assoc['modified_after'] : '',
+			'modified_before' => isset( $assoc['modified_before'] ) ? (string) $assoc['modified_before'] : '',
+			'limit'           => isset( $assoc['limit'] ) ? (int) $assoc['limit'] : AI_Site_Connector_Content_Inventory::DEFAULT_LIMIT,
+			'offset'          => isset( $assoc['offset'] ) ? (int) $assoc['offset'] : 0,
+		);
+		$all    = \WP_CLI\Utils\get_flag_value( $assoc, 'all', false );
+		if ( $all ) {
+			$query['offset'] = 0;
+		}
+
+		$items  = array();
+		$result = null;
+		do {
+			$result = AI_Site_Connector_Content_Inventory::query( $query );
+			if ( is_wp_error( $result ) ) {
+				WP_CLI::error( $result->get_error_message() );
+			}
+			$items           = array_merge( $items, $result['items'] );
+			$query['offset'] = $result['next_offset'];
+		} while ( $all && null !== $result['next_offset'] );
+
+		if ( 'json' === $format ) {
+			$result['items'] = $items;
+			$result['count'] = count( $items );
+			if ( $all ) {
+				$result['offset']      = 0;
+				$result['next_offset'] = null;
+			}
+			WP_CLI::log( wp_json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+			return;
+		}
+		if ( 'csv' === $format ) {
+			WP_CLI::log( rtrim( AI_Site_Connector_Content_Inventory::to_csv( $items, $result['seo_plugin'] ), "\r\n" ) );
+			return;
+		}
+		$rows = array();
+		foreach ( $items as $item ) {
+			$rows[] = array(
+				'id'           => $item['id'],
+				'post_type'    => $item['post_type'],
+				'status'       => $item['status'],
+				'slug'         => $item['slug'],
+				'title'        => $item['title'],
+				'modified_gmt' => $item['modified_gmt'],
+			);
+		}
+		\WP_CLI\Utils\format_items( 'table', $rows, array( 'id', 'post_type', 'status', 'slug', 'title', 'modified_gmt' ) );
+		WP_CLI::log( sprintf( 'total=%d shown=%d omitted_forbidden=%d next_offset=%s', $result['total'], count( $items ), $result['omitted_forbidden'], null === $result['next_offset'] ? 'none' : $result['next_offset'] ) );
+	}
+
+	/**
 	 * Validate --format against an allow-list.
 	 */
 	private static function format( $assoc, array $allowed ) {

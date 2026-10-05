@@ -26,6 +26,7 @@
  *   wp_rest_routes   — REST route inventory
  *   wp_page_builder  — page builder detection (site + per-post)
  *   wp_redirects     — redirect plugin detection + export
+ *   wp_content_inventory — paginated posts/pages/CPT inventory
  *
  * Constants:
  *   AI_SITE_CONNECTOR_MCP_DISABLE — when true, the route is not registered.
@@ -240,6 +241,27 @@ class AI_Site_Connector_MCP_Server {
 				),
 			),
 			array(
+				'name'        => 'wp_content_inventory',
+				'description' => 'Paginated inventory of posts, pages and custom post types with taxonomy terms and SEO fields. Optional: post_type and status (comma-separated), modified_after/modified_before (UTC), limit (1-500, default 100), offset, include_terms, include_seo, format (json|csv). Returns total and next_offset. Read-only.',
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'post_type'       => array( 'type' => 'string' ),
+						'status'          => array( 'type' => 'string' ),
+						'modified_after'  => array( 'type' => 'string' ),
+						'modified_before' => array( 'type' => 'string' ),
+						'limit'           => array( 'type' => 'integer' ),
+						'offset'          => array( 'type' => 'integer' ),
+						'include_terms'   => array( 'type' => 'boolean' ),
+						'include_seo'     => array( 'type' => 'boolean' ),
+						'format'          => array(
+							'type' => 'string',
+							'enum' => array( 'json', 'csv' ),
+						),
+					),
+				),
+			),
+			array(
 				'name'        => 'wp_redirects',
 				'description' => 'Detect redirect plugins (Rank Math, Redirection, AIOSEO, Yoast Premium) and export their redirects. Optional: limit (1-1000, default 500), offset. Read-only; admin only.',
 				'inputSchema' => array(
@@ -384,6 +406,8 @@ class AI_Site_Connector_MCP_Server {
 				return self::dispatch_checked( 'GET', '/diagnostics/rest-routes', self::pick( $args, array( 'namespace' ) ) );
 			case 'wp_page_builder':
 				return self::dispatch_checked( 'GET', '/diagnostics/page-builder', self::pick( $args, array( 'post_ids' ) ) );
+			case 'wp_content_inventory':
+				return self::dispatch_checked( 'GET', '/export/content-inventory', self::pick( $args, array( 'post_type', 'status', 'modified_after', 'modified_before', 'limit', 'offset', 'include_terms', 'include_seo', 'format' ) ) );
 			case 'wp_redirects':
 				return self::dispatch_checked( 'GET', '/diagnostics/redirects', self::pick( $args, array( 'limit', 'offset' ) ) );
 			default:

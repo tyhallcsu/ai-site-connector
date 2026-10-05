@@ -363,6 +363,16 @@ wp_cli ai-connector page-builder --format=json --path="$WP_DIR" \
 wp_cli ai-connector redirects --format=json --path="$WP_DIR" \
 	| jq -e '.plugin_detected == "none" and .redirects == []' >/dev/null \
 	|| { echo "redirects --format=json unexpected output" >&2; exit 1; }
+wp_cli ai-connector content-inventory --user=admin --all --format=json --path="$WP_DIR" \
+	| jq -e '(.total | type == "number") and (.items | length) == .total and .next_offset == null' >/dev/null \
+	|| { echo "content-inventory --all --format=json unexpected output" >&2; exit 1; }
+wp_cli ai-connector content-inventory --user=admin --format=csv --path="$WP_DIR" | head -1 \
+	| grep -q '^"id","post_type","title"' \
+	|| { echo "content-inventory --format=csv missing header" >&2; exit 1; }
+if wp_cli ai-connector content-inventory --user=admin --post_type=attachment --path="$WP_DIR" >/dev/null 2>&1; then
+	echo "content-inventory accepted post_type=attachment" >&2
+	exit 1
+fi
 if wp_cli ai-connector routes --format=xml --path="$WP_DIR" >/dev/null 2>&1; then
 	echo "routes accepted an unsupported --format" >&2
 	exit 1

@@ -8,17 +8,17 @@
 
 | Item | Value |
 |------|-------|
-| Latest `origin/main` | `d378e50` — feat(content): safe content update (#87) |
-| Latest published release | **v0.11.0** — tag → `6645155`; https://github.com/tyhallcsu/ai-site-connector/releases/tag/v0.11.0; ZIP sha256 `95b337b122d7ed198ab72b5a9aed90006616953fd7e2568228508ecfbd4086f3`; verified (checksum, versions, contents, clean install, upgrade from published v0.10.0) |
-| Unreleased on main | #89 export coverage reporting, #90 library-wide duplicate scan (closes #88) |
-| Release candidate | **0.12.0** — prep PR `chore/release-0.12.0`; local gates passed |
+| Latest `origin/main` | `94169ad` — release-audit fixes (#92) |
+| Latest published release | **v0.12.0** — tag → `441df7f`; https://github.com/tyhallcsu/ai-site-connector/releases/tag/v0.12.0; ZIP sha256 `663911684072b5117bac513baefbe626b954bb54e708c4cb3d27db5367d5e23f`; verified (checksum, versions, contents, clean install, upgrade from published v0.11.0) |
+| Unreleased on main | #92 audit fixes (MCP post writes gated by write_content) |
+| Release candidate | **0.12.1** — prep PR `chore/release-0.12.1`; local gates passed |
 | Open issues | none |
 
 ## Open PRs
 
 | PR | Branch | State |
 |----|--------|-------|
-| (0.12.0 prep) | chore/release-0.12.0 | opening |
+| (0.12.1 prep) | chore/release-0.12.1 | opening |
 
 ## Completed milestones
 
@@ -35,15 +35,17 @@
 | M6 disable/enable | #85 | `d81b62d` | 71/71 on WP 5.6–7.1.2; closed #75 |
 | v0.11.0 prep | #86 | `6645155` | released v0.11.0 (verified above) |
 | Export coverage reporting | #89 | `1098ee4` | 72/72 on WP 5.6–7.1.2 |
+| v0.12.0 prep | #91 | `441df7f` | released v0.12.0 (verified) |
+| Release-audit fixes | #92 | `94169ad` | 88/88; MCP write gate verified red-before-green |
 | M7 safe content update | #87 | `d378e50` | 86/86 on WP 5.6–7.1.2; closed #70; 4 reviews |
 | Library-wide duplicate scan | #90 | `c255de3` | 73/73 on WP 5.6–7.1.2; closed #88; reviewed (1 P1 + 7 P2 + 3 P3 fixed) |
 | #59 superseded branch | — | — | branch deleted; evidence in issue |
 
 ## Next three actions
 
-1. Merge the 0.12.0 prep PR after CI; verify main CI on the merge SHA; tag; verify the published ZIP (checksum, versions, install, upgrade from published v0.11.0).
-2. Final integration/security/docs audit of the shipped surface.
-3. Report; no further ready backlog.
+1. Merge 0.12.1 prep after CI; verify main CI on the merge SHA; tag; verify the published ZIP (checksum, versions, install, upgrade from published v0.12.0).
+2. Record the release in this file via the next PR (no handoff-only loop needed if nothing else changes).
+3. No ready backlog remains; new work needs new issues.
 
 Resume: `cd /Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector && git fetch && gh pr list -R tyhallcsu/ai-site-connector`. If the scratchpad worktree is gone: `git worktree prune`, then add a new worktree for `feature/content-update` outside the parent `ess-custom-plugins` tree.
 

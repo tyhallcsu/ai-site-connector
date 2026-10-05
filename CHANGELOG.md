@@ -6,6 +6,12 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-05
+
+Patch from the v0.12.0 release audit. **Behaviour change:** MCP
+`wp_create_post` / `wp_update_post` now require the default-off
+`write_content` permission and honour read-only mode.
+
 ### Fixed
 
 - MCP `wp_create_post` and `wp_update_post` now require the `write_content`

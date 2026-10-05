@@ -378,6 +378,9 @@ wp_cli ai-connector media-audit --user=admin --format=json --path="$WP_DIR" \
 wp_cli ai-connector media-duplicates --user=admin --format=json --path="$WP_DIR" \
 	| jq -e '(.by_filename | type == "array") and (.by_hash | type == "array")' >/dev/null \
 	|| { echo "media-duplicates --format=json unexpected output" >&2; exit 1; }
+wp_cli ai-connector broken-links --user=admin --all --format=json --path="$WP_DIR" \
+	| jq -e '(.summary | has("broken")) and (.items | type == "array")' >/dev/null \
+	|| { echo "broken-links --format=json unexpected output" >&2; exit 1; }
 if wp_cli ai-connector content-inventory --user=admin --post_type=attachment --path="$WP_DIR" >/dev/null 2>&1; then
 	echo "content-inventory accepted post_type=attachment" >&2
 	exit 1

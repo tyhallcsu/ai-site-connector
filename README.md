@@ -311,6 +311,7 @@ All endpoints under `/wp-json/ai-site-connector/v1/`. Permission-gated tools suc
 | `GET /export/content-inventory`   | Authenticated, `edit_posts`       | Paginated posts/pages/CPT inventory with terms and SEO fields; JSON or CSV. See below. |
 | `GET /media/audit`                | Authenticated, `upload_files`     | Media SEO/hygiene audit (alt/title/caption/description, unattached, oversized, suspicious filename, missing file). See below. |
 | `GET /media/duplicates`           | Authenticated, `upload_files`     | Duplicate media by filename and SHA-256; never deletes. See below. |
+| `GET /content/broken-links`       | Authenticated, `edit_posts`       | Offline broken internal link scan (no HTTP requests). See below. |
 
 ### Write and credential administration
 
@@ -360,6 +361,15 @@ Both gated by `upload_files` + the `export_manifest` permission; both list only 
 
 - **Audit** — `GET /media/audit` · MCP `wp_media_audit` · `wp ai-connector media-audit`. Per attachment: `attachment_id, url, filename, mime_type, file_size, width, height, uploaded_gmt, attached_post_id, has_alt/title/caption/description, issues[]`. Issue codes: `missing_alt` (images only), `missing_title`, `title_is_filename` (also against the pre-`-scaled`/`-N` name), `missing_caption`, `missing_description`, `unattached`, `oversized_dimensions` (default: WordPress big-image threshold, 2560 px — also when scaling is disabled), `oversized_file` (default 1 MB), `suspicious_filename` (camera/screenshot defaults, bare hashes, `image (1)` copies), `missing_file`. `mime=image|all`, `only_issues` (default true), `limit` 1–500, `offset`, `summary` counts, `next_offset`.
 - **Duplicates** — `GET /media/duplicates` · MCP `wp_media_duplicates` · `wp ai-connector media-duplicates`. `by_filename` groups (`exact`, or `suffix_variant` — WordPress `-1`/`-scaled` re-uploads, only when the unsuffixed original is present, so `slide-1`/`slide-2` series are not flagged) and `by_hash` groups (SHA-256). Only files whose byte size collides are hashed; files over `max_file_bytes` (≤ 50 MB) are listed in `skipped_large`; at most 500 MB is hashed per call, the rest listed in `unhashed` (`hash_budget_exhausted`). Scans up to `max_scan` attachments (≤ 20 000 for administrators, ≤ 5 000 / 100 MB for other roles) in ID order; `next_after_id` continues the scan, but groups only pair files within one call's window — use a `max_scan` at least the library size for complete results. Files are read only when they resolve inside the uploads directory; missing/unreadable files are listed in `unreadable`.
+
+### Broken internal links
+
+`GET /content/broken-links` · MCP `wp_broken_links` · `wp ai-connector broken-links` (gated by `export_manifest`; lists only posts the caller can edit, and callers who cannot edit others' posts only see — and count — their own).
+
+- **Offline by design:** links are resolved against the database (`url_to_postid`, `?p=` IDs, terms, post-type/author/date archives, permalink front, `/page/N`, feeds) and the uploads directory. No HTTP request is ever made, so the scan cannot load the live site or act as an SSRF probe. External links, `mailto:`/`tel:` etc. are counted and ignored.
+- Relative hrefs are resolved against the linking post's permalink, as a browser would.
+- Row: `source_post_id, source_post_type, url, link_text, status, reason, target_post_id`. Statuses `ok | broken | invalid | skipped`; reasons include `post_missing`, `post_trashed`, `post_not_published`, `not_found`, `term_not_found`, `missing_upload`, `malformed_url`, `system_path`, `extract_failed`.
+- `limit` posts per call (1–200, default 50), `offset`, `next_offset`; `max_links` (≤ 5 000) bounds work per call — a single oversized post is checked up to the cap and listed in `partial_posts`. `only_broken` (default true).
 
 ### SEO plugin abstraction (`AI_Site_Connector_SEO`)
 

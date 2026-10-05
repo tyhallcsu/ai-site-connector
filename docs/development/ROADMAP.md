@@ -11,8 +11,8 @@ acceptance gates, and release grouping. Operating rules:
 | M0 | CI truthfulness + integration harness + control docs | — | — | merged #78 (`2dd96bc`) |
 | M1 | Finish PR #76: self-test, REST routes, page builder, redirects, SEO abstraction hardening, MCP + WP-CLI exposure | #67 #68 #69 #71 #72 (+#75 partial) | M0 | merged #76 (`c7f689b`) |
 | M2 | Content inventory (JSON + CSV) + CLI | #63 (+#75 partial) | M1 (SEO read) | merged #79 (`2949c89`); export consistency #80 (`4d948e0`) |
-| M3 | Media SEO audit + duplicate media + CLI | #64 #65 (+#75 partial) | M0 | in review |
-| M4 | Broken internal link scanner + CLI | #66 (+#75 partial) | M0 | queued |
+| M3 | Media SEO audit + duplicate media + CLI | #64 #65 (+#75 partial) | M0 | merged #82 (`4f44c85`) |
+| M4 | Broken internal link scanner + CLI | #66 (+#75 partial) | M0 | in review |
 | M5 | Export bundle + deterministic manifests + CLI `export` | #73 #74 (+#75 partial) | M1–M4 | queued |
 | M6 | WP-CLI remainder (`status`, `enable`/`disable` guards) — close #75 | #75 | M1–M5 | queued |
 | M7 | Safe content update (dry-run, snapshot, rollback) | #70 | M1 (SEO write), backup manager | queued |

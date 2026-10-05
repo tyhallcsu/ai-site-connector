@@ -231,7 +231,8 @@ asc_it(
 			asc_assert( in_array( $theirs, $ids, true ), 'own draft missing' );
 			asc_assert( ! in_array( $secret, $ids, true ), 'admin draft leaked' );
 			asc_assert( false === strpos( wp_json_encode( $data ), 'admin secret draft' ), 'admin draft title leaked' );
-			asc_assert( $data['omitted_forbidden'] >= 1, 'omitted count' );
+			asc_assert_same( 0, $data['omitted_forbidden'], 'query is scoped to own posts, so nothing is counted' );
+			asc_assert_same( 1, $data['total'], 'total reveals only own posts' );
 
 			$anon = asc_it_as_user( 0, function () {
 				return asc_it_rest( 'GET', '/export/content-inventory' );

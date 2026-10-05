@@ -822,6 +822,84 @@ class AI_Site_Connector_CLI {
 	}
 
 	/**
+	 * Scan content for broken internal links (offline; no HTTP). Read-only.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--post_type=<types>]
+	 * : Comma-separated post types. Default: all content types.
+	 *
+	 * [--status=<statuses>]
+	 * : Statuses of posts to scan. Default: publish.
+	 *
+	 * [--limit=<n>]
+	 * : Posts per page, 1-200. Default: 50.
+	 *
+	 * [--all]
+	 * : Walk every page of posts.
+	 *
+	 * [--all-links]
+	 * : Include ok/skipped links, not just broken/invalid ones.
+	 *
+	 * [--format=<format>]
+	 * : table|csv|json. Default: table.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *   wp ai-connector broken-links --user=admin --all --format=csv > broken-links.csv
+	 */
+	public function broken_links( $args, $assoc ) {
+		$format = self::format( $assoc, array( 'table', 'csv', 'json' ) );
+		$query  = array(
+			'post_type'   => isset( $assoc['post_type'] ) ? (string) $assoc['post_type'] : '',
+			'status'      => isset( $assoc['status'] ) ? (string) $assoc['status'] : 'publish',
+			'limit'       => isset( $assoc['limit'] ) ? (int) $assoc['limit'] : AI_Site_Connector_Link_Scanner::DEFAULT_LIMIT,
+			'offset'      => 0,
+			'only_broken' => ! \WP_CLI\Utils\get_flag_value( $assoc, 'all-links', false ),
+		);
+		$all     = \WP_CLI\Utils\get_flag_value( $assoc, 'all', false );
+		$items   = array();
+		$summary = array_fill_keys( AI_Site_Connector_Link_Scanner::STATUSES, 0 );
+		$totals  = array();
+		$partial = array();
+		$counted = array( 'posts_scanned', 'omitted_forbidden', 'links_examined', 'external_ignored', 'non_http_ignored' );
+		do {
+			$result = AI_Site_Connector_Link_Scanner::scan( $query );
+			if ( is_wp_error( $result ) ) {
+				WP_CLI::error( $result->get_error_message() );
+			}
+			$items = array_merge( $items, $result['items'] );
+			foreach ( $result['summary'] as $k => $v ) {
+				$summary[ $k ] += $v;
+			}
+			foreach ( $counted as $k ) {
+				$totals[ $k ] = ( isset( $totals[ $k ] ) ? $totals[ $k ] : 0 ) + (int) $result[ $k ];
+			}
+			$partial         = array_merge( $partial, $result['partial_posts'] );
+			$query['offset'] = $result['next_offset'];
+		} while ( $all && null !== $result['next_offset'] );
+
+		if ( 'json' === $format ) {
+			$result['items']         = $items;
+			$result['summary']       = $summary;
+			$result['partial_posts'] = $partial;
+			if ( $all ) {
+				// Aggregate counters across pages so they match the items.
+				$result                = array_merge( $result, $totals );
+				$result['offset']      = 0;
+				$result['next_offset'] = null;
+				$result['truncated']   = ! empty( $partial );
+			}
+			WP_CLI::log( wp_json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+			return;
+		}
+		\WP_CLI\Utils\format_items( $format, $items, array( 'source_post_id', 'source_post_type', 'url', 'link_text', 'status', 'reason', 'target_post_id' ) );
+		if ( 'table' === $format ) {
+			WP_CLI::log( sprintf( 'ok=%d broken=%d invalid=%d skipped=%d', $summary['ok'], $summary['broken'], $summary['invalid'], $summary['skipped'] ) );
+		}
+	}
+
+	/**
 	 * Validate --format against an allow-list.
 	 */
 	private static function format( $assoc, array $allowed ) {

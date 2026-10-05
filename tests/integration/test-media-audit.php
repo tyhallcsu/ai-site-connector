@@ -185,7 +185,7 @@ asc_it(
 		unlink( trailingslashit( $uploads['basedir'] ) . 'asc-it/deleted-file.png' ); // phpcs:ignore WordPress.WP.AlternativeFunctions
 		try {
 			$before = asc_it_db_fingerprint();
-			$res    = AI_Site_Connector_Media_Audit::duplicates();
+			$res    = asc_it_duplicates();
 			asc_assert_same( $before, asc_it_db_fingerprint(), 'duplicates mutated the DB' );
 
 			$groups = array();
@@ -230,9 +230,16 @@ asc_it(
 		$ids[] = $b = asc_it_attachment( 'cross-b.png', 'CROSS-WINDOW-SAME', array( 'mime' => 'image/png' ) );
 		try {
 			$scan_id = '';
+			$last_id = '';
 			$calls   = 0;
+			$phases  = array();
+			$tiny    = static function () {
+				return 1; // One file per hash call: forces a resumed hash phase.
+			};
+			add_filter( 'ai_site_connector_duplicate_hash_budget', $tiny );
 			do {
 				$res = AI_Site_Connector_Media_Audit::duplicates( array( 'scan_id' => $scan_id, 'max_scan' => 1 ) );
+				$phases[] = is_wp_error( $res ) ? 'error' : $res['phase'];
 				asc_assert( ! is_wp_error( $res ), 'scan error: ' . ( is_wp_error( $res ) ? $res->get_error_message() : '' ) );
 				if ( ! $res['complete'] ) {
 					asc_assert_same( array(), $res['by_hash'], 'groups reported before the scan completed' );
@@ -240,8 +247,13 @@ asc_it(
 					asc_assert( '' !== $res['scan_id'], 'no scan_id to continue' );
 				}
 				$scan_id = $res['scan_id'];
+				if ( '' !== $scan_id ) {
+					$last_id = $scan_id;
+				}
 				asc_assert( ++$calls < 100, 'scan never completed' );
 			} while ( ! $res['complete'] );
+			remove_filter( 'ai_site_connector_duplicate_hash_budget', $tiny );
+			asc_assert( count( array_keys( $phases, 'hash', true ) ) >= 2, 'hash phase never resumed: ' . implode( ',', $phases ) );
 			asc_assert( $calls > 2, 'fixture did not span several windows' );
 			$pair = null;
 			foreach ( $res['by_hash'] as $g ) {
@@ -250,7 +262,7 @@ asc_it(
 				}
 			}
 			asc_assert_same( array( $a, $b ), $pair, 'cross-window duplicate not paired' );
-			asc_assert( false === get_option( AI_Site_Connector_Media_Audit::DUP_STATE_PREFIX . $scan_id ), 'scan state left behind' );
+			asc_assert( '' !== $last_id && false === get_option( AI_Site_Connector_Media_Audit::DUP_STATE_PREFIX . $last_id ), 'scan state left behind' );
 			asc_assert_same( '', $res['scan_id'], 'finished scan still advertises a scan_id' );
 
 			// Another user cannot continue (or read) someone else's scan.
@@ -265,7 +277,7 @@ asc_it(
 				asc_it_delete_user( $editor );
 				AI_Site_Connector_Media_Audit::abandon_scan( $first['scan_id'] );
 			}
-			foreach ( array( array( 'max_scan' => 0 ), array( 'max_scan' => 20001 ), array( 'after_id' => 5 ), array( 'max_file_bytes' => 0 ), array( 'scan_id' => 'nope' ), array( 'scan_id' => '20990101000000-abcdefgh' ) ) as $bad ) {
+			foreach ( array( array( 'max_scan' => 0 ), array( 'max_scan' => 20001 ), array( 'after_id' => 5 ), array( 'max_file_bytes' => 0 ), array( 'scan_id' => 'nope' ), array( 'scan_id' => '20990101000000-abcdefgh-u1' ), array( 'scan_id' => '20990101000000-abcdefgh' ) ) as $bad ) {
 				asc_assert( is_wp_error( AI_Site_Connector_Media_Audit::duplicates( $bad ) ), 'accepted ' . wp_json_encode( $bad ) );
 			}
 		} finally {
@@ -302,7 +314,7 @@ asc_it(
 		$ids[] = $sc = asc_it_attachment( 'harbor-view-scaled.jpg', 'scaled', array( 'title' => 'harbor-view', 'width' => 7000, 'height' => 5000 ) );
 		$ids[] = $cp = asc_it_attachment( 'unnamed-scaled.jpg', 'unnamed', array( 'title' => 'Something descriptive' ) );
 		try {
-			$dup = AI_Site_Connector_Media_Audit::duplicates();
+			$dup = asc_it_duplicates();
 			foreach ( $dup['by_filename'] as $g ) {
 				asc_assert( ! in_array( $s1, $g['attachment_ids'], true ), 'numbered series grouped as duplicate' );
 				asc_assert( $g['attachment_ids'] === array_values( array_unique( $g['attachment_ids'] ) ), 'attachment listed twice in a group' );
@@ -345,6 +357,50 @@ asc_it(
 			} );
 			asc_assert( is_wp_error( $res ), 'author allowed admin-sized scan' );
 		} finally {
+			asc_it_delete_user( $author );
+		}
+	}
+);
+
+asc_it(
+	'duplicates review: deleted and no-longer-visible attachments are dropped at completion; one live scan per user',
+	function () {
+		$author  = asc_it_user( 'author' );
+		$post    = asc_it_post( array( 'post_author' => $author ) );
+		$ids     = array();
+		$ids[]   = $vis = asc_it_attachment( 'vis-a.png', 'VISIBILITY-SAME', array( 'mime' => 'image/png', 'parent' => $post ) );
+		$ids[]   = $vis2 = asc_it_attachment( 'vis-b.png', 'VISIBILITY-SAME', array( 'mime' => 'image/png', 'parent' => $post ) );
+		$ids[]   = $del = asc_it_attachment( 'deleted-later.png', 'DELETED-SAME-XX', array( 'mime' => 'image/png' ) );
+		$ids[]   = $keep = asc_it_attachment( 'deleted-later.png', 'DELETED-SAME-XX', array( 'mime' => 'image/png', 'subdir' => 'k' ) );
+		try {
+			$res = asc_it_as_user(
+				$author,
+				function () use ( $post, $del ) {
+					$first = AI_Site_Connector_Media_Audit::duplicates( array( 'max_scan' => 1 ) );
+					$again = AI_Site_Connector_Media_Audit::duplicates( array( 'max_scan' => 1 ) );
+					asc_assert( false === get_option( AI_Site_Connector_Media_Audit::DUP_STATE_PREFIX . $first['scan_id'] ), 'previous scan of the same user not replaced' );
+					$scan_id = $again['scan_id'];
+					// Mid-scan: the parent becomes private (author can no longer read
+					// its media) and one attachment is deleted.
+					wp_update_post( array( 'ID' => $post, 'post_status' => 'private', 'post_author' => 1 ) );
+					wp_delete_attachment( $del, true );
+					$calls = 0;
+					do {
+						$r       = AI_Site_Connector_Media_Audit::duplicates( array( 'scan_id' => $scan_id, 'max_scan' => 1 ) );
+						$scan_id = $r['scan_id'];
+						asc_assert( ++$calls < 100, 'scan never completed' );
+					} while ( ! $r['complete'] );
+					return $r;
+				}
+			);
+			$json = wp_json_encode( array( $res['by_filename'], $res['by_hash'] ) );
+			foreach ( array( $vis, $vis2, $del ) as $gone ) {
+				asc_assert( false === strpos( $json, '"attachment_ids":[' . $gone ) && ! preg_match( '/[\[,]' . $gone . '[\],]/', $json ), "attachment {$gone} still reported" );
+			}
+			asc_assert( false === strpos( $json, 'vis-a.png' ), 'filename of a no-longer-visible attachment leaked' );
+		} finally {
+			asc_it_cleanup_attachments( array_diff( $ids, array( $del ) ) );
+			wp_delete_post( $post, true );
 			asc_it_delete_user( $author );
 		}
 	}

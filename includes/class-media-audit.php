@@ -285,6 +285,7 @@ class AI_Site_Connector_Media_Audit {
 	const DUP_STATE_PREFIX = 'ai_site_connector_dupscan_';
 	const DUP_STATE_TTL    = DAY_IN_SECONDS;
 	const DUP_MAX_LIBRARY  = 200000;
+	const DUP_FILES_PER_CALL = 5000;
 
 	/**
 	 * Find duplicate media across the whole library, by filename and by
@@ -338,8 +339,8 @@ class AI_Site_Connector_Media_Audit {
 
 		$scan_id = (string) $args['scan_id'];
 		if ( '' === $scan_id ) {
-			self::prune_scans();
-			$scan_id = gmdate( 'YmdHis' ) . '-' . wp_generate_password( 8, false, false );
+			self::prune_scans( get_current_user_id() );
+			$scan_id = gmdate( 'YmdHis' ) . '-' . wp_generate_password( 8, false, false ) . '-u' . get_current_user_id();
 			$state   = array(
 				'user_id'   => get_current_user_id(),
 				'created'   => time(),
@@ -352,6 +353,7 @@ class AI_Site_Connector_Media_Audit {
 				'sizes'     => array(),
 				'unread'    => array(),
 				'queue'     => array(),
+				'qpos'      => 0,
 				'hashes'    => array(),
 				'large'     => array(),
 				'hashed_b'  => 0,
@@ -373,8 +375,8 @@ class AI_Site_Connector_Media_Audit {
 				return $more;
 			}
 			if ( $more ) {
-				self::save_scan( $scan_id, $state );
-				return self::scan_response( $scan_id, $state, false );
+				$saved = self::save_scan( $scan_id, $state );
+				return is_wp_error( $saved ) ? $saved : self::scan_response( $scan_id, $state, false );
 			}
 			// All sizes known: queue every file whose size collides anywhere.
 			ksort( $state['sizes'] );
@@ -391,15 +393,29 @@ class AI_Site_Connector_Media_Audit {
 				}
 			}
 			$state['phase'] = 'hash';
+			$state['qpos']  = 0;
+			unset( $state['sizes'] ); // No longer needed; keeps the state small.
+			// This call already did a full stat window; hash in the next one.
+			$saved = self::save_scan( $scan_id, $state );
+			return is_wp_error( $saved ) ? $saved : self::scan_response( $scan_id, $state, false );
 		}
 
+		/**
+		 * Bytes hashed per duplicate-scan call (filterable for constrained hosts).
+		 *
+		 * @param int $hash_cap Default 500 MB for administrators, 100 MB otherwise.
+		 */
+		$hash_cap   = max( 1, (int) apply_filters( 'ai_site_connector_duplicate_hash_budget', $hash_cap ) );
 		$call_bytes = 0;
-		while ( $state['queue'] ) {
-			list( $id, $size ) = $state['queue'][0];
-			if ( $call_bytes > 0 && $call_bytes + $size > $hash_cap ) {
+		$call_files = 0;
+		$qlen       = count( $state['queue'] );
+		while ( $state['qpos'] < $qlen ) {
+			list( $id, $size ) = $state['queue'][ $state['qpos'] ];
+			if ( $call_files > 0 && ( $call_bytes + $size > $hash_cap || $call_files >= self::DUP_FILES_PER_CALL ) ) {
 				break; // Budget for this call used; continue next call.
 			}
-			array_shift( $state['queue'] );
+			++$state['qpos'];
+			++$call_files;
 			$path = self::safe_path( $id );
 			$h    = ( '' !== $path && is_file( $path ) && is_readable( $path ) ) ? hash_file( 'sha256', $path ) : false;
 			if ( ! is_string( $h ) ) {
@@ -410,9 +426,9 @@ class AI_Site_Connector_Media_Audit {
 			$call_bytes            += $size;
 			$state['hashed_b']     += $size;
 		}
-		if ( $state['queue'] ) {
-			self::save_scan( $scan_id, $state );
-			return self::scan_response( $scan_id, $state, false );
+		if ( $state['qpos'] < $qlen ) {
+			$saved = self::save_scan( $scan_id, $state );
+			return is_wp_error( $saved ) ? $saved : self::scan_response( $scan_id, $state, false );
 		}
 
 		delete_option( self::DUP_STATE_PREFIX . $scan_id );
@@ -497,6 +513,23 @@ class AI_Site_Connector_Media_Audit {
 		$filename_groups = array();
 		$hash_groups     = array();
 		if ( $complete ) {
+			// Visibility and existence are rechecked now: the scan may have
+			// started under broader permissions, and attachments may have been
+			// deleted since they were stat'ed.
+			$ids = array_unique( array_merge( array_keys( $state['names'] ), array_keys( $state['hashes'] ), array_keys( $state['unread'] ) ) );
+			if ( $ids ) {
+				_prime_post_caches( array_map( 'intval', $ids ), false, false );
+			}
+			foreach ( $ids as $id ) {
+				$att = get_post( (int) $id );
+				if ( ! $att || 'attachment' !== $att->post_type ) {
+					unset( $state['names'][ $id ], $state['hashes'][ $id ] );
+					$state['unread'][ $id ] = 'deleted';
+				} elseif ( ! AI_Site_Connector_Export::can_read_attachment( $att ) ) {
+					unset( $state['names'][ $id ], $state['hashes'][ $id ], $state['unread'][ $id ] );
+					++$state['omitted'];
+				}
+			}
 			$by_exact   = array();
 			$by_variant = array();
 			foreach ( $state['names'] as $id => $base ) {
@@ -562,11 +595,14 @@ class AI_Site_Connector_Media_Audit {
 		);
 		$large = array_values( array_unique( array_map( 'intval', $state['large'] ) ) );
 		sort( $large );
+		$pending  = isset( $state['qpos'] ) ? array_slice( $state['queue'], (int) $state['qpos'] ) : $state['queue'];
 		$unhashed = array();
-		foreach ( $state['queue'] as $q ) {
-			$unhashed[] = (int) $q[0];
+		if ( $complete ) {
+			foreach ( $pending as $q ) {
+				$unhashed[] = (int) $q[0];
+			}
+			sort( $unhashed );
 		}
-		sort( $unhashed );
 
 		return array(
 			'generated_at'          => gmdate( 'c' ),
@@ -581,6 +617,7 @@ class AI_Site_Connector_Media_Audit {
 			'hashed_files'          => count( $state['hashes'] ),
 			'hashed_bytes'          => (int) $state['hashed_b'],
 			'hash_budget_exhausted' => ! $complete && 'hash' === $state['phase'],
+			'unhashed_count'        => count( $pending ),
 			'unhashed'              => $unhashed,
 			'skipped_large'         => $large,
 			'scope'                 => $complete
@@ -596,7 +633,7 @@ class AI_Site_Connector_Media_Audit {
 	 * @return array|WP_Error
 	 */
 	private static function load_scan( $scan_id ) {
-		if ( ! preg_match( '/^[0-9]{14}-[A-Za-z0-9]{8}$/', $scan_id ) ) {
+		if ( ! preg_match( '/^[0-9]{14}-[A-Za-z0-9]{8}-u[0-9]+$/', $scan_id ) ) {
 			return self::invalid( 'scan_id', 'Invalid scan_id.' );
 		}
 		$state = get_option( self::DUP_STATE_PREFIX . $scan_id, null );
@@ -614,20 +651,25 @@ class AI_Site_Connector_Media_Audit {
 		return $state;
 	}
 
+	/**
+	 * @return true|WP_Error
+	 */
 	private static function save_scan( $scan_id, array $state ) {
 		$key = self::DUP_STATE_PREFIX . $scan_id;
-		if ( false === get_option( $key, false ) ) {
-			add_option( $key, $state, '', 'no' );
-		} else {
-			update_option( $key, $state, false );
+		$ok  = false === get_option( $key, false ) ? add_option( $key, $state, '', 'no' ) : update_option( $key, $state, false );
+		$chk = $ok ? get_option( $key, null ) : null;
+		if ( ! is_array( $chk ) || (int) $chk['last_id'] !== (int) $state['last_id'] || ( isset( $state['qpos'] ) && (int) $chk['qpos'] !== (int) $state['qpos'] ) ) {
+			delete_option( $key );
+			return new WP_Error( 'asc_scan_state_failed', 'Could not store the duplicate scan progress (the library may be too large for this database configuration).', array( 'status' => 507 ) );
 		}
+		return true;
 	}
 
 	/**
 	 * Drop the state of an unfinished scan (e.g. when a caller gives up).
 	 */
 	public static function abandon_scan( $scan_id ) {
-		if ( preg_match( '/^[0-9]{14}-[A-Za-z0-9]{8}$/', (string) $scan_id ) ) {
+		if ( preg_match( '/^[0-9]{14}-[A-Za-z0-9]{8}-u[0-9]+$/', (string) $scan_id ) ) {
 			delete_option( self::DUP_STATE_PREFIX . $scan_id );
 		}
 	}
@@ -635,13 +677,19 @@ class AI_Site_Connector_Media_Audit {
 	/**
 	 * Remove expired scan states.
 	 */
-	private static function prune_scans() {
+	/**
+	 * Remove expired scan states (age read from the option name, without
+	 * loading the state) and any earlier scan by the same user: one live scan
+	 * per user bounds storage.
+	 */
+	private static function prune_scans( $user_id ) {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-		$names = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s LIMIT 100", $wpdb->esc_like( self::DUP_STATE_PREFIX ) . '%' ) );
+		$names = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( self::DUP_STATE_PREFIX ) . '%' ) );
 		foreach ( (array) $names as $name ) {
-			$state = get_option( $name, null );
-			if ( ! is_array( $state ) || time() - (int) $state['created'] > self::DUP_STATE_TTL ) {
+			$id      = substr( (string) $name, strlen( self::DUP_STATE_PREFIX ) );
+			$created = strtotime( substr( $id, 0, 4 ) . '-' . substr( $id, 4, 2 ) . '-' . substr( $id, 6, 2 ) . ' ' . substr( $id, 8, 2 ) . ':' . substr( $id, 10, 2 ) . ':' . substr( $id, 12, 2 ) . ' UTC' );
+			if ( ! $created || time() - $created > self::DUP_STATE_TTL || '-u' . (int) $user_id === substr( $id, strrpos( $id, '-u' ) ) ) {
 				delete_option( $name );
 			}
 		}

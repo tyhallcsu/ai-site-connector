@@ -789,7 +789,12 @@ class AI_Site_Connector_CLI {
 	public function media_duplicates( $args, $assoc ) {
 		$format = self::format( $assoc, array( 'table', 'json' ) );
 		$scan_id = '';
+		$calls   = 0;
 		do {
+			if ( ++$calls > 1000 ) {
+				AI_Site_Connector_Media_Audit::abandon_scan( $scan_id );
+				WP_CLI::error( 'Duplicate scan did not complete within 1000 calls.' );
+			}
 			$result = AI_Site_Connector_Media_Audit::duplicates(
 				array(
 					'scan_id'  => $scan_id,

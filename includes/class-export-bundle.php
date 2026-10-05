@@ -225,6 +225,16 @@ class AI_Site_Connector_Export_Bundle {
 				}
 				if ( ! $res['complete'] ) {
 					AI_Site_Connector_Media_Audit::abandon_scan( $scan_id );
+					// Progress fields depend on wall-clock speed; a fixed stub
+					// keeps the manifest deterministic.
+					$res = array(
+						'complete'    => false,
+						'truncated'   => true,
+						'scope'       => 'Scan did not complete within this export\'s bounds; run wp ai-connector media-duplicates for a complete result.',
+						'by_filename' => array(),
+						'by_hash'     => array(),
+						'unreadable'  => array(),
+					);
 				}
 				unset( $res['scan_id'], $res['calls'] );
 				return array(

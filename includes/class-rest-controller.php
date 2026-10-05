@@ -704,7 +704,7 @@ class AI_Site_Connector_REST_Controller {
 					),
 					'scan_id'        => array(
 						'type'        => 'string',
-						'pattern'     => '^([0-9]{14}-[A-Za-z0-9]{8})?$',
+						'pattern'     => '^([0-9]{14}-[A-Za-z0-9]{8}-u[0-9]+)?$',
 						'default'     => '',
 						'description' => 'Continue a scan; omit to start one. Repeat until complete is true.',
 					),

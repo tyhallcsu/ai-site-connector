@@ -73,9 +73,14 @@ services:
     # The CLI image's www-data is uid 82; match the Apache image's uid 33 so
     # files WP-CLI writes stay writable by the web server.
     user: "33:33"
+    # Share the web container's network so http://localhost:PORT (the site
+    # URL) reaches Apache from WP-CLI too, e.g. `wp ai-connector self-test`.
+    network_mode: "service:wordpress"
     depends_on:
       db:
         condition: service_healthy
+      wordpress:
+        condition: service_started
     environment: *wp-env
     volumes:
       - wp:/var/www/html

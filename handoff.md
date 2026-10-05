@@ -1,18 +1,18 @@
 # Handoff — AI Site Connector
 
-**Updated:** 2026-10-05 ~21:50 UTC (15:50 America/Denver) · **State:** v0.12.2 released and verified; closeout done; paused for the owner · **Mode:** continuous low-usage (single agent; new features stay in backlog) · **Session:** `asc-dev-audit-ship`
+**Updated:** 2026-10-05 ~22:30 UTC (16:30 America/Denver) · **State:** 0.12.3 release prep (P1 fixes #114, #119 merged in #134) · **Mode:** continuous low-usage (single agent; new features stay in backlog) · **Session:** `asc-dev-audit-ship`
 **Repo:** tyhallcsu/ai-site-connector (public, standalone — the parent `ess-custom-plugins` dir is not a repo)
 **Primary checkout:** `/Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector`. Its local `main` is at `16f5816`, 5 commits behind `origin/main` (read from its refs 21:48 UTC; not modified by this session; fast-forward before use)
-**Session worktree:** `.claude/worktrees/asc-dev-audit-ship` · branch `docs/checkpoint-0.12.2` (this checkpoint); no other branches of this session on origin
+**Session worktree:** `.claude/worktrees/asc-dev-audit-ship` · branch `chore/release-0.12.3` (release prep)
 **Rules:** `docs/development/OPERATING_BRIEF.md` · **Dev site:** `docs/development/DEV_SITE.md` · **Plan:** `docs/development/ROADMAP.md` · **Log:** `docs/development/WORK_LOG.md`
 
 ## Verified state
 
 | Item | Value | Evidence |
 |------|-------|----------|
-| `origin/main` | `72e268e` — chore(release): v0.12.2 (#115) | `gh pr view 115` merge commit |
+| `origin/main` | `422f953` — #134 safe rollback + namespaced MCP URLs, on `843ffec` | `gh pr view 134` merge commit |
 | Latest release | **v0.12.2** → tag on `72e268e`; stable; `releases/latest`; ZIP 1,132,005 B, sha256 `826eba73…4e8e` (checksum, version, contents verified) | release run 37377593413; `gh release view` |
-| Unreleased on main | nothing besides docs | commits since tag v0.12.2 |
+| Unreleased on main | #134 (fixes P1 #114, #119) → v0.12.3 prepared in this PR | commits since tag v0.12.2 |
 | Dev site | http://localhost:8790 — **published v0.12.2** (`72e268e`), upgraded from published v0.12.1; 70 files verified; `audit` 22/22 clean; CLI self-test 6/6 | `bin/dev-site.sh status` / `audit` 21:44 UTC |
 | CI | GitHub CI verified: `15b43de` run 37375258741 19/19; release PR head `f91972d` run 37377009311 19/19 (upgrade v0.12.1 → v0.12.2); `72e268e` run 37377306710 19/19. Earlier outage-time merges used owner-authorized local CI (one-off exception) | `gh run view` |
 | Remote dev target | none exists — owner decision tracked in #97 | config/registry search |
@@ -64,9 +64,9 @@
 
 ## Next three actions
 
-1. Next patch (0.12.3): the P1s filed by the other session, #114 (rollback validation) and #119 (connection-pack MCP URLs). Check with that session/owner before taking them, then a focused PR each with tests.
-2. Owner decisions still open: #97 (remote dev site?), #99 (required checks on main).
-3. Backlog (not auto-implemented): #101 #106 #108 #109 #125, plus the other session's P2/P3 issues #111–#113, #116–#118, #120–#124.
+1. Release-prep PR for 0.12.3: CI green on its head → squash-merge → wait for main CI 19/19 on the merge SHA (the publisher requires it) → `git tag -a v0.12.3` → push the tag.
+2. Verify the published asset; on dev, `deploy --release v0.12.3`, run the UI rollback round trip with a verified 0.12.2 backup plus a hidden partial one, and check the generated MCP URL initializes over HTTP.
+3. Owner decisions #97, #99. Backlog: #101 #106 #108 #109 #125 and the other session's P2/P3 issues #111–#113, #116–#118, #120–#124.
 
 Resume: `cd <worktree> && git fetch && gh pr list -R tyhallcsu/ai-site-connector && bin/dev-site.sh status`
 

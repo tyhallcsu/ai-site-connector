@@ -2,6 +2,23 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-05 — P1 fixes #114 and #119 (0.12.3 prep)
+
+- PR #134 → `422f953` (closes #114, #119). PR CI run 37379827867 on
+  `e66518f`: 19/19. Integration 97 passed / 0 failed on WP latest
+  (PHP 8.3) and 5.6/6.5/6.8/6.9/7.0 (PHP 8.0); the 6 new cases inject copy
+  failures, partial/empty/staging/tampered backups and a full rollback
+  round trip, and initialize MCP through a generated snippet's route.
+  PHPUnit 40 OK.
+- Found while fixing: the old `pre_install` created the backup base dir
+  non-recursively, so the first backup on a site without
+  `wp-content/upgrade-backups` failed. Now created with `wp_mkdir_p()`.
+  Backups made by 0.12.2 and earlier code during an upgrade can still be
+  missing for that reason.
+- Single-agent self-review (low-usage mode, no reviewer agent) added a
+  symlinked-install refusal and an exact recovery message for a failed
+  restore rename.
+
 ## 2026-10-05 — v0.12.2 released
 
 - PR #115 → `72e268e`. PR CI run 37377009311 on head `f91972d`: 19/19.

@@ -221,6 +221,19 @@ jobs:
       - name: Build and inspect release ZIP
         run: tests/package-smoke.sh
 
+      # Same commit, same bytes (#101): rebuild after changing every file's
+      # time and require an identical archive. The printed sha256 can be
+      # compared with a build of the same commit on another machine.
+      - name: Reproducible ZIP
+        run: |
+          set -e
+          first="$(bin/build-release-zip.sh | tail -n1)"
+          cp "$first" /tmp/asc-first.zip
+          find . -path ./.git -prune -o -type f -exec touch {} +
+          second="$(bin/build-release-zip.sh | tail -n1)"
+          cmp /tmp/asc-first.zip "$second"
+          sha256sum "$second"
+
   zip-install-upgrade:
     # Installs the built ZIP into a fresh site, then upgrades the previous
     # published release ZIP to it — catches packaging and upgrade breakage

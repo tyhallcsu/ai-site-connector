@@ -10,7 +10,7 @@
 
 ## What this bridge does
 
-A small Node 18+ stdio MCP server that forwards every `tools/call` to the plugin's HTTP MCP endpoint (`POST /wp-json/ai-site-connector/v1/mcp`) via Basic Auth. Functionally equivalent to `npx -y mcp-remote <url> --header Authorization:Basic ...`, but the source is in-tree so you can clone, modify, and run it locally.
+A small Node 18+ stdio MCP server that forwards `tools/list` and every `tools/call` to the plugin's HTTP MCP endpoint (`POST /wp-json/ai-site-connector/v1/mcp`, or the pack's `mcp_endpoint`) via Basic Auth. The tool list comes from the site itself, so every tool the plugin offers (including safe content update and rollback) is available with its real schema. Functionally equivalent to `npx -y mcp-remote <url> --header Authorization:Basic ...`, but the source is in-tree so you can clone, modify, and run it locally. `npm test` runs the bridge contract test against a mock server.
 
 ## Requirements
 

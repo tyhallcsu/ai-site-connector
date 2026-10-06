@@ -64,6 +64,7 @@ class AI_Site_Connector_Diagnostics {
 				'permalink_structure' => (string) get_option( 'permalink_structure', '' ),
 				'https'       => AI_Site_Connector_Plugin::is_https(),
 				'app_passwords_available' => AI_Site_Connector_Plugin::app_passwords_available(),
+				'app_passwords_blocked_by' => self::app_passwords_blocked_by(),
 				'db_version'  => isset( $wpdb->db_version ) ? $wpdb->db_version() : '',
 			),
 			'php'           => array(
@@ -1138,7 +1139,7 @@ class AI_Site_Connector_Diagnostics {
 			return array(
 				'status' => 'fail',
 				'code'   => 'app_passwords_unavailable',
-				'hint'   => __( 'Application Passwords are not available on this site (HTTPS, environment type, or a security plugin disabled them).', 'ai-site-connector' ),
+				'hint'   => self::app_passwords_unavailable_hint(),
 			);
 		}
 		$created = AI_Site_Connector_Application_Passwords::create_for_user( $user->ID, 'AI Site Connector live check - ' . gmdate( 'Y-m-d H:i:s' ) );
@@ -1178,5 +1179,19 @@ class AI_Site_Connector_Diagnostics {
 			)
 		);
 		return $result;
+	}
+
+	/** Confirmed source blocking Application Passwords (#133), or null. */
+	private static function app_passwords_blocked_by() {
+		$blocker = AI_Site_Connector_Plugin::app_passwords_blocker();
+		return $blocker ? $blocker['source'] : null;
+	}
+
+	/** Why Application Passwords are unavailable, with the fix when known (#133). */
+	private static function app_passwords_unavailable_hint() {
+		$blocker = AI_Site_Connector_Plugin::app_passwords_blocker();
+		return $blocker
+			? $blocker['message'] . ' ' . $blocker['fix']
+			: __( 'Application Passwords are not available on this site (HTTPS, environment type, or a security plugin disabled them).', 'ai-site-connector' );
 	}
 }

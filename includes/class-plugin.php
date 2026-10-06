@@ -174,6 +174,32 @@ class AI_Site_Connector_Plugin {
 		return activate_plugin( AI_SITE_CONNECTOR_BASENAME, '', ! empty( $state['network'] ), (bool) $silent );
 	}
 
+	/**
+	 * Why Application Passwords are unavailable, when the cause can be
+	 * confirmed (#133). Today that is Wordfence's "Disable WordPress
+	 * application passwords" option (loginSec_disableApplicationPasswords),
+	 * which hooks wp_is_application_passwords_available to false. Brute
+	 * Force Protection alone is never reported as the cause. Returns null
+	 * when passwords are available or the cause is unknown.
+	 *
+	 * @return array{source:string, message:string, fix:string, settings_url:string, doc_url:string}|null
+	 */
+	public static function app_passwords_blocker() {
+		if ( self::app_passwords_available() ) {
+			return null;
+		}
+		if ( class_exists( 'wfConfig' ) && is_callable( array( 'wfConfig', 'get' ) ) && wfConfig::get( 'loginSec_disableApplicationPasswords' ) ) {
+			return array(
+				'source'       => 'wordfence',
+				'message'      => __( 'Wordfence is blocking Application Passwords: its "Disable WordPress application passwords" option is on.', 'ai-site-connector' ),
+				'fix'          => __( 'In Wordfence → All Options → Brute Force Protection, uncheck "Disable WordPress application passwords", save, then reload this page. Only that one option needs to change.', 'ai-site-connector' ),
+				'settings_url' => admin_url( 'admin.php?page=WordfenceWAF&subpage=waf_options#wf-option-loginSec-disableApplicationPasswords-label' ),
+				'doc_url'      => 'https://www.wordfence.com/help/firewall/brute-force/#disable-wordpress-application-passwords',
+			);
+		}
+		return null;
+	}
+
 	public static function app_passwords_available() {
 		return class_exists( 'WP_Application_Passwords' )
 			&& function_exists( 'wp_is_application_passwords_available' )

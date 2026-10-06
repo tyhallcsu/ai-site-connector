@@ -2,6 +2,31 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-06 — v0.13.1 released; #97 and #99 decided
+
+- PR #160 → `345ffc6`; PR CI run 37491800393 20/20 (ZIP install +
+  upgrade v0.13.0 → v0.13.1; integration 117/117 on 6 WordPress builds);
+  main CI run 37492125903 20/20. Tag `v0.13.1` → `345ffc6`; release run
+  37492378604 succeeded; stable; `releases/latest` = v0.13.1. Asset:
+  313,205 B, sha256
+  `4fa08c24776e734bdc77fd1b3995310e75c8e46c15ca7c450931a8e6bfb6bd4e`,
+  69 files, embeds 0.13.1, no `assets/brand/`, no dev paths. A local
+  rebuild from the tag archive gave the same sha256. #125 and #131
+  commented.
+- Dev site: deployed v0.13.1 (same sha256); audit all tabs clean. Header
+  logo `…mark-128.png?ver=0.13.1`: natural 128×128, rendered 64×64 at 2×,
+  HTTP 200, 7,593 B.
+- #97 (owner ticked "no remote target"): PR #161 → `9331959` records the
+  local instance as the canonical dev target in `DEV_SITE.md`; closed.
+- #99 (owner: "stop this being a blocker"): PR #161 adds a `CI gate` job.
+  It needs all 11 job groups, runs with `if: always()`, and fails unless
+  all succeeded. CI was 21/21, and the gate printed every result.
+  - Classic protection on `main` then requires `CI gate` (GitHub Actions,
+    app 15368). Branches needn't be up to date, there are no required
+    reviews, admins aren't enforced, and force pushes and deletions are
+    off. `OPERATING_BRIEF.md` states this.
+  - Undo: `gh api -X DELETE repos/tyhallcsu/ai-site-connector/branches/main/protection`.
+
 ## 2026-10-06 — #131 decided; #125 ZIP size fixed (unreleased)
 
 - Owner, on #131: the approved icon is "the newer one". That is the

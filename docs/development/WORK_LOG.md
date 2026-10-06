@@ -2,6 +2,21 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-06 — Multisite, bridge and docs fixes (0.12.5 prep)
+
+- PR #141 → `f73220f` (closes #130, #132): CI 20/20, including the new
+  "Multisite activation" job (two-site network; 9 checks on update
+  reactivation and the rollback round trip; plugin ends active-network).
+- PR #142 → `7c6d5a9` (closes #129): CI 20/20, integration 105/105; the
+  multisite job confirms each site serves its own OpenAPI server URL.
+- PR #143 → `ed0de94` (closes #112): CI 20/20; the bridge contract test
+  passes in CI (2/2) and failed 2/2 against the old bridge locally
+  (red before green).
+- #128 closed as already fixed by #134 (v0.12.3); evidence on the issue.
+  #131 is waiting for the owner to name the approved icon file.
+- Dev site still on v0.12.3: Docker Desktop has been unresponsive since
+  the disk-full episode and needs an owner restart.
+
 ## 2026-10-06 — v0.12.4 released
 
 - PR #139 → `dba1914`; PR CI run 37398279040 19/19 (ZIP install +

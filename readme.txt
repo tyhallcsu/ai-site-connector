@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.12.4
+Stable tag: 0.12.5
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,11 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.12.5 =
+* Fixed (Multisite): network activation survives self-updates and rollbacks; each site's OpenAPI document names its own endpoint.
+* Fixed: the bundled stdio MCP bridge lists every tool the site offers and honours the pack's mcp_endpoint.
+* Fixed: Docs tab no longer shows a stale version label.
+
 = 0.12.4 =
 * Fixed: content updates refuse wrong-typed SEO values instead of deleting the existing metadata.
 * Fixed: legacy MCP post tools report failed REST calls as errors and refuse unknown post types instead of creating blog posts.

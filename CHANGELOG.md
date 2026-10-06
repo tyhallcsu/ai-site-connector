@@ -6,6 +6,32 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.12.5] - 2026-10-06
+
+Patch: Multisite fixes and a complete tool catalog in the bundled stdio
+bridge. No REST, MCP or database contract changes.
+
+### Fixed
+
+- Multisite (#130): a network-activated plugin stays network-activated
+  through a self-update or a rollback started from any site's Tools page.
+  It used to come back active on only that one site.
+- Multisite (#129): each site's `openapi.json` names its own REST endpoint.
+  The cached document used to be shared network-wide, so a site could
+  advertise another site's URL for up to an hour.
+- Stdio bridge (#112): `examples/mcp-server` now lists the tools the site
+  actually offers (all 20, including safe content update and rollback)
+  instead of a hard-coded 9. It also honours a pack's `mcp_endpoint`.
+- Docs tab (#132): the Features link no longer carries a stale "(v0.2.0)"
+  label.
+
+### Testing
+
+- New CI job "Multisite activation": a two-site network checks
+  update/rollback activation scope and per-site OpenAPI documents.
+- The bridge contract test runs the real bridge against a mock MCP
+  endpoint.
+
 ## [0.12.4] - 2026-10-06
 
 Patch: seven fixes from an independent code audit. **Behaviour changes:**

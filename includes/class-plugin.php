@@ -141,6 +141,37 @@ class AI_Site_Connector_Plugin {
 		return false;
 	}
 
+	/**
+	 * Whether this plugin is active, and whether network-wide, so an update
+	 * or rollback can restore the same scope afterwards (#130).
+	 *
+	 * @return array{active:bool, network:bool}
+	 */
+	public static function activation_state() {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		$network = is_multisite() && is_plugin_active_for_network( AI_SITE_CONNECTOR_BASENAME );
+		return array(
+			'active'  => $network || is_plugin_active( AI_SITE_CONNECTOR_BASENAME ),
+			'network' => $network,
+		);
+	}
+
+	/**
+	 * Re-activate with the scope recorded by activation_state(). A no-op
+	 * when the plugin was inactive before.
+	 *
+	 * @param array{active:bool, network:bool} $state  Recorded state.
+	 * @param bool                             $silent Skip activation hooks.
+	 * @return true|WP_Error|null
+	 */
+	public static function restore_activation( array $state, $silent ) {
+		if ( empty( $state['active'] ) ) {
+			return null;
+		}
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		return activate_plugin( AI_SITE_CONNECTOR_BASENAME, '', ! empty( $state['network'] ), (bool) $silent );
+	}
+
 	public static function app_passwords_available() {
 		return class_exists( 'WP_Application_Passwords' )
 			&& function_exists( 'wp_is_application_passwords_available' )

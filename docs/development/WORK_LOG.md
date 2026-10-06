@@ -2,6 +2,24 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-06 — v0.12.4 released
+
+- PR #139 → `dba1914`; PR CI run 37398279040 19/19 (ZIP install +
+  upgrade v0.12.3 → v0.12.4; integration 104/104 on 6 WordPress builds);
+  main CI run 37398509090 19/19. Tag `v0.12.4` → `dba1914`; release run
+  37398690817 succeeded; stable; `releases/latest` = v0.12.4. Asset
+  `ai-site-connector-v0.12.4.zip`: 1,138,034 B, sha256
+  `6c4a4e78ce8a70bf95816405ccad5b3cd0c904819ec139522c14cca5d2e5e74c`;
+  checksum OK, embeds 0.12.4, 70 files, no dev paths, fixes present.
+  Shipped issues commented.
+- Dev deploy not done: Docker Desktop stopped responding (`docker ps`
+  hangs) after the earlier disk-full episode. The deploy was stopped
+  before it changed anything; dev stays on v0.12.3. Pending owner restart
+  of Docker. Then: `deploy --release v0.12.4`, `audit`, and HTTP checks:
+  `wp_get_post` with a nonexistent id must return isError/404 (#111),
+  `post_type=pages` must return asc_unsupported_post_type (#118), and
+  openapi.json `/content/snapshots/{id}` must have `id` in path (#120).
+
 ## 2026-10-06 — P2 batch from the second audit (0.12.4 prep)
 
 - PR #137 → `6e02b3a` (closes #117, #111, #118): CI 19/19, integration

@@ -10,18 +10,19 @@ The illustrated README now uses three generated PNGs documented in [README artwo
 
 ## Files
 
-- `assets/brand/ai-site-connector-mark.svg` — **runtime asset.** Compact square mark for admin UI; loaded by the Tools → AI Site Connector page header. Must be present in the plugin install or the admin header image will be broken (PHP still works fine).
+- `assets/ai-site-connector-mark-128.png` — **runtime asset** (7.6 KB). 128px export of the compact mark, shown at 64px (sharp on 2× displays) in the Tools → AI Site Connector page header. It is the only brand image in the plugin install.
+- `assets/brand/ai-site-connector-mark.svg` — compact square mark, the source of the PNG exports. Repo display and the updater's `svg` icon (served from GitHub).
 - `assets/brand/ai-site-connector-logo.svg` — horizontal logo with the AI Site Connector wordmark. Repo display only.
 - `assets/brand/ai-site-connector-readme-banner.svg` — README banner with the tagline "Secure REST API access for AI coding agents". Repo display only.
 - `assets/brand/ai-site-connector-logo-512.png` — optional 512px PNG export of the compact mark. Repo display only; excluded from the plugin install ZIP.
 - `assets/brand/ai-site-connector-logo-256.png` — optional 256px PNG export of the compact mark. Repo display only; excluded from the plugin install ZIP.
 - `assets/brand/ai-site-connector-banner.png` — optional PNG export of the README banner. Repo display only; excluded from the plugin install ZIP.
 
-The release ZIP build script (`bin/build-release-zip.sh`) bundles the SVG files and excludes only the optional PNG exports, while the self-contained SVG mark embeds the 512px generated PNG for offline admin rendering. It is a raster-backed SVG, not resolution-independent vector artwork.
+The release ZIP build script (`bin/build-release-zip.sh`) excludes all of `assets/brand/` (#125). Each SVG embeds a 512px PNG (about 375 KB), not resolution-independent vector artwork, so shipping them made the ZIP four times larger. `tests/package-smoke.sh` enforces a 400 KiB ZIP budget and a 20 KiB header mark.
 
 ## Usage Notes
 
-- Use the self-contained SVG for the existing runtime path and PNG exports for updater/plugin-details surfaces. The embedded icon has a native resolution of 512px.
+- Use `assets/ai-site-connector-mark-128.png` at runtime and the PNG exports for updater/plugin-details surfaces. The embedded icon has a native resolution of 512px. Regenerate the runtime PNG from the 512px export: `magick assets/brand/ai-site-connector-logo-512.png -resize 128x128 assets/ai-site-connector-mark-128.png`, then `pngquant --quality=88-99` and `oxipng -o max --strip all`.
 - Use the compact mark when the available space is square or narrow.
 - Use the README banner at the top of repo documentation or social preview contexts where a wide aspect ratio is useful.
 - Keep sufficient whitespace around the mark so the connection links remain legible.

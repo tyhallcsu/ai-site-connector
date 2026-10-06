@@ -65,9 +65,7 @@ require_file 'ai-site-connector/includes/class-mcp-server.php'
 require_file 'ai-site-connector/includes/class-wp-cli.php'
 require_file 'ai-site-connector/assets/admin.css'
 require_file 'ai-site-connector/assets/admin.js'
-require_file 'ai-site-connector/assets/brand/ai-site-connector-mark.svg'
-require_file 'ai-site-connector/assets/brand/ai-site-connector-logo.svg'
-require_file 'ai-site-connector/assets/brand/ai-site-connector-readme-banner.svg'
+require_file 'ai-site-connector/assets/ai-site-connector-mark-128.png'
 require_file 'ai-site-connector/scripts/diagnose-hosting-auth.sh'
 require_file 'ai-site-connector/readme.txt'
 require_file 'ai-site-connector/README.md'
@@ -85,7 +83,7 @@ forbid_path 'ai-site-connector/dist/'
 forbid_path 'ai-site-connector/composer\.(json|lock)$'
 forbid_path 'ai-site-connector/phpcs\.xml'
 forbid_path 'ai-site-connector/TESTING_CHECKLIST\.md$'
-forbid_path 'ai-site-connector/assets/brand/.*\.png$'
+forbid_path 'ai-site-connector/assets/brand/'
 forbid_path 'ai-site-connector/(connection-pack\.json|[^/]+-connection-pack\.json|.*\.connection-pack\.json)$'
 forbid_path 'ai-site-connector/\.env'
 forbid_path 'ai-site-connector/handoff\.md$'
@@ -100,6 +98,18 @@ if [ -n "$unexpected" ]; then
 	exit 1
 fi
 forbid_path 'ai-site-connector/docs/development/'
+
+# Size budget (#125): brand sources once made the ZIP 4x larger.
+ZIP_BYTES="$(wc -c < "$ZIP_PATH" | tr -d '[:space:]')"
+if [ "$ZIP_BYTES" -gt 409600 ]; then
+	echo "Release ZIP is $ZIP_BYTES bytes; the budget is 400 KiB (#125)." >&2
+	exit 1
+fi
+MARK_BYTES="$(unzip -p "$ZIP_PATH" ai-site-connector/assets/ai-site-connector-mark-128.png | wc -c | tr -d '[:space:]')"
+if [ "$MARK_BYTES" -gt 20480 ]; then
+	echo "Admin header mark is $MARK_BYTES bytes; the budget is 20 KiB (#125)." >&2
+	exit 1
+fi
 
 VERSION="$(
 	grep -E '^[[:space:]]*\*[[:space:]]*Version:' "$ROOT_DIR/ai-site-connector.php" \

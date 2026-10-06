@@ -545,7 +545,8 @@ RewriteRule .* - [E=HTTP_AUTHORIZATION:%1]
 
 The illustrated README uses `readme-hero.png`, `readme-connect.png`, and `readme-control.png`. These are conceptual artwork, not product screenshots. The plugin uses a matching mint-and-cyan connection icon across admin and updater surfaces. [Artwork provenance](docs/README_ARTWORK.md).
 
-- `assets/brand/ai-site-connector-mark.svg` — compact icon/mark; **shipped at runtime** (rendered by the Tools → AI Site Connector admin page header).
+- `assets/ai-site-connector-mark-128.png` — compact icon/mark at 128px; **shipped at runtime** (the Tools → AI Site Connector admin page header). `assets/brand/` holds the sources and is not shipped in the plugin ZIP.
+- `assets/brand/ai-site-connector-mark.svg` — compact icon/mark source.
 - `assets/brand/ai-site-connector-logo.svg` — horizontal logo with wordmark; for README, repo, social previews.
 - `assets/brand/ai-site-connector-readme-banner.svg` — README banner with the tagline "Secure REST API access for AI coding agents".
 - `assets/brand/ai-site-connector-logo-256.png` / `-logo-512.png` / `-banner.png` — optional PNG exports for surfaces that don't render SVG (excluded from the plugin install ZIP to keep the distribution lean).

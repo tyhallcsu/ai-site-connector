@@ -63,7 +63,7 @@ rsync -a \
 	--exclude='phpcs.xml' \
 	--exclude='phpunit.xml' \
 	--exclude='phpunit.xml.dist' \
-	--exclude='assets/brand/*.png' \
+	--exclude='assets/brand/' \
 	--exclude='TESTING_CHECKLIST.md' \
 	--exclude='/handoff.md' \
 	--exclude='/docs/development/' \

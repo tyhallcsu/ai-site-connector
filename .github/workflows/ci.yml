@@ -123,6 +123,7 @@ jobs:
             includes/class-diagnostics.php \
             assets/admin.css \
             assets/admin.js \
+            assets/ai-site-connector-mark-128.png \
             assets/brand/ai-site-connector-mark.svg \
             assets/brand/ai-site-connector-logo.svg \
             assets/brand/ai-site-connector-readme-banner.svg \

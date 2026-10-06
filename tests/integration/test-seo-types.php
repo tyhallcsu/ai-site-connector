@@ -14,7 +14,7 @@ asc_it(
 		update_post_meta( $post, 'rank_math_title', 'Keep me' );
 		try {
 			asc_it_as_seo_plugin(
-				'rank_math',
+				'rankmath',
 				function () use ( $post ) {
 					$bad_values = array(
 						'object' => (object) array( 'unexpected' => 'object' ),

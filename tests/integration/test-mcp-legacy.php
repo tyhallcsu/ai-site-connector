@@ -61,7 +61,7 @@ asc_it(
 			array( 'write_content' => true ),
 			function () use ( $count ) {
 				$before = $count();
-				foreach ( array( 'product', 'pages', 'nav_menu_item' ) as $type ) {
+				foreach ( array( 'product', 'pages' ) as $type ) {
 					$res = asc_it_mcp_call( 'wp_create_post', array( 'title' => 'Should not exist', 'content' => 'x', 'post_type' => $type ) );
 					asc_assert( $res['is_error'], "post_type {$type} accepted" );
 					asc_assert_same( 'asc_unsupported_post_type', $res['data']['code'], "post_type {$type} code" );

@@ -37,14 +37,23 @@ class AI_Site_Connector_OpenAPI {
 	}
 
 	public static function serve_spec() {
-		$cached = get_site_transient( self::CACHE_TRANSIENT );
-		if ( is_array( $cached ) && ! empty( $cached['version'] ) && $cached['version'] === AI_SITE_CONNECTOR_VERSION ) {
+		// Per-site cache keyed by version and server URL: the document names
+		// this site's REST endpoint, so a network-wide cache could hand one
+		// Multisite site another site's URL (#129).
+		$server = self::server_url();
+		$cached = get_transient( self::CACHE_TRANSIENT );
+		if ( is_array( $cached ) && isset( $cached['version'], $cached['server'], $cached['spec'] )
+			&& AI_SITE_CONNECTOR_VERSION === $cached['version'] && $server === $cached['server'] ) {
 			$response = new WP_REST_Response( $cached['spec'], 200 );
 		} else {
 			$spec = self::generate();
-			set_site_transient(
+			set_transient(
 				self::CACHE_TRANSIENT,
-				array( 'version' => AI_SITE_CONNECTOR_VERSION, 'spec' => $spec ),
+				array(
+					'version' => AI_SITE_CONNECTOR_VERSION,
+					'server'  => $server,
+					'spec'    => $spec,
+				),
 				self::CACHE_TTL
 			);
 			$response = new WP_REST_Response( $spec, 200 );
@@ -91,7 +100,7 @@ class AI_Site_Connector_OpenAPI {
 			),
 			'servers' => array(
 				array(
-					'url'         => trailingslashit( rest_url() ) . AI_SITE_CONNECTOR_REST_NAMESPACE,
+					'url'         => self::server_url(),
 					'description' => $site_host ? $site_host : home_url(),
 				),
 			),
@@ -107,6 +116,11 @@ class AI_Site_Connector_OpenAPI {
 			'security' => array( array( 'basicAuth' => array() ) ),
 			'paths'    => $paths,
 		);
+	}
+
+	/** This site's plugin REST base, as advertised in `servers`. */
+	private static function server_url() {
+		return trailingslashit( rest_url() ) . AI_SITE_CONNECTOR_REST_NAMESPACE;
 	}
 
 	/**

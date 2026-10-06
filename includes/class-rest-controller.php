@@ -864,6 +864,11 @@ class AI_Site_Connector_REST_Controller {
 						'type'    => 'string',
 						'default' => '',
 					),
+					'text_diff'             => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'Dry runs only: add a bounded unified diff of the content change.',
+					),
 				),
 			)
 		);
@@ -1319,6 +1324,7 @@ class AI_Site_Connector_REST_Controller {
 			array(
 				'dry_run'               => (bool) $request->get_param( 'dry_run' ),
 				'expected_modified_gmt' => (string) $request->get_param( 'expected_modified_gmt' ),
+				'text_diff'             => (bool) $request->get_param( 'text_diff' ),
 			)
 		);
 		return is_wp_error( $res ) ? $res : rest_ensure_response( $res );

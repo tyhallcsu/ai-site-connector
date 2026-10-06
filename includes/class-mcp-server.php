@@ -331,7 +331,7 @@ class AI_Site_Connector_MCP_Server {
 			),
 			array(
 				'name'        => 'wp_update_content',
-				'description' => 'Safely update one post: title, excerpt, content, slug, status (draft/pending/publish/private), featured_image (attachment id, 0 removes), terms ({taxonomy: [id|slug]}, existing terms only), seo ({title, description, canonical, og_*}). DRY-RUN BY DEFAULT — returns the before/after diff. Set dry_run=false to write (requires the write_content permission; SEO also update_seo); a rollback snapshot_id is returned. Optional expected_modified_gmt for concurrency. Never trashes or deletes.',
+				'description' => 'Safely update one post: title, excerpt, content, slug, status (draft/pending/publish/private), featured_image (attachment id, 0 removes), terms ({taxonomy: [id|slug]}, existing terms only), seo ({title, description, canonical, og_*}). DRY-RUN BY DEFAULT — returns the before/after diff. Set dry_run=false to write (requires the write_content permission; SEO also update_seo); a rollback snapshot_id is returned. Optional expected_modified_gmt for concurrency; text_diff=true (dry runs) adds a bounded unified diff of the content for human review. Never trashes or deletes.',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'post_id', 'changes' ),
@@ -343,6 +343,7 @@ class AI_Site_Connector_MCP_Server {
 							'default' => true,
 						),
 						'expected_modified_gmt' => array( 'type' => 'string' ),
+						'text_diff'             => array( 'type' => 'boolean' ),
 					),
 				),
 			),
@@ -534,7 +535,7 @@ class AI_Site_Connector_MCP_Server {
 			case 'wp_export_bundle':
 				return self::dispatch_checked( 'GET', '/export/bundle', self::pick( $args, array( 'max_items', 'sections' ) ) );
 			case 'wp_update_content':
-				return self::dispatch_checked( 'POST', '/content/update', self::pick( $args, array( 'post_id', 'changes', 'dry_run', 'expected_modified_gmt' ) ) );
+				return self::dispatch_checked( 'POST', '/content/update', self::pick( $args, array( 'post_id', 'changes', 'dry_run', 'expected_modified_gmt', 'text_diff' ) ) );
 			case 'wp_list_content_snapshots':
 				$post_id = isset( $args['post_id'] ) ? (int) $args['post_id'] : 0;
 				if ( $post_id <= 0 ) {

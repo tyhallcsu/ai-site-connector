@@ -1,9 +1,9 @@
 # Dev site runbook
 
 The canonical development target is a persistent **local** WordPress driven by
-[`bin/dev-site.sh`](../../bin/dev-site.sh). No remote dev site exists yet; see
-[#97](https://github.com/tyhallcsu/ai-site-connector/issues/97). Until #97 is
-resolved, "deployed to dev" means this local instance and nothing else.
+[`bin/dev-site.sh`](../../bin/dev-site.sh). The owner decided against a remote
+dev site ([#97](https://github.com/tyhallcsu/ai-site-connector/issues/97),
+2026-10-06), so "deployed to dev" always means this local instance.
 
 | Item | Value |
 |------|-------|

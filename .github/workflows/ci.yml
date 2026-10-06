@@ -442,3 +442,31 @@ jobs:
           wp eval-file "$WP_DIR/wp-content/plugins/ai-site-connector/tests/multisite/activation.php" --path="$WP_DIR" --user=admin
           wp eval-file "$WP_DIR/wp-content/plugins/ai-site-connector/tests/multisite/openapi.php" --path="$WP_DIR" --user=admin
           wp plugin list --path="$WP_DIR" --fields=name,status --format=csv | grep -x 'ai-site-connector,active-network'
+
+  # The one check `main` requires (#99): it passes only when every job listed
+  # in `needs` succeeded. Add new jobs to `needs`; matrix entries and new jobs
+  # need no settings change. It runs even when a job fails or is cancelled,
+  # and then fails itself.
+  ci-gate:
+    name: CI gate
+    if: always()
+    needs:
+      - php-lint
+      - coding-standards
+      - phpunit
+      - structure
+      - assets
+      - security-grep
+      - package-smoke
+      - zip-install-upgrade
+      - wordpress-runtime
+      - wordpress-version-compat
+      - multisite-activation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e 'to_entries | all(.value.result == "success")' > /dev/null

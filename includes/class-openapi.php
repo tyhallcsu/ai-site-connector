@@ -69,7 +69,8 @@ class AI_Site_Connector_OpenAPI {
 				if ( 0 !== strpos( $route, '/' . AI_SITE_CONNECTOR_REST_NAMESPACE . '/' ) ) {
 					continue;
 				}
-				$operations = self::collect_operations( $handlers );
+				preg_match_all( '#\(\?P<([^>]+)>#', $route, $captures );
+				$operations = self::collect_operations( $handlers, $captures[1] );
 				if ( empty( $operations ) ) {
 					continue;
 				}
@@ -108,7 +109,11 @@ class AI_Site_Connector_OpenAPI {
 		);
 	}
 
-	private static function collect_operations( $handlers ) {
+	/**
+	 * @param array    $handlers  Route handlers.
+	 * @param string[] $path_vars Names captured in the route pattern (#120).
+	 */
+	private static function collect_operations( $handlers, array $path_vars = array() ) {
 		$ops = array();
 		foreach ( $handlers as $h ) {
 			if ( ! is_array( $h ) ) {
@@ -124,7 +129,7 @@ class AI_Site_Connector_OpenAPI {
 			}
 			$summary     = isset( $h['summary'] ) ? (string) $h['summary'] : '';
 			$description = isset( $h['description'] ) ? (string) $h['description'] : '';
-			$parameters  = self::args_to_parameters( isset( $h['args'] ) && is_array( $h['args'] ) ? $h['args'] : array(), $methods );
+			$parameters  = self::args_to_parameters( isset( $h['args'] ) && is_array( $h['args'] ) ? $h['args'] : array(), $methods, $path_vars );
 			$op_body     = array(
 				'summary'     => $summary,
 				'description' => $description,
@@ -145,23 +150,30 @@ class AI_Site_Connector_OpenAPI {
 	}
 
 	/**
-	 * Convert args declarations into OpenAPI parameter objects. GET-only
-	 * args go in `query`; POST/PUT/PATCH bodies fall back to query for now
-	 * (existing routes use inline args, no request bodies needed for the
-	 * AI Site Connector namespace).
+	 * Convert args declarations into OpenAPI parameter objects. Arguments
+	 * captured by the route pattern are required `path` parameters (every
+	 * template variable gets one, #120); the rest go in `query` (existing
+	 * routes use inline args, no request bodies).
+	 *
+	 * @param array    $args      Route args.
+	 * @param array    $methods   Enabled methods (unused; kept for callers).
+	 * @param string[] $path_vars Names captured in the route pattern.
 	 */
-	private static function args_to_parameters( array $args, array $methods ) {
+	private static function args_to_parameters( array $args, array $methods, array $path_vars = array() ) {
+		unset( $methods );
 		$out  = array();
-		$in   = isset( $methods['get'] ) || isset( $methods['delete'] ) ? 'query' : 'query';
+		$seen = array();
 		foreach ( $args as $name => $spec ) {
 			if ( ! is_array( $spec ) ) {
 				continue;
 			}
+			$in    = in_array( (string) $name, $path_vars, true ) ? 'path' : 'query';
 			$param = array(
 				'name'     => (string) $name,
 				'in'       => $in,
-				'required' => ! empty( $spec['required'] ),
+				'required' => 'path' === $in || ! empty( $spec['required'] ),
 			);
+			$seen[] = (string) $name;
 			$schema = array();
 			if ( isset( $spec['type'] ) ) {
 				$schema['type'] = is_array( $spec['type'] ) ? reset( $spec['type'] ) : (string) $spec['type'];
@@ -182,6 +194,14 @@ class AI_Site_Connector_OpenAPI {
 				$param['description'] = (string) $spec['description'];
 			}
 			$out[] = $param;
+		}
+		foreach ( array_diff( $path_vars, $seen ) as $name ) {
+			$out[] = array(
+				'name'     => (string) $name,
+				'in'       => 'path',
+				'required' => true,
+				'schema'   => array( 'type' => 'string' ),
+			);
 		}
 		return $out;
 	}

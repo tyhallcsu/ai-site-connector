@@ -1039,4 +1039,144 @@ class AI_Site_Connector_Diagnostics {
 			'total' => count( $all ),
 		);
 	}
+
+	/**
+	 * HTTP sign-in probe: GET /wp/v2/users/me with Basic auth, the way an AI
+	 * client connects. Shared by the connection-pack pre-flight, the
+	 * Connection Test live check and `wp ai-connector self-test --username`
+	 * (#106). Catches hosts or security plugins that strip the Authorization
+	 * header, WAFs that block Basic auth, and disabled REST.
+	 *
+	 * @param string     $username     Login.
+	 * @param string     $password     Application Password (never stored or logged here).
+	 * @param array|null $skip_context Passed to the ai_site_connector_skip_preflight
+	 *                                 filter; null skips the filter (CLI self-test).
+	 * @return array{status:string, code:int|string, hint:string} status pass|fail|skipped.
+	 */
+	public static function auth_probe( $username, $password, $skip_context = null ) {
+		/**
+		 * Filter to skip the pre-flight loopback check. Useful for hosts
+		 * where the WP install cannot make HTTP requests to itself.
+		 *
+		 * @param bool  $skip    Default false.
+		 * @param array $context Connection pack (pre-flight) or { username, live_check }.
+		 */
+		if ( null !== $skip_context && apply_filters( 'ai_site_connector_skip_preflight', false, $skip_context ) ) {
+			return array(
+				'status' => 'skipped',
+				'code'   => 'filter',
+				'hint'   => __( 'Pre-flight check skipped by ai_site_connector_skip_preflight filter.', 'ai-site-connector' ),
+			);
+		}
+
+		$response = wp_remote_get(
+			rest_url( 'wp/v2/users/me' ),
+			array(
+				'timeout'   => 10,
+				'sslverify' => false,
+				'headers'   => array(
+					'Authorization' => 'Basic ' . base64_encode( $username . ':' . $password ),
+				),
+			)
+		);
+		if ( is_wp_error( $response ) ) {
+			return array(
+				'status' => 'fail',
+				'code'   => $response->get_error_code(),
+				'hint'   => sprintf(
+					/* translators: %s: WP error message. */
+					__( 'Could not reach REST API: %s', 'ai-site-connector' ),
+					$response->get_error_message()
+				),
+			);
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		if ( 200 === $code ) {
+			return array(
+				'status' => 'pass',
+				'code'   => 200,
+				'hint'   => __( 'REST API accepts the Application Password.', 'ai-site-connector' ),
+			);
+		}
+		$hints = array(
+			401 => __( 'The most common cause is your host stripping the Authorization header (some shared hosts and security plugins do this). See SECURITY.md and scripts/diagnose-hosting-auth.sh for fixes.', 'ai-site-connector' ),
+			403 => __( 'The user may lack the required REST capability, or a security plugin / WAF is blocking REST access.', 'ai-site-connector' ),
+			404 => __( 'The REST API may be disabled, or pretty permalinks are off. Settings → Permalinks → save without changes.', 'ai-site-connector' ),
+			500 => __( 'WordPress returned a server error. Check the PHP error log.', 'ai-site-connector' ),
+		);
+		return array(
+			'status' => 'fail',
+			'code'   => $code,
+			'hint'   => isset( $hints[ $code ] ) ? $hints[ $code ] : __( 'Unexpected response. Review the server log and security plugin settings.', 'ai-site-connector' ),
+		);
+	}
+
+	/**
+	 * Live sign-in check without a lasting credential (#106): mint a
+	 * temporary Application Password for $user, probe with it over HTTP,
+	 * then revoke it, eagerly and again at shutdown in case of a fatal
+	 * error. The plaintext stays inside this method and is never logged.
+	 *
+	 * @param WP_User $user              User to sign in as.
+	 * @param bool    $honor_skip_filter Consult ai_site_connector_skip_preflight.
+	 * @return array{status:string, code:int|string, hint:string}
+	 */
+	public static function credential_round_trip( WP_User $user, $honor_skip_filter = true ) {
+		$context = array(
+			'username'   => $user->user_login,
+			'live_check' => true,
+		);
+		if ( $honor_skip_filter && apply_filters( 'ai_site_connector_skip_preflight', false, $context ) ) {
+			return array(
+				'status' => 'skipped',
+				'code'   => 'filter',
+				'hint'   => __( 'Pre-flight check skipped by ai_site_connector_skip_preflight filter.', 'ai-site-connector' ),
+			);
+		}
+		if ( ! AI_Site_Connector_Plugin::app_passwords_available() ) {
+			return array(
+				'status' => 'fail',
+				'code'   => 'app_passwords_unavailable',
+				'hint'   => __( 'Application Passwords are not available on this site (HTTPS, environment type, or a security plugin disabled them).', 'ai-site-connector' ),
+			);
+		}
+		$created = AI_Site_Connector_Application_Passwords::create_for_user( $user->ID, 'AI Site Connector live check - ' . gmdate( 'Y-m-d H:i:s' ) );
+		if ( is_wp_error( $created ) ) {
+			return array(
+				'status' => 'fail',
+				'code'   => 'mint_failed',
+				'hint'   => $created->get_error_message(),
+			);
+		}
+		$user_id = (int) $user->ID;
+		$uuid    = isset( $created['uuid'] ) ? (string) $created['uuid'] : '';
+		register_shutdown_function(
+			static function () use ( $user_id, $uuid ) {
+				if ( '' !== $uuid ) {
+					AI_Site_Connector_Application_Passwords::revoke( $user_id, $uuid );
+				}
+			}
+		);
+		$password = isset( $created['password'] ) ? (string) $created['password'] : '';
+		unset( $created );
+		$result = self::auth_probe( $user->user_login, $password, null );
+		unset( $password );
+		if ( '' !== $uuid ) {
+			AI_Site_Connector_Application_Passwords::revoke( $user_id, $uuid );
+		}
+		AI_Site_Connector_Audit_Log::record(
+			'live_signin_check',
+			array(
+				'message' => sprintf(
+					/* translators: 1: user login, 2: result, 3: HTTP status or error code. */
+					__( 'Live sign-in check for %1$s: %2$s (%3$s).', 'ai-site-connector' ),
+					$user->user_login,
+					$result['status'],
+					(string) $result['code']
+				),
+			)
+		);
+		return $result;
+	}
 }

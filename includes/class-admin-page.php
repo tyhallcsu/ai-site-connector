@@ -23,6 +23,7 @@ class AI_Site_Connector_Admin_Page {
 		add_action( 'admin_post_ai_site_connector_revoke_password', array( __CLASS__, 'handle_revoke_password' ) );
 		add_action( 'admin_post_ai_site_connector_rotate_password', array( __CLASS__, 'handle_rotate_password' ) );
 		add_action( 'admin_post_ai_site_connector_test_rest', array( __CLASS__, 'handle_test_rest' ) );
+		add_action( 'admin_post_ai_site_connector_live_signin_check', array( __CLASS__, 'handle_live_signin_check' ) );
 		add_action( 'admin_post_ai_site_connector_prune_log', array( __CLASS__, 'handle_prune_log' ) );
 		add_action( 'admin_post_ai_site_connector_save_uninstall_pref', array( __CLASS__, 'handle_save_uninstall_pref' ) );
 		add_action( 'admin_post_ai_site_connector_export_write', array( __CLASS__, 'handle_export_write' ) );
@@ -393,72 +394,12 @@ class AI_Site_Connector_Admin_Page {
 	 * @return array|null {status:'pass'|'fail'|'skipped', code:int|string, hint:string}
 	 */
 	private static function run_preflight_check( array $pack ) {
-		/**
-		 * Filter to skip the pre-flight loopback check. Useful for hosts
-		 * where the WP install cannot make HTTP requests to itself.
-		 *
-		 * @param bool  $skip Default false.
-		 * @param array $pack Connection pack.
-		 */
-		if ( apply_filters( 'ai_site_connector_skip_preflight', false, $pack ) ) {
-			return array(
-				'status' => 'skipped',
-				'code'   => 'filter',
-				'hint'   => __( 'Pre-flight check skipped by ai_site_connector_skip_preflight filter.', 'ai-site-connector' ),
-			);
-		}
-
 		$user = isset( $pack['username'] ) ? (string) $pack['username'] : '';
 		$pass = isset( $pack['application_password'] ) ? (string) $pack['application_password'] : '';
 		if ( '' === $user || '' === $pass ) {
 			return null;
 		}
-
-		$response = wp_remote_get(
-			rest_url( 'wp/v2/users/me' ),
-			array(
-				'timeout'   => 10,
-				'sslverify' => false,
-				'headers'   => array(
-					'Authorization' => 'Basic ' . base64_encode( $user . ':' . $pass ),
-				),
-			)
-		);
-
-		if ( is_wp_error( $response ) ) {
-			return array(
-				'status' => 'fail',
-				'code'   => $response->get_error_code(),
-				'hint'   => sprintf(
-					/* translators: %s: WP error message. */
-					__( 'Could not reach REST API: %s', 'ai-site-connector' ),
-					$response->get_error_message()
-				),
-			);
-		}
-
-		$code = (int) wp_remote_retrieve_response_code( $response );
-		if ( 200 === $code ) {
-			return array(
-				'status' => 'pass',
-				'code'   => 200,
-				'hint'   => __( 'REST API accepts the new Application Password.', 'ai-site-connector' ),
-			);
-		}
-
-		$hints = array(
-			401 => __( 'The most common cause is your host stripping the Authorization header (some shared hosts and security plugins do this). See SECURITY.md and scripts/diagnose-hosting-auth.sh for fixes.', 'ai-site-connector' ),
-			403 => __( 'The user may lack the required REST capability, or a security plugin / WAF is blocking REST access.', 'ai-site-connector' ),
-			404 => __( 'The REST API may be disabled, or pretty permalinks are off. Settings → Permalinks → save without changes.', 'ai-site-connector' ),
-			500 => __( 'WordPress returned a server error. Check the PHP error log.', 'ai-site-connector' ),
-		);
-		$hint = isset( $hints[ $code ] ) ? $hints[ $code ] : __( 'Unexpected response. Review the server log and security plugin settings.', 'ai-site-connector' );
-
-		return array(
-			'status' => 'fail',
-			'code'   => $code,
-			'hint'   => $hint,
-		);
+		return AI_Site_Connector_Diagnostics::auth_probe( $user, $pass, $pack );
 	}
 
 	public static function handle_revoke_password() {
@@ -597,6 +538,45 @@ class AI_Site_Connector_Admin_Page {
 	 */
 	public static function allowed_return_tab( $requested, array $allowed, $fallback ) {
 		return in_array( $requested, $allowed, true ) ? $requested : $fallback;
+	}
+
+	/**
+	 * Connection Test → "Run live sign-in check" (#106): signs in over HTTP
+	 * as the chosen user with a temporary Application Password that is
+	 * revoked immediately, like `wp ai-connector self-test --username`.
+	 */
+	public static function handle_live_signin_check() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Insufficient permissions.', 'ai-site-connector' ) );
+		}
+		check_admin_referer( self::NONCE_ACTION, self::NONCE_FIELD );
+		$user_id = isset( $_POST['ai_user_id'] ) ? (int) $_POST['ai_user_id'] : 0;
+		$allowed = wp_list_pluck( AI_Site_Connector_User_Manager::list_candidate_users(), 'ID' );
+		$user    = in_array( $user_id, array_map( 'intval', $allowed ), true ) ? get_userdata( $user_id ) : false;
+		if ( ! $user ) {
+			self::flash( __( 'Choose a user for the live sign-in check.', 'ai-site-connector' ), 'error' );
+			self::redirect_back( 'connection' );
+		}
+		$result = AI_Site_Connector_Diagnostics::credential_round_trip( $user );
+		if ( 'pass' === $result['status'] ) {
+			$message = sprintf(
+				/* translators: %s: user login. */
+				__( 'Live sign-in check passed for %s: the REST API accepted an Application Password over HTTP (HTTP 200). The temporary password was revoked.', 'ai-site-connector' ),
+				$user->user_login
+			);
+		} elseif ( 'skipped' === $result['status'] ) {
+			$message = __( 'Live sign-in check skipped: ', 'ai-site-connector' ) . $result['hint'];
+		} else {
+			$message = sprintf(
+				/* translators: 1: user login, 2: HTTP status or error code, 3: hint. */
+				__( 'Live sign-in check failed for %1$s (%2$s). %3$s The temporary password was revoked.', 'ai-site-connector' ),
+				$user->user_login,
+				(string) $result['code'],
+				$result['hint']
+			);
+		}
+		self::flash( $message, 'pass' === $result['status'] ? 'success' : 'error' );
+		self::redirect_back( 'connection' );
 	}
 
 	private static function build_connection_pack( $user_id, $cred ) {
@@ -1764,6 +1744,26 @@ class AI_Site_Connector_Admin_Page {
 				<input type="hidden" name="action" value="ai_site_connector_test_rest" />
 				<input type="hidden" name="return_tab" value="connection" />
 				<button type="submit" class="button button-secondary"><?php esc_html_e( 'Run REST self-test', 'ai-site-connector' ); ?></button>
+			</form>
+		</div>
+
+		<div class="asc-card">
+			<h2><?php esc_html_e( 'Live sign-in check', 'ai-site-connector' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'Signs in over HTTP exactly as an AI tool does, using a temporary Application Password for the chosen user that is revoked immediately. It detects hosts, CDNs and security plugins that strip the Authorization header or block Basic auth, which the in-process REST self-test cannot see.', 'ai-site-connector' ); ?></p>
+			<?php $live_users = AI_Site_Connector_User_Manager::list_candidate_users(); ?>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<?php self::nonce_field(); ?>
+				<input type="hidden" name="action" value="ai_site_connector_live_signin_check" />
+				<p>
+					<label for="asc-live-user"><?php esc_html_e( 'Sign in as', 'ai-site-connector' ); ?></label>
+					<select id="asc-live-user" name="ai_user_id" required>
+						<option value=""><?php esc_html_e( '— Select a user —', 'ai-site-connector' ); ?></option>
+						<?php foreach ( $live_users as $u ) : ?>
+							<option value="<?php echo esc_attr( $u->ID ); ?>"><?php echo esc_html( sprintf( '%s (id=%d)', $u->user_login, $u->ID ) ); ?></option>
+						<?php endforeach; ?>
+					</select>
+					<button type="submit" class="button button-secondary"><?php esc_html_e( 'Run live sign-in check', 'ai-site-connector' ); ?></button>
+				</p>
 			</form>
 		</div>
 

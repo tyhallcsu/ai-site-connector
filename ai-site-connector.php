@@ -82,6 +82,7 @@ require_once AI_SITE_CONNECTOR_DIR . 'includes/class-backup-manager.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-api-explorer.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-onboarding.php';
 require_once AI_SITE_CONNECTOR_DIR . 'includes/class-mcp-server.php';
+require_once AI_SITE_CONNECTOR_DIR . 'includes/class-access-preview.php';
 
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	require_once AI_SITE_CONNECTOR_DIR . 'includes/class-wp-cli.php';

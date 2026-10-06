@@ -1107,6 +1107,181 @@ class AI_Site_Connector_Admin_Page {
 			<?php endif; ?>
 		</div>
 		<?php
+		self::render_access_preview( $users );
+	}
+
+	/**
+	 * Effective-access preview (#124). Read-only, so a plain GET form.
+	 *
+	 * @param array $users Candidate users.
+	 */
+	private static function render_access_preview( array $users ) {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Read-only preview; nothing is changed.
+		$cred    = isset( $_GET['asc_cred'] ) ? sanitize_text_field( wp_unslash( $_GET['asc_cred'] ) ) : '';
+		$op      = isset( $_GET['asc_op'] ) ? sanitize_text_field( wp_unslash( $_GET['asc_op'] ) ) : '';
+		$method  = isset( $_GET['asc_method'] ) ? strtoupper( sanitize_key( wp_unslash( $_GET['asc_method'] ) ) ) : 'GET';
+		$route   = isset( $_GET['asc_route'] ) ? sanitize_text_field( wp_unslash( $_GET['asc_route'] ) ) : '';
+		$post_id = isset( $_GET['asc_post'] ) ? absint( $_GET['asc_post'] ) : 0;
+		$dry_run = ! empty( $_GET['asc_dry'] );
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+		$result = null;
+		if ( '' !== $cred && '' !== $op ) {
+			$parts  = explode( ':', $cred, 2 );
+			$result = AI_Site_Connector_Access_Preview::explain(
+				array(
+					'user_id'   => (int) $parts[0],
+					'uuid'      => isset( $parts[1] ) ? $parts[1] : '',
+					'operation' => $op,
+					'method'    => $method,
+					'route'     => $route,
+					'post_id'   => $post_id,
+					'dry_run'   => $dry_run,
+				)
+			);
+		}
+		$ops = AI_Site_Connector_Access_Preview::operations();
+		?>
+		<div class="asc-card" id="asc-access-preview">
+			<h2><?php esc_html_e( 'Effective access preview', 'ai-site-connector' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'Explains whether a credential can run an operation and which check would refuse it. Nothing is sent, changed or run, and no password is shown.', 'ai-site-connector' ); ?></p>
+			<form method="get" action="<?php echo esc_url( admin_url( 'tools.php' ) . '#asc-access-preview' ); ?>">
+				<input type="hidden" name="page" value="<?php echo esc_attr( self::PAGE_SLUG ); ?>" />
+				<input type="hidden" name="tab" value="credentials" />
+				<table class="form-table">
+					<tr><th><label for="asc-ap-cred"><?php esc_html_e( 'Credential', 'ai-site-connector' ); ?></label></th>
+						<td>
+							<select id="asc-ap-cred" name="asc_cred" required>
+								<option value=""><?php esc_html_e( '— Select a credential —', 'ai-site-connector' ); ?></option>
+								<?php
+								foreach ( $users as $u ) :
+									$pwds = AI_Site_Connector_Application_Passwords::list_for_user( $u->ID );
+									if ( ! $pwds ) {
+										continue;
+									}
+									?>
+									<optgroup label="<?php echo esc_attr( $u->user_login ); ?>">
+										<?php
+										foreach ( $pwds as $p ) :
+											$value = $u->ID . ':' . ( isset( $p['uuid'] ) ? $p['uuid'] : '' );
+											?>
+											<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $cred, $value ); ?>><?php echo esc_html( sprintf( '%s (%s…)', isset( $p['name'] ) ? $p['name'] : '', substr( isset( $p['uuid'] ) ? $p['uuid'] : '', 0, 8 ) ) ); ?></option>
+										<?php endforeach; ?>
+									</optgroup>
+								<?php endforeach; ?>
+								<optgroup label="<?php esc_attr_e( 'Role only (no Application Password)', 'ai-site-connector' ); ?>">
+									<?php foreach ( $users as $u ) : ?>
+										<option value="<?php echo esc_attr( $u->ID . ':' ); ?>" <?php selected( $cred, $u->ID . ':' ); ?>><?php echo esc_html( $u->user_login ); ?></option>
+									<?php endforeach; ?>
+								</optgroup>
+							</select>
+						</td></tr>
+					<tr><th><label for="asc-ap-op"><?php esc_html_e( 'Operation', 'ai-site-connector' ); ?></label></th>
+						<td>
+							<select id="asc-ap-op" name="asc_op" required>
+								<option value=""><?php esc_html_e( '— Select an operation —', 'ai-site-connector' ); ?></option>
+								<optgroup label="<?php esc_attr_e( 'MCP tools', 'ai-site-connector' ); ?>">
+									<?php foreach ( $ops as $key => $o ) : ?>
+										<?php if ( 'mcp' === $o['channel'] ) : ?>
+											<option value="<?php echo esc_attr( $key ); ?>" <?php selected( $op, $key ); ?>><?php echo esc_html( $o['name'] ); ?></option>
+										<?php endif; ?>
+									<?php endforeach; ?>
+								</optgroup>
+								<optgroup label="<?php esc_attr_e( 'REST tools (/ai-site-connector/v1)', 'ai-site-connector' ); ?>">
+									<?php foreach ( $ops as $key => $o ) : ?>
+										<?php if ( 'rest' === $o['channel'] ) : ?>
+											<option value="<?php echo esc_attr( $key ); ?>" <?php selected( $op, $key ); ?>><?php echo esc_html( $o['name'] . ' — ' . $o['method'] . ' ' . $o['route'] ); ?></option>
+										<?php endif; ?>
+									<?php endforeach; ?>
+								</optgroup>
+								<option value="<?php echo esc_attr( AI_Site_Connector_Access_Preview::CUSTOM ); ?>" <?php selected( $op, AI_Site_Connector_Access_Preview::CUSTOM ); ?>><?php esc_html_e( 'Another REST route (enter it below)', 'ai-site-connector' ); ?></option>
+							</select>
+						</td></tr>
+					<tr><th><label for="asc-ap-route"><?php esc_html_e( 'REST route', 'ai-site-connector' ); ?></label></th>
+						<td>
+							<select id="asc-ap-method" name="asc_method" aria-label="<?php esc_attr_e( 'HTTP method', 'ai-site-connector' ); ?>">
+								<?php foreach ( AI_Site_Connector_Access_Preview::METHODS as $m ) : ?>
+									<option value="<?php echo esc_attr( $m ); ?>" <?php selected( $method, $m ); ?>><?php echo esc_html( $m ); ?></option>
+								<?php endforeach; ?>
+							</select>
+							<input type="text" id="asc-ap-route" name="asc_route" class="regular-text" placeholder="/wp/v2/posts/123" value="<?php echo esc_attr( $route ); ?>" />
+							<p class="description"><?php esc_html_e( 'Only for "Another REST route", for example a WordPress core route an agent calls directly.', 'ai-site-connector' ); ?></p>
+						</td></tr>
+					<tr><th><label for="asc-ap-post"><?php esc_html_e( 'Post ID (optional)', 'ai-site-connector' ); ?></label></th>
+						<td>
+							<input type="number" min="0" id="asc-ap-post" name="asc_post" class="small-text" value="<?php echo $post_id ? esc_attr( (string) $post_id ) : ''; ?>" />
+							<p class="description"><?php esc_html_e( 'Checks access to one post, for operations that take a post.', 'ai-site-connector' ); ?></p>
+						</td></tr>
+					<tr><th><?php esc_html_e( 'Dry run', 'ai-site-connector' ); ?></th>
+						<td><label for="asc-ap-dry"><input type="checkbox" id="asc-ap-dry" name="asc_dry" value="1" <?php checked( $dry_run ); ?> /> <?php esc_html_e( 'Preview a dry run (content update and rollback only)', 'ai-site-connector' ); ?></label></td></tr>
+				</table>
+				<p><button type="submit" class="button"><?php esc_html_e( 'Explain access', 'ai-site-connector' ); ?></button></p>
+			</form>
+			<?php if ( is_wp_error( $result ) ) : ?>
+				<div class="notice notice-error inline"><p><?php echo esc_html( $result->get_error_message() ); ?></p></div>
+			<?php elseif ( $result ) : ?>
+				<?php self::render_access_result( $result ); ?>
+			<?php endif; ?>
+		</div>
+		<?php
+	}
+
+	/**
+	 * @param array $result From AI_Site_Connector_Access_Preview::explain().
+	 */
+	private static function render_access_result( array $result ) {
+		$verdicts = array(
+			'allowed'     => array( 'asc-ok', __( 'Allowed', 'ai-site-connector' ), __( 'Every check passes under the current settings.', 'ai-site-connector' ) ),
+			'conditional' => array( 'asc-warn', __( 'Depends', 'ai-site-connector' ), __( 'Nothing refuses it outright, but some checks depend on the request or cannot be decided here.', 'ai-site-connector' ) ),
+			'denied'      => array( 'asc-bad', __( 'Denied', 'ai-site-connector' ), __( 'Refused by:', 'ai-site-connector' ) ),
+		);
+		$statuses = array(
+			AI_Site_Connector_Access_Preview::PASS        => array( 'asc-ok', __( 'Pass', 'ai-site-connector' ) ),
+			AI_Site_Connector_Access_Preview::DENY        => array( 'asc-bad', __( 'Deny', 'ai-site-connector' ) ),
+			AI_Site_Connector_Access_Preview::CONDITIONAL => array( 'asc-warn', __( 'Conditional', 'ai-site-connector' ) ),
+			AI_Site_Connector_Access_Preview::UNKNOWN     => array( 'asc-warn', __( 'Unknown', 'ai-site-connector' ) ),
+			AI_Site_Connector_Access_Preview::SKIPPED     => array( 'asc-na', __( 'Not applicable', 'ai-site-connector' ) ),
+		);
+		$groups   = array(
+			'credential' => __( 'Credential', 'ai-site-connector' ),
+			'scope'      => __( 'Route scopes', 'ai-site-connector' ),
+			'wordpress'  => __( 'WordPress role and post access', 'ai-site-connector' ),
+			'plugin'     => __( 'AI Site Connector settings', 'ai-site-connector' ),
+		);
+		$verdict  = $verdicts[ $result['verdict'] ];
+		?>
+		<div class="asc-access-result">
+			<h3>
+				<?php
+				/* translators: 1: user login, 2: operation. */
+				echo esc_html( sprintf( __( 'Result for %1$s: %2$s', 'ai-site-connector' ), $result['user'], $result['operation'] ) );
+				?>
+			</h3>
+			<p><span class="asc-badge <?php echo esc_attr( $verdict[0] ); ?>"><?php echo esc_html( $verdict[1] ); ?></span> <?php echo esc_html( $verdict[2] ); ?></p>
+			<?php if ( $result['denials'] ) : ?>
+				<ul class="asc-access-denials">
+					<?php foreach ( $result['denials'] as $denial ) : ?>
+						<li><?php echo esc_html( $denial ); ?></li>
+					<?php endforeach; ?>
+				</ul>
+			<?php endif; ?>
+			<table class="widefat striped">
+				<thead><tr><th><?php esc_html_e( 'Area', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Check', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Result', 'ai-site-connector' ); ?></th><th><?php esc_html_e( 'Why', 'ai-site-connector' ); ?></th></tr></thead>
+				<tbody>
+				<?php foreach ( $result['checks'] as $check ) : ?>
+					<tr>
+						<td><?php echo esc_html( $groups[ $check['group'] ] ); ?></td>
+						<td><?php echo esc_html( $check['label'] ); ?></td>
+						<td><span class="asc-badge <?php echo esc_attr( $statuses[ $check['status'] ][0] ); ?>"><?php echo esc_html( $statuses[ $check['status'] ][1] ); ?></span></td>
+						<td><?php echo esc_html( $check['detail'] ); ?></td>
+					</tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+			<?php foreach ( $result['notes'] as $note ) : ?>
+				<p class="description"><?php echo esc_html( $note ); ?></p>
+			<?php endforeach; ?>
+		</div>
+		<?php
 	}
 
 	private static function render_api_explorer() {

@@ -1,20 +1,20 @@
 # Handoff — AI Site Connector
 
-**Updated:** 2026-10-06 ~01:35 UTC (2026-10-05 19:35 America/Denver) · **State:** 0.12.4 release prep (P2 fixes merged in #137, #138) · **Mode:** continuous low-usage (single agent) · **Session:** `asc-dev-audit-ship`
+**Updated:** 2026-10-06 ~02:10 UTC (2026-10-05 20:10 America/Denver) · **State:** v0.12.4 released and asset verified; dev deploy BLOCKED (Docker Desktop unresponsive) · **Session:** `asc-dev-audit-ship`
 **Repo:** tyhallcsu/ai-site-connector (public, standalone — the parent `ess-custom-plugins` dir is not a repo)
 **Primary checkout:** `/Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector`. Its local `main` is at `16f5816`, 5 commits behind `origin/main` (read from its refs 21:48 UTC; not modified by this session; fast-forward before use)
-**Session worktree:** `.claude/worktrees/asc-dev-audit-ship` · branch `chore/release-0.12.4` (release prep)
+**Session worktree:** `.claude/worktrees/asc-dev-audit-ship` · branch `docs/checkpoint-0.12.4` (this checkpoint)
 **Rules:** `docs/development/OPERATING_BRIEF.md` · **Dev site:** `docs/development/DEV_SITE.md` · **Plan:** `docs/development/ROADMAP.md` · **Log:** `docs/development/WORK_LOG.md`
 
 ## Verified state
 
 | Item | Value | Evidence |
 |------|-------|----------|
-| `origin/main` | `c34af14` — #138 (#121 #120 #116 #113), on `6e02b3a` (#137: #117 #111 #118) | `gh pr view` merge commits |
-| Latest release | **v0.12.3** → tag on `4bef824`; stable; `releases/latest`; ZIP 1,135,602 B, sha256 `01b973c2…94afe`; checksum, embedded 0.12.3, 70 files, no dev paths and both fixes present all verified | release run 37380756899 |
-| Unreleased on main | #137, #138 (7 P2 fixes) → v0.12.4 prepared in this PR | commits since tag v0.12.3 |
-| Dev site | http://localhost:8790 — **published v0.12.3** (`4bef824`), 70 files verified. #114: a verified 0.12.2 backup plus an empty 0.12.0 dir present, only 0.12.2 offered. UI Rollback to 0.12.2 via the admin-post handler gave byte-identical files and audit started → roll-away backup → completed; then restored to v0.12.3. #119: the generated snippet URL `…/wp-json/ai-site-connector/v1/mcp`, HTTP `initialize` with the snippet's header → 200 | `bin/dev-site.sh status`; audit ids 17–19 |
-| CI | #134 run 37379827867 19/19 (integration 97/97 × 6 WP builds); #135 run 37380234124 19/19 (upgrade v0.12.2 → v0.12.3); main `4bef824` run 37380505933 19/19 | `gh run view` |
+| `origin/main` | `dba1914` — chore(release): v0.12.4 (#139) | `gh pr view 139` merge commit |
+| Latest release | **v0.12.4** → tag on `dba1914`; stable; `releases/latest`; ZIP 1,138,034 B, sha256 `6c4a4e78…5e74c`; checksum, embedded 0.12.4, 70 files, no dev paths, fixes present all verified | release run 37398690817 |
+| Unreleased on main | nothing | commits since tag v0.12.4 |
+| Dev site | http://localhost:8790 — still **published v0.12.3**. `deploy --release v0.12.4` hung at its first Docker call because Docker Desktop stopped responding (`docker ps` hangs) after the disk filled. The deploy was stopped; nothing changed on dev. Restarting Docker also stops another project's `uptime-kuma` container, so that needs the owner | `docker ps` hang 02:05 UTC |
+| CI | #137 19/19 (101/101), #138 19/19 (104/104 on PR merged with main), #139 19/19 (upgrade v0.12.3 → v0.12.4), main `dba1914` 19/19 | `gh run view` |
 | Remote dev target | none exists — owner decision tracked in #97 | config/registry search |
 
 ## Startup reconciliation (2026-10-05)
@@ -64,7 +64,7 @@
 
 ## Next three actions
 
-1. Release-prep PR: CI green → merge → main CI 19/19 on the merge SHA → tag v0.12.4 → verify the asset → `bin/dev-site.sh deploy --release v0.12.4` → `audit`.
+1. Owner: restart Docker Desktop, then `bin/dev-site.sh deploy --release v0.12.4` and `bin/dev-site.sh audit`, and run the HTTP checks for #111/#118/#120 (script described in WORK_LOG).
 2. Owner decisions #97 (remote dev site?) and #99 (required checks on main).
 3. Backlog (not auto-implemented): #101 #106 #108 #109 #125 and the other session's features #112 #122–#124.
 

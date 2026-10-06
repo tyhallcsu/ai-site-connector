@@ -1133,8 +1133,6 @@ class AI_Site_Connector_CLI {
 	 *
 	 *   wp ai-connector update-content 42 --user=editor --title="New title"
 	 *   wp ai-connector update-content 42 --user=editor --content-file=body.html --apply
-	 *
-	 * @subcommand update-content
 	 */
 	public function update_content( $args, $assoc ) {
 		self::require_user_context();
@@ -1205,8 +1203,6 @@ class AI_Site_Connector_CLI {
 	 * ## EXAMPLES
 	 *
 	 *   wp ai-connector rollback-content 42 <snapshot_id> --user=editor --apply
-	 *
-	 * @subcommand rollback-content
 	 */
 	public function rollback_content( $args, $assoc ) {
 		self::require_user_context();

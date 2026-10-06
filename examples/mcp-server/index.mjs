@@ -3,11 +3,10 @@
  * AI Site Connector — stdio MCP server.
  *
  * Speaks MCP over stdio (the transport Claude Desktop and Cursor use
- * locally) and forwards each tools/call to the plugin's HTTP MCP
- * endpoint at /wp-json/ai-site-connector/v1/mcp using HTTP Basic Auth.
- *
- * Tool descriptors MIRROR the PHP-side declarations in
- * includes/class-mcp-server.php — keep both in sync when adding tools.
+ * locally) and forwards tools/list and tools/call to the plugin's HTTP MCP
+ * endpoint (/wp-json/ai-site-connector/v1/mcp) using HTTP Basic Auth. The
+ * site's own catalog is authoritative, so every tool the site offers is
+ * discoverable with its real description and input schema (#112).
  *
  * Configuration:
  *   WORDPRESS_SITE_URL              (required) e.g. https://example.com
@@ -15,6 +14,7 @@
  *   WORDPRESS_APPLICATION_PASSWORD  (required)
  *   AI_SITE_CONNECTOR_PACK          (optional) path to a connection-pack JSON;
  *                                              read first, overrides the env trio.
+ *                                              Its mcp_endpoint is used when present.
  *
  * Run: node index.mjs   (or `npx ai-site-connector-mcp` if published)
  */
@@ -26,23 +26,9 @@ import {
 	ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 
-const TOOLS = [
-	{ name: 'wp_health',        description: 'Plugin health check.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-	{ name: 'wp_site_info',     description: 'Site name, URL, WP/PHP versions, active theme.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-	{ name: 'wp_list_posts',    description: 'List posts (status, per_page, search, post_type).',
-		inputSchema: { type: 'object', properties: { status: { type: 'string' }, per_page: { type: 'integer' }, search: { type: 'string' }, post_type: { type: 'string' } } } },
-	{ name: 'wp_get_post',      description: 'Fetch a single post by id (post_type optional).',
-		inputSchema: { type: 'object', properties: { id: { type: 'integer' }, post_type: { type: 'string' } }, required: ['id'] } },
-	{ name: 'wp_create_post',   description: 'Create a post. Required: title, content. Optional: status, post_type.',
-		inputSchema: { type: 'object', properties: { title: { type: 'string' }, content: { type: 'string' }, status: { type: 'string' }, post_type: { type: 'string' } }, required: ['title', 'content'] } },
-	{ name: 'wp_update_post',   description: 'Update an existing post.',
-		inputSchema: { type: 'object', properties: { id: { type: 'integer' }, title: { type: 'string' }, content: { type: 'string' }, status: { type: 'string' }, post_type: { type: 'string' } }, required: ['id'] } },
-	{ name: 'wp_list_pages',    description: 'Alias for wp_list_posts with post_type=page.',
-		inputSchema: { type: 'object', properties: { status: { type: 'string' }, per_page: { type: 'integer' }, search: { type: 'string' } } } },
-	{ name: 'wp_list_plugins',  description: 'List installed plugins.',  inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-	{ name: 'wp_list_themes',   description: 'List installed themes.',   inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-];
+const { version } = createRequire(import.meta.url)('./package.json');
 
 async function loadCredentials() {
 	const packPath = process.env.AI_SITE_CONNECTOR_PACK;
@@ -51,9 +37,10 @@ async function loadCredentials() {
 			const raw  = await readFile(packPath, 'utf8');
 			const pack = JSON.parse(raw);
 			return {
-				siteUrl:  pack.site_url,
-				username: pack.username,
-				password: pack.application_password,
+				siteUrl:     pack.site_url,
+				mcpEndpoint: pack.mcp_endpoint,
+				username:    pack.username,
+				password:    pack.application_password,
 			};
 		} catch (err) {
 			throw new Error(`Failed to read AI_SITE_CONNECTOR_PACK at ${packPath}: ${err.message}`);
@@ -69,7 +56,9 @@ async function loadCredentials() {
 }
 
 async function callRemoteMcp(creds, jsonRpcMessage) {
-	const url  = `${creds.siteUrl.replace(/\/$/, '')}/wp-json/ai-site-connector/v1/mcp`;
+	// Packs carry the exact endpoint (plain permalinks, subdirectory installs);
+	// otherwise assume pretty permalinks at the site root.
+	const url  = creds.mcpEndpoint || `${creds.siteUrl.replace(/\/$/, '')}/wp-json/ai-site-connector/v1/mcp`;
 	const auth = 'Basic ' + Buffer.from(`${creds.username}:${creds.password}`).toString('base64');
 	const res = await fetch(url, {
 		method:  'POST',
@@ -93,11 +82,14 @@ async function main() {
 	const creds = await loadCredentials();
 
 	const server = new Server(
-		{ name: 'ai-site-connector', version: '0.8.0' },
+		{ name: 'ai-site-connector', version },
 		{ capabilities: { tools: { listChanged: false } } }
 	);
 
-	server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+	server.setRequestHandler(ListToolsRequestSchema, async () => {
+		const result = await callRemoteMcp(creds, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+		return { tools: result && Array.isArray(result.tools) ? result.tools : [] };
+	});
 
 	server.setRequestHandler(CallToolRequestSchema, async (request) => {
 		const { name, arguments: args } = request.params;

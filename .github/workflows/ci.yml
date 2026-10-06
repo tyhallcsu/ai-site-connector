@@ -192,6 +192,12 @@ jobs:
       - name: Check admin JavaScript syntax
         run: node --check assets/admin.js
 
+      # The stdio bridge must expose whatever tools the site advertises (#112).
+      - name: Stdio MCP bridge contract test
+        run: |
+          npm install --prefix examples/mcp-server --no-package-lock --no-audit --no-fund
+          npm test --prefix examples/mcp-server
+
   security-grep:
     name: Dangerous-pattern grep
     runs-on: ubuntu-latest

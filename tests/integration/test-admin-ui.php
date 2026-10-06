@@ -75,3 +75,15 @@ asc_it(
 		asc_assert( false === strpos( $html, 'name="return_tab"' ), 'return_tab only belongs to the Connection Test form' );
 	}
 );
+
+asc_it(
+	'admin ui: header logo is the small, versioned mark (#125, #131)',
+	function () {
+		$html = asc_it_render_admin_tab( 'docs' );
+		asc_assert( false !== strpos( $html, 'assets/ai-site-connector-mark-128.png?ver=' . AI_SITE_CONNECTOR_VERSION ), 'header logo is not the versioned 128px mark' );
+		$file = AI_SITE_CONNECTOR_DIR . 'assets/ai-site-connector-mark-128.png';
+		asc_assert( is_readable( $file ) && filesize( $file ) <= 20480, 'header mark missing or over 20 KiB' );
+		$size = getimagesize( $file );
+		asc_assert( is_array( $size ) && 128 === $size[0] && 128 === $size[1], 'header mark is not 128x128' );
+	}
+);

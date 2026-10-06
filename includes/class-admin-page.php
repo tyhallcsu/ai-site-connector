@@ -654,7 +654,7 @@ class AI_Site_Connector_Admin_Page {
 		?>
 		<div class="wrap ai-site-connector-wrap">
 			<div class="asc-page-header">
-				<img class="asc-page-logo" src="<?php echo esc_url( AI_SITE_CONNECTOR_URL . 'assets/brand/ai-site-connector-mark.svg' ); ?>" alt="" width="64" height="64" />
+				<img class="asc-page-logo" src="<?php echo esc_url( add_query_arg( 'ver', AI_SITE_CONNECTOR_VERSION, AI_SITE_CONNECTOR_URL . 'assets/ai-site-connector-mark-128.png' ) ); ?>" alt="" width="64" height="64" />
 				<div>
 					<h1><?php esc_html_e( 'AI Site Connector', 'ai-site-connector' ); ?></h1>
 					<p class="description"><?php esc_html_e( 'Connect Claude / Codex / AI agents to this WordPress site over the REST API using Application Passwords. WordPress.com is not required.', 'ai-site-connector' ); ?></p>

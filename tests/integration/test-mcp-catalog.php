@@ -20,7 +20,7 @@ asc_it(
 		sort( $names );
 		$expected = array(
 			'wp_broken_links', 'wp_content_inventory', 'wp_create_post', 'wp_export_bundle', 'wp_get_post',
-			'wp_health', 'wp_list_pages', 'wp_list_plugins', 'wp_list_posts', 'wp_list_themes',
+			'wp_health', 'wp_list_content_snapshots', 'wp_list_pages', 'wp_list_plugins', 'wp_list_posts', 'wp_list_themes',
 			'wp_media_audit', 'wp_media_duplicates', 'wp_page_builder', 'wp_redirects', 'wp_rest_routes',
 			'wp_rollback_content', 'wp_self_test', 'wp_site_info', 'wp_update_content', 'wp_update_post',
 		);

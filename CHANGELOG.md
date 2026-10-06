@@ -6,6 +6,27 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-10-06
+
+Patch: a 73% smaller plugin download. No REST, MCP or database changes.
+
+### Changed
+
+- Packaging (#125): the release ZIP shrinks from 1.15 MB to about 313 KB.
+  The brand source images in `assets/brand/` stay in the repository and are
+  no longer shipped; nothing at runtime used them, and the updater's icons
+  are served from GitHub.
+- Admin header (#131): shows the approved mint/cyan mark as a 7.6 KB,
+  128px PNG (sharp at 64px on 2x screens) instead of a 373 KB SVG. The
+  image URL carries the plugin version, so upgraded sites never show a
+  cached old image.
+
+### Testing
+
+- The package smoke enforces a 400 KiB ZIP budget and a 20 KiB header
+  mark; an integration test checks the header uses the versioned 128px
+  mark.
+
 ## [0.13.0] - 2026-10-06
 
 Minor: tools for operators and agents around safe content changes,

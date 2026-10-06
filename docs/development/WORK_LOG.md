@@ -2,6 +2,34 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-06 — Dev audit of v0.13.1: CLI, REST and MCP
+
+These are the audit areas still open from the first pass. All ran on the
+local dev site with a temporary Application Password. The password was
+never printed and was deleted afterwards, and the permission option was
+restored.
+
+- **Content (CLI):**
+  - `update-content --text-diff` dry run returns a unified diff and
+    writes nothing.
+  - `--apply` is refused (`whitelist_off`) while `write_content` is off.
+    With it on, `--apply` writes and returns a `snapshot_id`.
+  - The rollback dry run writes nothing; `--apply` restores the title.
+- **Inventory:** `content-inventory` lists fixtures 7, 8 and 9.
+- **HTTP:**
+  - MCP `tools/list` returns 21 tools.
+  - `wp_list_content_snapshots` shows the audit snapshot as `rolled_back`.
+  - #111: a missing post comes back as isError with 404.
+  - #118: `post_type=pages` returns `asc_unsupported_post_type`.
+  - #120: the OpenAPI snapshots path declares `id` as a path parameter.
+  - REST `/tools` lists 18 tools with `allowed` flags, and `/export/bundle`
+    returns 200 with a `manifest_index`.
+  - A wrong password gets 401; unauthenticated `/health` hides versions.
+- **One grep hit, a false positive:** 17 `args/password` entries in the
+  bundle's `rest-routes.json`. These are core routes' argument metadata,
+  each a three-key object. There are no hash-like strings or secrets.
+- **Result:** no defects found, no issues filed.
+
 ## 2026-10-06 — v0.13.1 released; #97 and #99 decided
 
 - PR #160 → `345ffc6`; PR CI run 37491800393 20/20 (ZIP install +

@@ -2,6 +2,23 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-06 — Docker restarted; v0.13.0 on the dev site
+
+- At the owner's request, Docker Desktop was restarted. `docker desktop
+  restart` timed out. A graceful quit and TERM stopped the VM, but the
+  backend (hung for 22 h) survived until it was force-killed. After a
+  relaunch, engine 28.3.3 came up. The dev containers and another
+  project's `uptime-kuma` restarted healthy on their own.
+- `bin/dev-site.sh deploy --release v0.13.0`: 0.12.3 → 0.13.0 from
+  `2395ea4`; zip sha256
+  `189711e10977e835ca0aff54035bafb17c5bc5953534f9d1b12dabe26be12156`
+  (same as the published asset); plugin active.
+- `bin/dev-site.sh audit`: all tabs clean on desktop and phone.
+- Headless text checks (no screenshots):
+  - **#124:** Credentials → access preview rendered for `ai-agent`. Verdict "Depends": post access is unknown without a post ID.
+  - **#106:** the live sign-in card is present.
+  - **#127:** the Plugins row shows "Check for updates", "Up to date (v0.13.0)", Changelog and GitHub release.
+
 ## 2026-10-06 — v0.13.0 released
 
 - PR #155 → `2395ea4`; PR CI run 37469725758 20/20 (ZIP install + upgrade

@@ -307,8 +307,6 @@ class AI_Site_Connector_CLI {
 		$format        = isset( $assoc['format'] ) && 'json' === $assoc['format'] ? 'json' : 'human';
 		$username      = isset( $assoc['username'] ) ? sanitize_user( $assoc['username'], true ) : '';
 		$checks        = array();
-		$temp_user_id  = 0;
-		$temp_uuid     = '';
 
 		$add_check = function ( $name, $ok, $detail = '' ) use ( &$checks ) {
 			$checks[] = array(
@@ -372,9 +370,6 @@ class AI_Site_Connector_CLI {
 		$add_check( 'health_endpoint', $health_ok, $health_ok ? '/v1/health unauth payload is minimal' : ( 'leaks: ' . implode( ',', $leaks ) ) );
 
 		// 6. Optional: round-trip a temporary credential through Basic Auth.
-		// The plaintext stays in $temp_pwd which is unset() before any failure path.
-		// We also schedule revoke via register_shutdown_function so a fatal error
-		// during the test still triggers cleanup.
 		if ( '' !== $username ) {
 			$user = get_user_by( 'login', $username );
 			if ( ! $user ) {
@@ -382,50 +377,17 @@ class AI_Site_Connector_CLI {
 			} elseif ( ! $app_pwds_ok ) {
 				$add_check( 'credential_round_trip', false, 'skipped — Application Passwords not available' );
 			} else {
-				$temp_name = 'AI Site Connector Self-Test - ' . gmdate( 'Y-m-d H:i:s' );
-				$created   = AI_Site_Connector_Application_Passwords::create_for_user( $user->ID, $temp_name );
-				if ( is_wp_error( $created ) ) {
-					$add_check( 'credential_round_trip', false, 'mint failed: ' . $created->get_error_message() );
+				// Shared with the Connection Test live check and the pack
+				// pre-flight (#106): temporary password, HTTP probe, revoke.
+				$probe = AI_Site_Connector_Diagnostics::credential_round_trip( $user, false );
+				if ( 'pass' === $probe['status'] ) {
+					$detail = '/wp/v2/users/me returned HTTP 200';
+				} elseif ( is_int( $probe['code'] ) ) {
+					$detail = '/wp/v2/users/me returned HTTP ' . $probe['code'];
 				} else {
-					$temp_user_id = (int) $user->ID;
-					$temp_uuid    = isset( $created['uuid'] ) ? (string) $created['uuid'] : '';
-					$temp_pwd     = isset( $created['password'] ) ? (string) $created['password'] : '';
-
-					// Cleanup safety net — if anything below fatals, this still
-					// runs at shutdown and the credential is revoked.
-					register_shutdown_function(
-						static function () use ( $temp_user_id, $temp_uuid ) {
-							if ( $temp_user_id && $temp_uuid ) {
-								AI_Site_Connector_Application_Passwords::revoke( $temp_user_id, $temp_uuid );
-							}
-						}
-					);
-
-					$auth_header = 'Basic ' . base64_encode( $user->user_login . ':' . $temp_pwd );
-					unset( $temp_pwd ); // Drop plaintext from this scope ASAP.
-
-					$ping = wp_remote_get(
-						rest_url( 'wp/v2/users/me' ),
-						array(
-							'timeout'   => 8,
-							'sslverify' => false,
-							'headers'   => array( 'Authorization' => $auth_header ),
-						)
-					);
-					unset( $auth_header );
-
-					if ( is_wp_error( $ping ) ) {
-						$add_check( 'credential_round_trip', false, 'request failed: ' . $ping->get_error_message() );
-					} else {
-						$code = (int) wp_remote_retrieve_response_code( $ping );
-						$add_check( 'credential_round_trip', 200 === $code, '/wp/v2/users/me returned HTTP ' . $code );
-					}
-
-					// Eager revoke (in addition to the shutdown safety net).
-					AI_Site_Connector_Application_Passwords::revoke( $temp_user_id, $temp_uuid );
-					$temp_uuid    = '';
-					$temp_user_id = 0;
+					$detail = ( 'mint_failed' === $probe['code'] ? 'mint failed: ' : 'request failed: ' ) . $probe['hint'];
 				}
+				$add_check( 'credential_round_trip', 'pass' === $probe['status'], $detail );
 			}
 		}
 

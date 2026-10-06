@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.12.5
+Stable tag: 0.13.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,14 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.13.0 =
+* New: Credentials → Effective access preview explains whether a credential can run an MCP tool, a REST tool or any REST route, and names the check that would refuse it. Read-only: nothing is sent, written or run.
+* New: live sign-in check on the Connection Test tab: signs in over HTTP with a temporary Application Password, revokes it, and explains failures.
+* New: MCP tool wp_list_content_snapshots; opt-in text_diff in content-update previews; WP-CLI update-content and rollback-content (dry run unless --apply).
+* New: the Installed Plugins row offers Update to vX.Y.Z or Check for updates, with an update status line and a changelog link.
+* Changed: when Wordfence's "Disable WordPress application passwords" option blocks Application Passwords, the plugin names it and the one setting to change.
+* Changed: agents are steered to wp_update_content; wp_update_post is marked legacy but not removed. Release ZIPs are byte-reproducible.
+
 = 0.12.5 =
 * Fixed (Multisite): network activation survives self-updates and rollbacks; each site's OpenAPI document names its own endpoint.
 * Fixed: the bundled stdio MCP bridge lists every tool the site offers and honours the pack's mcp_endpoint.

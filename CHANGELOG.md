@@ -6,6 +6,59 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-06
+
+Minor: tools for operators and agents around safe content changes,
+connection troubleshooting and updates. Adds one MCP tool
+(`wp_list_content_snapshots`) and one optional request field
+(`text_diff`). No breaking REST, MCP or database changes.
+
+### Added
+
+- Effective-access preview (#124): Credentials → "Effective access
+  preview" explains, check by check, whether a credential can run an MCP
+  tool, a REST tool or any REST route, and names the check that refuses
+  it: expiry, route scopes (the MCP endpoint and the route the tool calls),
+  role and post access, tool permissions, read-only mode or the connector
+  switch. Plugin settings are shown as not applying to WordPress core
+  routes. Read-only: nothing is minted, sent, written or run.
+- Live sign-in check (#106): the Connection Test tab mints a temporary
+  Application Password, signs in over HTTP with it, revokes it, and
+  explains failures (stripped Authorization header, WAF or capability
+  block, REST disabled, blocked loopback).
+- `wp_list_content_snapshots` MCP tool (#123): lists a post's rollback
+  snapshots (ids, state, names of touched fields; never stored values), so
+  a new session can recover with `wp_rollback_content`.
+- Readable content diffs (#122): opt-in `text_diff` on REST
+  `/content/update`, MCP `wp_update_content` and
+  `wp ai-connector update-content --text-diff` adds a bounded unified diff
+  of the content that would be stored to dry-run previews.
+- WP-CLI safe content commands (#108): `wp ai-connector update-content`
+  and `wp ai-connector rollback-content`. Dry run unless `--apply`; same
+  permissions and checks as REST and MCP.
+- Installed Plugins row (#127): "Update to vX.Y.Z" through WordPress's own
+  upgrader, or "Check for updates", plus an update status line, a
+  Changelog link and a link to the GitHub release.
+
+### Changed
+
+- Wordfence (#133): when Wordfence's "Disable WordPress application
+  passwords" option is what blocks Application Passwords, the Credentials,
+  Overview and Connection Test tabs, onboarding, credential errors and the
+  diagnostics report name it and the one setting to change.
+- Agent guidance (#109): MCP tool descriptions and generated agent
+  instructions steer agents to `wp_update_content` (dry run, snapshot,
+  rollback). `wp_update_post` is marked legacy; no tool was removed.
+- Release ZIPs are byte-reproducible (#101): rebuilding a tag gives the
+  same sha256 as the published asset.
+
+### Testing
+
+- Integration tests for each item above. The MCP catalog contract test
+  freezes the 21 tool names.
+- CI's "Reproducible ZIP" step rebuilds the package after touching every
+  file and requires identical bytes.
+
 ## [0.12.5] - 2026-10-06
 
 Patch: Multisite fixes and a complete tool catalog in the bundled stdio

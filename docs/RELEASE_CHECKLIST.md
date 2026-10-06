@@ -61,7 +61,7 @@ unzip -p ai-site-connector-vX.Y.Z.zip ai-site-connector/ai-site-connector.php | 
 - [ ] Status (stable / prerelease) is as intended; exactly one ZIP + checksum.
 - [ ] Downloaded ZIP matches its checksum and embeds `X.Y.Z`.
 - [ ] Rebuilding the tag gives the same bytes. Builds are reproducible
-      since 0.12.6, so this check must match:
+      since 0.13.0, so this check must match:
       `mkdir /tmp/asc-src && git archive vX.Y.Z | tar -x -C /tmp/asc-src && /tmp/asc-src/bin/build-release-zip.sh`,
       then `shasum -a 256` the result. It must equal the published `.sha256`.
 - [ ] Record tag, source SHA, release URL and checksum in

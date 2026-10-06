@@ -148,7 +148,7 @@ class AI_Site_Connector_MCP_Server {
 			),
 			array(
 				'name'        => 'wp_list_posts',
-				'description' => 'List posts. Optional: status (publish/draft/any), per_page (default 10, max 100), search (string), post_type (default post).',
+				'description' => 'List posts. Optional: status (publish/draft/any), per_page (default 10, max 100), search (string), post_type (default post; any REST-enabled type, e.g. page or attachment; unknown types are rejected).',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'properties' => array(
@@ -161,7 +161,7 @@ class AI_Site_Connector_MCP_Server {
 			),
 			array(
 				'name'        => 'wp_get_post',
-				'description' => 'Fetch a single post by ID. Required: id. Optional: post_type (default post).',
+				'description' => 'Fetch a single post by ID. Required: id. Optional: post_type (default post; any REST-enabled type, e.g. page or attachment; unknown types are rejected).',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'properties' => array(
@@ -173,7 +173,7 @@ class AI_Site_Connector_MCP_Server {
 			),
 			array(
 				'name'        => 'wp_create_post',
-				'description' => 'Create a post. Required: title, content. Optional: status (default draft), post_type (default post). Requires the write_content permission (off by default); blocked in read-only mode.',
+				'description' => 'Create a post. Required: title, content. Optional: status (default draft), post_type (default post; any REST-enabled type; unknown types are rejected). Requires the write_content permission (off by default); blocked in read-only mode.',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'properties' => array(
@@ -187,7 +187,7 @@ class AI_Site_Connector_MCP_Server {
 			),
 			array(
 				'name'        => 'wp_update_post',
-				'description' => 'Update a post by ID. Required: id. Optional: title, content, status, post_type. Requires the write_content permission (off by default); blocked in read-only mode. Prefer wp_update_content (dry-run, snapshot, rollback).',
+				'description' => 'Update a post by ID. Required: id. Optional: title, content, status, post_type (REST-enabled types only). Requires the write_content permission (off by default); blocked in read-only mode. Prefer wp_update_content (dry-run, snapshot, rollback).',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'properties' => array(
@@ -478,13 +478,13 @@ class AI_Site_Connector_MCP_Server {
 				if ( $id <= 0 ) {
 					throw new InvalidArgumentException( 'id required' );
 				}
-				return self::dispatch( 'GET', '/wp/v2/' . self::pt_rest_base( $pt ) . '/' . $id );
+				return self::dispatch( 'GET', self::post_type_route( $pt ) . '/' . $id );
 			case 'wp_create_post':
 				self::require_write_content();
 				$pt = isset( $args['post_type'] ) ? sanitize_key( $args['post_type'] ) : 'post';
 				return self::dispatch(
 					'POST',
-					'/wp/v2/' . self::pt_rest_base( $pt ),
+					self::post_type_route( $pt ),
 					array(
 						'title'   => isset( $args['title'] ) ? (string) $args['title'] : '',
 						'content' => isset( $args['content'] ) ? (string) $args['content'] : '',
@@ -504,7 +504,7 @@ class AI_Site_Connector_MCP_Server {
 						$body[ $k ] = (string) $args[ $k ];
 					}
 				}
-				return self::dispatch( 'POST', '/wp/v2/' . self::pt_rest_base( $pt ) . '/' . $id, $body );
+				return self::dispatch( 'POST', self::post_type_route( $pt ) . '/' . $id, $body );
 			case 'wp_self_test':
 				return self::dispatch_checked( 'GET', '/diagnostics/self-test' );
 			case 'wp_rest_routes':
@@ -549,7 +549,17 @@ class AI_Site_Connector_MCP_Server {
 		} else {
 			$req->set_body_params( $params );
 		}
-		$resp = rest_do_request( $req );
+		return self::checked_data( rest_do_request( $req ) );
+	}
+
+	/**
+	 * Response data, or an MCP tool error when the request failed (#111).
+	 *
+	 * @param WP_REST_Response|WP_Error $resp Result of rest_do_request().
+	 * @return mixed
+	 * @throws AI_Site_Connector_MCP_Tool_Error When the route returns >= 400.
+	 */
+	private static function checked_data( $resp ) {
 		if ( is_wp_error( $resp ) ) {
 			// WordPress < 5.7 returns rest_pre_dispatch errors unconverted.
 			$err_data = $resp->get_error_data();
@@ -609,13 +619,12 @@ class AI_Site_Connector_MCP_Server {
 		if ( isset( $args['search'] ) && '' !== (string) $args['search'] ) {
 			$query['search'] = (string) $args['search'];
 		}
-		$path = '/wp/v2/' . self::pt_rest_base( $pt );
+		$path = self::post_type_route( $pt );
 		$req  = new WP_REST_Request( 'GET', $path );
 		foreach ( $query as $k => $v ) {
 			$req->set_query_params( array_merge( $req->get_query_params(), array( $k => $v ) ) );
 		}
-		$resp = rest_do_request( $req );
-		return method_exists( $resp, 'get_data' ) ? $resp->get_data() : null;
+		return self::checked_data( rest_do_request( $req ) );
 	}
 
 	private static function dispatch( $method, $path, $body = null ) {
@@ -623,23 +632,36 @@ class AI_Site_Connector_MCP_Server {
 		if ( null !== $body ) {
 			$req->set_body_params( $body );
 		}
-		$resp = rest_do_request( $req );
-		return method_exists( $resp, 'get_data' ) ? $resp->get_data() : null;
+		return self::checked_data( rest_do_request( $req ) );
 	}
 
-	private static function pt_rest_base( $pt ) {
-		// Map common post types to REST base names. Custom post types
-		// would need the plugin's rest_base — not exposed here.
-		switch ( $pt ) {
-			case 'page':
-				return 'pages';
-			case 'attachment':
-			case 'media':
-				return 'media';
-			case 'post':
-			default:
-				return 'posts';
+	/**
+	 * REST collection route for a post type: only types registered with
+	 * show_in_rest, using their own namespace and base. Anything else is
+	 * refused instead of silently becoming a blog post (#118).
+	 *
+	 * @param string $pt Post type slug; "media" is accepted for attachment.
+	 * @return string Route such as /wp/v2/posts.
+	 * @throws AI_Site_Connector_MCP_Tool_Error When the type is unknown or not REST-enabled.
+	 */
+	private static function post_type_route( $pt ) {
+		$pt  = 'media' === $pt ? 'attachment' : (string) $pt;
+		$obj = get_post_type_object( $pt );
+		if ( ! $obj || empty( $obj->show_in_rest ) ) {
+			// JSON-encoded into the MCP result, never echoed as HTML.
+			// phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped
+			throw new AI_Site_Connector_MCP_Tool_Error(
+				array(
+					'status'  => 400,
+					'code'    => 'asc_unsupported_post_type',
+					'message' => sprintf( 'Unsupported post_type "%s": use a post type registered with show_in_rest, e.g. post, page or attachment.', $pt ),
+				)
+			);
+			// phpcs:enable
 		}
+		$base      = ! empty( $obj->rest_base ) ? $obj->rest_base : $obj->name;
+		$namespace = ! empty( $obj->rest_namespace ) ? $obj->rest_namespace : 'wp/v2';
+		return '/' . trim( $namespace, '/' ) . '/' . trim( $base, '/' );
 	}
 
 	private static function jsonrpc_result( $id, $result ) {

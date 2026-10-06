@@ -41,9 +41,15 @@ class AI_Site_Connector_Updater {
 	private static $readme_cache = null;
 
 	public static function register_hooks() {
+		// Installed Plugins screen (#127): status line even when updates are
+		// disabled, so that state is visible too.
+		add_filter( 'plugin_row_meta', array( __CLASS__, 'plugin_row_meta' ), 10, 2 );
+		add_action( 'admin_notices', array( __CLASS__, 'plugins_screen_notice' ) );
+
 		if ( self::is_disabled() ) {
 			return;
 		}
+		add_filter( 'plugin_action_links_' . AI_SITE_CONNECTOR_BASENAME, array( __CLASS__, 'plugin_action_links' ) );
 
 		add_filter( 'pre_set_site_transient_update_plugins', array( __CLASS__, 'inject_update' ) );
 		add_filter( 'plugins_api', array( __CLASS__, 'plugins_api_filter' ), 10, 3 );
@@ -846,6 +852,12 @@ class AI_Site_Connector_Updater {
 	}
 
 	private static function redirect_back() {
+		// The Installed Plugins row's "Check for updates" link returns there (#127).
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Callers verified the nonce; this only picks the return screen.
+		if ( isset( $_GET['return'] ) && 'plugins' === sanitize_key( wp_unslash( $_GET['return'] ) ) ) {
+			wp_safe_redirect( add_query_arg( 'asc_update_check', '1', self_admin_url( 'plugins.php' ) ) );
+			exit;
+		}
 		wp_safe_redirect(
 			add_query_arg(
 				array(
@@ -856,5 +868,115 @@ class AI_Site_Connector_Updater {
 			)
 		);
 		exit;
+	}
+
+	/* ---------------------------------------------------------------------
+	 * Installed Plugins screen (#127).
+	 * ------------------------------------------------------------------ */
+
+	/**
+	 * Row actions: "Update to vX.Y.Z" through WordPress's normal upgrader
+	 * when a newer release is known, otherwise "Check for updates".
+	 *
+	 * @param string[] $links Existing action links.
+	 * @return string[]
+	 */
+	public static function plugin_action_links( $links ) {
+		if ( ! current_user_can( 'update_plugins' ) || self::is_disabled() ) {
+			return $links;
+		}
+		$remote = self::cached_release();
+		if ( $remote && self::update_available() ) {
+			$url = wp_nonce_url(
+				self_admin_url( 'update.php?action=upgrade-plugin&plugin=' . rawurlencode( AI_SITE_CONNECTOR_BASENAME ) ),
+				'upgrade-plugin_' . AI_SITE_CONNECTOR_BASENAME
+			);
+			$links['asc_update'] = sprintf(
+				'<a href="%1$s"><strong>%2$s</strong></a>',
+				esc_url( $url ),
+				/* translators: %s: version. */
+				esc_html( sprintf( __( 'Update to v%s', 'ai-site-connector' ), $remote['version'] ) )
+			);
+		} else {
+			$url = wp_nonce_url(
+				add_query_arg(
+					array(
+						'action' => 'ai_site_connector_check_updates',
+						'return' => 'plugins',
+					),
+					admin_url( 'admin-post.php' )
+				),
+				'ai_site_connector_check_updates'
+			);
+			$links['asc_check'] = sprintf( '<a href="%1$s">%2$s</a>', esc_url( $url ), esc_html__( 'Check for updates', 'ai-site-connector' ) );
+		}
+		return $links;
+	}
+
+	/**
+	 * Status line under the plugin description: installed vs latest
+	 * version, failed check, or updates disabled; plus the changelog modal
+	 * and the GitHub release.
+	 *
+	 * @param string[] $meta Existing row meta.
+	 * @param string   $file Plugin basename of the row.
+	 * @return string[]
+	 */
+	public static function plugin_row_meta( $meta, $file ) {
+		if ( AI_SITE_CONNECTOR_BASENAME !== $file || ! current_user_can( 'update_plugins' ) ) {
+			return $meta;
+		}
+		if ( self::is_disabled() ) {
+			$meta[] = esc_html__( 'Self-updates disabled (AI_SITE_CONNECTOR_UPDATE_DISABLE)', 'ai-site-connector' );
+			return $meta;
+		}
+		$error  = self::cached_error();
+		$remote = self::cached_release();
+		if ( $error ) {
+			/* translators: %s: error code. */
+			$meta[] = esc_html( sprintf( __( 'Update check failed (%s); use "Check for updates" to retry', 'ai-site-connector' ), (string) $error['error'] ) );
+		} elseif ( $remote ) {
+			$meta[] = self::update_available()
+				/* translators: 1: available version, 2: installed version. */
+				? esc_html( sprintf( __( 'Update available: v%1$s (installed v%2$s)', 'ai-site-connector' ), $remote['version'], AI_SITE_CONNECTOR_VERSION ) )
+				/* translators: %s: installed version. */
+				: esc_html( sprintf( __( 'Up to date (v%s)', 'ai-site-connector' ), AI_SITE_CONNECTOR_VERSION ) );
+		} else {
+			$meta[] = esc_html__( 'Update status not checked yet', 'ai-site-connector' );
+		}
+		$changelog = self_admin_url( 'plugin-install.php?tab=plugin-information&plugin=' . self::PLUGIN_SLUG . '&section=changelog&TB_iframe=true&width=772&height=600' );
+		$meta[]    = sprintf( '<a href="%1$s" class="thickbox open-plugin-details-modal">%2$s</a>', esc_url( $changelog ), esc_html__( 'Changelog', 'ai-site-connector' ) );
+		if ( $remote && ! empty( $remote['html_url'] ) ) {
+			$meta[] = sprintf( '<a href="%1$s" target="_blank" rel="noopener">%2$s</a>', esc_url( $remote['html_url'] ), esc_html__( 'GitHub release', 'ai-site-connector' ) );
+		}
+		return $meta;
+	}
+
+	/**
+	 * Show the "Check for updates" result on the Installed Plugins screen.
+	 * Only after that link redirected here, so flashes meant for the plugin
+	 * page are not consumed.
+	 */
+	public static function plugins_screen_notice() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Display only.
+		if ( empty( $_GET['asc_update_check'] ) || ! current_user_can( 'update_plugins' ) ) {
+			return;
+		}
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! $screen || 0 !== strpos( (string) $screen->id, 'plugins' ) ) {
+			return;
+		}
+		$key   = AI_Site_Connector_Admin_Page::FLASH_OPTION . '_' . get_current_user_id();
+		$flash = get_transient( $key );
+		if ( ! is_array( $flash ) || empty( $flash['msg'] ) ) {
+			return;
+		}
+		delete_transient( $key );
+		printf(
+			'<div class="notice notice-%1$s is-dismissible"><p><strong>%2$s</strong> %3$s</p></div>',
+			'success' === $flash['type'] ? 'success' : 'error',
+			esc_html__( 'AI Site Connector:', 'ai-site-connector' ),
+			esc_html( (string) $flash['msg'] )
+		);
 	}
 }

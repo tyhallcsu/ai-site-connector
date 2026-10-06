@@ -420,4 +420,5 @@ jobs:
           rsync -a --exclude='.git/' --exclude='vendor/' --exclude='build/' ./ "$WP_DIR/wp-content/plugins/ai-site-connector/"
           wp plugin activate ai-site-connector --network --path="$WP_DIR"
           wp eval-file "$WP_DIR/wp-content/plugins/ai-site-connector/tests/multisite/activation.php" --path="$WP_DIR" --user=admin
+          wp eval-file "$WP_DIR/wp-content/plugins/ai-site-connector/tests/multisite/openapi.php" --path="$WP_DIR" --user=admin
           wp plugin list --path="$WP_DIR" --fields=name,status --format=csv | grep -x 'ai-site-connector,active-network'

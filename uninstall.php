@@ -72,6 +72,7 @@ foreach ( array(
 	delete_option( $ai_site_connector_option );
 }
 delete_transient( 'ai_site_connector_openapi_cache' );
+delete_site_transient( 'ai_site_connector_openapi_cache' ); // Network-wide copy written before 0.12.5.
 delete_site_transient( 'ai_site_connector_remote_release' );
 // Unused one-time connection-pack download tokens.
 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching

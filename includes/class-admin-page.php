@@ -1726,10 +1726,10 @@ class AI_Site_Connector_Admin_Page {
 				'bad_label' => __( 'ON — every non-read tool is currently denied', 'ai-site-connector' ),
 			),
 			array(
-				'label'   => __( 'Last successful MCP request', 'ai-site-connector' ),
+				'label'   => __( 'Last successful plugin API request (REST or MCP)', 'ai-site-connector' ),
 				'ok'      => '' !== $last,
 				'ok_label'  => $last,
-				'bad_label' => __( 'Never (no request has hit /ai-site-connector/v1/* since plugin activation)', 'ai-site-connector' ),
+				'bad_label' => __( 'None yet (no successful signed-in request to /ai-site-connector/v1/*)', 'ai-site-connector' ),
 			),
 		);
 		?>

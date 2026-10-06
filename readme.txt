@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.13.0
+Stable tag: 0.13.1
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,10 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.13.1 =
+* Changed: the plugin download is about 73% smaller (1.15 MB to about 313 KB). Brand source images are no longer shipped; nothing at runtime used them.
+* Changed: the admin header shows the approved icon as a small, versioned PNG, so upgraded sites never show a cached old image.
+
 = 0.13.0 =
 * New: Credentials → Effective access preview explains whether a credential can run an MCP tool, a REST tool or any REST route, and names the check that would refuse it. Read-only: nothing is sent, written or run.
 * New: live sign-in check on the Connection Test tab: signs in over HTTP with a temporary Application Password, revokes it, and explains failures.

@@ -2,6 +2,21 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-06 — #131 decided; #125 ZIP size fixed (unreleased)
+
+- Owner, on #131: the approved icon is "the newer one". That is the
+  mint/cyan mark that has shipped since v0.12.2, so the artwork is
+  unchanged.
+- PR #158 → `aa39cd2` (closes #125, #131); CI run 37484091055 20/20;
+  integration 117/117 on 6 WordPress builds.
+  - The admin header uses `assets/ai-site-connector-mark-128.png` (7,593 B,
+    from the mark's embedded 512px PNG) with `?ver=<version>`, so upgrades
+    never show a cached image.
+  - The build leaves out `assets/brand/`. ZIP: 1,154,500 → 312,795 B
+    (69 files).
+  - Package smoke enforces a 400 KiB ZIP and a 20 KiB mark.
+- Not released; 0.13.1 waits for the owner.
+
 ## 2026-10-06 — Docker restarted; v0.13.0 on the dev site
 
 - At the owner's request, Docker Desktop was restarted. `docker desktop

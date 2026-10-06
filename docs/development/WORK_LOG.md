@@ -2,6 +2,21 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-06 — v0.12.5 released
+
+- PR #144 → `6edeee1`; PR CI run 37462746859 20/20 (ZIP install + upgrade
+  v0.12.4 → v0.12.5; integration 105/105 on 6 WordPress builds; both
+  Multisite checks pass); main CI run 37463011527 20/20. Tag `v0.12.5` →
+  `6edeee1`; release run 37463275191 succeeded; stable;
+  `releases/latest` = v0.12.5. Asset `ai-site-connector-v0.12.5.zip`:
+  1,139,204 B, sha256
+  `6edea96318bb2d105fc6f109b938f4781ebf0455ae63419c3efefbca61a7b4be`;
+  checksum OK, embeds 0.12.5, 70 files, no dev or test paths, fixes
+  present. Shipped issues (#112 #129 #130 #132) commented.
+- Open issues are now features, owner decisions or blocked: #131 (approved
+  icon file?), #97, #99, and the backlog. The dev site stays on v0.12.3
+  until Docker is restarted.
+
 ## 2026-10-06 — Multisite, bridge and docs fixes (0.12.5 prep)
 
 - PR #141 → `f73220f` (closes #130, #132): CI 20/20, including the new

@@ -173,7 +173,7 @@ class AI_Site_Connector_MCP_Server {
 			),
 			array(
 				'name'        => 'wp_create_post',
-				'description' => 'Create a post. Required: title, content. Optional: status (default draft), post_type (default post; any REST-enabled type; unknown types are rejected). Requires the write_content permission (off by default); blocked in read-only mode.',
+				'description' => 'Create a post. Required: title, content. Optional: status (default draft), post_type (default post; any REST-enabled type; unknown types are rejected). Writes immediately (no dry run). Requires the write_content permission (off by default); blocked in read-only mode. To change an existing post, use wp_update_content instead.',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'properties' => array(
@@ -187,7 +187,7 @@ class AI_Site_Connector_MCP_Server {
 			),
 			array(
 				'name'        => 'wp_update_post',
-				'description' => 'Update a post by ID. Required: id. Optional: title, content, status, post_type (REST-enabled types only). Requires the write_content permission (off by default); blocked in read-only mode. Prefer wp_update_content (dry-run, snapshot, rollback).',
+				'description' => 'Update a post by ID. Required: id. Optional: title, content, status, post_type (REST-enabled types only). Legacy: writes immediately with no dry run, no snapshot and no rollback. Requires the write_content permission (off by default); blocked in read-only mode. Prefer wp_update_content, which previews the change first and returns a snapshot_id for wp_rollback_content.',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'properties' => array(

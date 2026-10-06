@@ -1,20 +1,20 @@
 # Handoff — AI Site Connector
 
-**Updated:** 2026-10-06 ~02:10 UTC (2026-10-05 20:10 America/Denver) · **State:** v0.12.4 released and asset verified; dev deploy BLOCKED (Docker Desktop unresponsive) · **Session:** `asc-dev-audit-ship`
+**Updated:** 2026-10-06 (America/Denver) · **State:** 0.12.5 release prep (#141 #142 #143 merged); dev deploy still blocked on Docker · **Session:** `asc-dev-audit-ship`
 **Repo:** tyhallcsu/ai-site-connector (public, standalone — the parent `ess-custom-plugins` dir is not a repo)
 **Primary checkout:** `/Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector`. Its local `main` is at `16f5816`, 5 commits behind `origin/main` (read from its refs 21:48 UTC; not modified by this session; fast-forward before use)
-**Session worktree:** `.claude/worktrees/asc-dev-audit-ship` · branch `docs/checkpoint-0.12.4` (this checkpoint)
+**Session worktree:** `.claude/worktrees/asc-dev-audit-ship` · branch `chore/release-0.12.5` (release prep)
 **Rules:** `docs/development/OPERATING_BRIEF.md` · **Dev site:** `docs/development/DEV_SITE.md` · **Plan:** `docs/development/ROADMAP.md` · **Log:** `docs/development/WORK_LOG.md`
 
 ## Verified state
 
 | Item | Value | Evidence |
 |------|-------|----------|
-| `origin/main` | `dba1914` — chore(release): v0.12.4 (#139) | `gh pr view 139` merge commit |
+| `origin/main` | `ed0de94` — #143 bridge discovery, on `7c6d5a9` (#142) and `f73220f` (#141) | `gh pr view` merge commits |
 | Latest release | **v0.12.4** → tag on `dba1914`; stable; `releases/latest`; ZIP 1,138,034 B, sha256 `6c4a4e78…5e74c`; checksum, embedded 0.12.4, 70 files, no dev paths, fixes present all verified | release run 37398690817 |
-| Unreleased on main | nothing | commits since tag v0.12.4 |
+| Unreleased on main | #141 #142 #143 → v0.12.5 prepared in this PR | commits since tag v0.12.4 |
 | Dev site | http://localhost:8790 — still **published v0.12.3**. `deploy --release v0.12.4` hung at its first Docker call because Docker Desktop stopped responding (`docker ps` hangs) after the disk filled. The deploy was stopped; nothing changed on dev. Restarting Docker also stops another project's `uptime-kuma` container, so that needs the owner | `docker ps` hang 02:05 UTC |
-| CI | #137 19/19 (101/101), #138 19/19 (104/104 on PR merged with main), #139 19/19 (upgrade v0.12.3 → v0.12.4), main `dba1914` 19/19 | `gh run view` |
+| CI | 20 jobs per run (new: Multisite activation). #141, #142 and #143 each 20/20 on their heads | `gh run view` |
 | Remote dev target | none exists — owner decision tracked in #97 | config/registry search |
 
 ## Startup reconciliation (2026-10-05)
@@ -64,9 +64,9 @@
 
 ## Next three actions
 
-1. Owner: restart Docker Desktop, then `bin/dev-site.sh deploy --release v0.12.4` and `bin/dev-site.sh audit`, and run the HTTP checks for #111/#118/#120 (script described in WORK_LOG).
+1. Release-prep PR: CI green → merge → main CI → tag v0.12.5 → verify the asset. Then, when Docker responds again: `bin/dev-site.sh deploy --release v0.12.5` and `audit`.
 2. Owner decisions #97 (remote dev site?) and #99 (required checks on main).
-3. Backlog (not auto-implemented): #101 #106 #108 #109 #125 and the other session's features #112 #122–#124.
+3. Waiting on the owner: #131 (which icon file is approved?), #97, #99. Backlog features: #101 #106 #108 #109 #122–#125 #127 #133.
 
 Resume: `cd <worktree> && git fetch && gh pr list -R tyhallcsu/ai-site-connector && bin/dev-site.sh status`
 

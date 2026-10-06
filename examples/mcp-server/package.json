@@ -1,6 +1,6 @@
 {
   "name": "ai-site-connector-mcp",
-  "version": "0.12.4",
+  "version": "0.12.5",
   "description": "Stdio MCP server for the AI Site Connector WordPress plugin. Proxies tool calls to the plugin's HTTP MCP endpoint via Basic Auth.",
   "type": "module",
   "private": true,

@@ -32,6 +32,7 @@
  *   wp_broken_links      — offline broken internal link scan
  *   wp_export_bundle     — deterministic manifest bundle
  *   wp_update_content    — safe content update (dry-run by default)
+ *   wp_list_content_snapshots — list a post's rollback snapshots (read-only)
  *   wp_rollback_content  — conflict-aware rollback of an update
  *
  * Constants:
@@ -346,6 +347,17 @@ class AI_Site_Connector_MCP_Server {
 				),
 			),
 			array(
+				'name'        => 'wp_list_content_snapshots',
+				'description' => 'List one post\'s rollback snapshots, newest first: snapshot_id, created_gmt, user_id, state (applied, rolled_back, ...) and the fields each update touched. Values are never returned. To undo an update: pick a snapshot_id, call wp_rollback_content (dry run by default) to review, then repeat with dry_run=false. Read-only.',
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'post_id' => array( 'type' => 'integer' ),
+					),
+					'required'   => array( 'post_id' ),
+				),
+			),
+			array(
 				'name'        => 'wp_rollback_content',
 				'description' => 'Roll back an update made with wp_update_content using its snapshot_id. Dry-run by default; refuses with reason=conflict if any of those fields changed since, so later edits are never overwritten.',
 				'inputSchema' => array(
@@ -523,6 +535,13 @@ class AI_Site_Connector_MCP_Server {
 				return self::dispatch_checked( 'GET', '/export/bundle', self::pick( $args, array( 'max_items', 'sections' ) ) );
 			case 'wp_update_content':
 				return self::dispatch_checked( 'POST', '/content/update', self::pick( $args, array( 'post_id', 'changes', 'dry_run', 'expected_modified_gmt' ) ) );
+			case 'wp_list_content_snapshots':
+				$post_id = isset( $args['post_id'] ) ? (int) $args['post_id'] : 0;
+				if ( $post_id <= 0 ) {
+					throw new InvalidArgumentException( 'post_id required' );
+				}
+				// Same route, permissions and disable switch as REST (#123).
+				return self::dispatch_checked( 'GET', '/content/snapshots/' . $post_id );
 			case 'wp_rollback_content':
 				return self::dispatch_checked( 'POST', '/content/rollback', self::pick( $args, array( 'post_id', 'snapshot_id', 'dry_run' ) ) );
 			case 'wp_redirects':

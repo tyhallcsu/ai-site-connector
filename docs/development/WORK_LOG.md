@@ -2,6 +2,29 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-06 — Real upgrade path 0.13.0 → 0.13.1 on the dev site
+
+Headless check of the route most users will take: the dev site on v0.13.0,
+then Installed Plugins → "Update to v0.13.1" (#127) through WordPress's
+own upgrader.
+
+- **Update link:** appeared after the row's "Check for updates" refreshed
+  the cached release.
+- **Upgrader output:** "Downloading update from
+  https://github.com/tyhallcsu/ai-site-connector/releases/download/v0.13.1/ai-site-connector-v0.13.1.zip…
+  Plugin updated successfully."
+- **Installed files:** identical to the v0.13.1 release ZIP (69/69 sha256;
+  none missing, extra or changed). The plugin was active afterwards
+  (WP-CLI).
+- **Rollback:** the overview tab shows "2 backups available for rollback",
+  so the pre-update backup (#114) was made through this path too.
+- The plugins row read "Activate" only when opened straight after the
+  success message. Core reactivates an updated plugin in a follow-up
+  iframe request, and the test navigated before that request finished.
+  This is a test timing artefact, not a plugin defect.
+- Dev deploy record resynced with `deploy --release v0.13.1`.
+- No defects found.
+
 ## 2026-10-06 — Dev audit of v0.13.1: CLI, REST and MCP
 
 These are the audit areas still open from the first pass. All ran on the

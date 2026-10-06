@@ -1,32 +1,30 @@
 # Handoff — AI Site Connector
 
-**Updated:** 2026-10-06 (America/Denver) · **State:** v0.13.0 released, verified and deployed to the dev site. The owner's feature list is done. #125 merged after the owner decided #131, and is not yet released. **PAUSED** under credit budget mode (weekly limit 74%, resets 2026-10-07). · **Session:** `asc-dev-audit-ship`
+**Updated:** 2026-10-06 (America/Denver) · **State:** v0.13.1 released, verified and on the dev site. Every owner decision is made (#97, #99, #131) and no issue is blocked. **PAUSED** under credit budget mode. · **Session:** `asc-dev-audit-ship`
 **Repo:** tyhallcsu/ai-site-connector (public). The parent `ess-custom-plugins` directory is not a repo.
-**Primary checkout:** `/Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector`. Its local `main` is `16f5816`, 28 commits behind `origin/main`; fast-forward it before use. This session did not modify it.
-**Session worktree:** `.claude/worktrees/asc-dev-audit-ship`, branch `docs/checkpoint-125` (this checkpoint).
+**Primary checkout:** `/Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector`. Its local `main` is `16f5816`, far behind `origin/main`; fast-forward it before use. This session did not modify it.
+**Session worktree:** `.claude/worktrees/asc-dev-audit-ship`, branch `docs/checkpoint-0.13.1` (this checkpoint).
 **Rules:** `docs/development/OPERATING_BRIEF.md` · **Dev site:** `docs/development/DEV_SITE.md` · **Log:** `docs/development/WORK_LOG.md` (evidence for everything below)
 
 ## Verified state
 
 | Item | Value | Evidence |
 |------|-------|----------|
-| `origin/main` | `2395ea4` — chore(release): v0.13.0 (#155) | `git log origin/main` |
-| Latest release | **v0.13.0**: tag on `2395ea4`, stable, `releases/latest`. ZIP is 1,154,500 B, sha256 `189711e1…2156`, 71 files, embeds 0.13.0, no dev paths. A local rebuild from the tag archive gives the same sha256. | release run 37471734711 |
-| CI | 20 jobs. #155 20/20 (upgrade v0.12.5 → v0.13.0; integration 116/116 × 6 WP builds); main `2395ea4` 20/20 | runs 37469725758, 37470047823 |
-| Dev site | http://localhost:8790 runs **v0.13.0**, deployed 2026-10-06T13:52Z from the release asset (sha256 `189711e1…2156`, the same as published). Audit: all tabs clean on desktop and phone. Headless checks pass for the access preview, the live sign-in card and the Plugins row ("Up to date (v0.13.0)", Changelog, GitHub release). | `bin/dev-site.sh status`, `audit` |
-| Unreleased on main | #158 → `aa39cd2` (#125, #131): the header mark is a 7.6 KB PNG, and brand sources are out of the ZIP (1,154,500 → 312,795 B, 69 files). Package smoke enforces 400 KiB for the ZIP and 20 KiB for the mark. | PR CI run 37484091055 20/20, integration 117/117 |
-| Open PRs | this checkpoint only | `gh pr list` |
+| `origin/main` | `9331959` — ci: single CI gate check for main (#161) | `git log origin/main` |
+| Latest release | **v0.13.1**: tag on `345ffc6`, stable, `releases/latest`. ZIP is 313,205 B with 69 files, sha256 `4fa08c24…bd4e`. Embeds 0.13.1; no `assets/brand/`; no dev paths. A local rebuild of the tag gives the same bytes. | release run 37492378604 |
+| Unreleased on main | #161 only: the CI gate job and docs. No plugin code changes. | `git log v0.13.1..origin/main` |
+| Branch protection | `main` requires the `CI gate` check, reported by GitHub Actions. Branches don't have to be up to date, no review is required, admins are not enforced, and force pushes and deletions are off. Agents never use the admin override. | `gh api repos/tyhallcsu/ai-site-connector/branches/main/protection` |
+| CI | 21 jobs; `CI gate` needs all 11 job groups. #160 20/20 (upgrade v0.13.0 → v0.13.1; integration 117/117 × 6 WP builds). #161 21/21. | runs 37491800393, 37492301242 |
+| Dev site | http://localhost:8790 runs **v0.13.1** from the release asset (same sha256). Audit: all tabs clean. Header logo `…mark-128.png?ver=0.13.1`: 128×128 shown at 64×64, HTTP 200, 7,593 B. This local instance is the canonical dev target (#97). | `bin/dev-site.sh status`, `audit` |
 
 ## Owner decisions / blocked
 
-- **0.13.1:** whether to release the packaging-only fix (#125). Nothing ships until the owner asks.
-- **#97:** whether to set up a remote dev site.
-- **#99:** required checks on `main` (an admin setting).
+None open. #97 is closed: no remote dev site; the local instance is canonical. #99 is decided: `CI gate` is required. #131 is decided: the newer mint/cyan icon.
 
-## Next actions (when budget allows)
+## Next actions
 
-1. Owner: decide #97 and #99, and whether to release 0.13.1.
-2. Optional local cleanup: the squash-merged feature branches (#146–#155) still have local pointers. `git branch -d` refuses them because of the squash merges; they are safe to delete with `-D` once each PR shows MERGED.
+1. Nothing is required. New work starts from the open issues list (`gh issue list`).
+2. Optional local cleanup: the squash-merged branches from #146 on still have local pointers. `git branch -d` refuses them because of the squash merges; they are safe to delete with `-D` once each PR shows MERGED.
 
 Resume: `cd <worktree> && git fetch && gh pr list -R tyhallcsu/ai-site-connector && bin/dev-site.sh status`
 
@@ -39,10 +37,10 @@ WP_DB_HOST=127.0.0.1:33306 WP_DB_PASSWORD=root WP_PORT=8775 bash tests/runtime-s
 bash tests/zip-upgrade-smoke.sh "$(bin/build-release-zip.sh | tail -n1)"
 ```
 
-Without Docker, these all pass locally: `composer test`, `composer lint`, `composer phpcs`, `tests/security-grep.sh` and `tests/package-smoke.sh`. GitHub CI runs everything else.
+Without Docker, these all pass locally: `composer test`, `composer lint`, `composer phpcs`, `tests/security-grep.sh` and `tests/package-smoke.sh`. The package smoke enforces a 400 KiB ZIP and a 20 KiB header mark.
 
 ## Workers / services
 
 - Subagents: none. Background watchers: none running.
-- Docker: restarted 2026-10-06 at the owner's request (a hung backend, up 22 h, was force-killed). Engine 28.3.3. Running: `asc-dev-wordpress-1`, `asc-dev-db-1`, and another project's `uptime-kuma`, which came back healthy on its own. `asc-mysql-test` is stopped (disposable). Stop the dev site with `bin/dev-site.sh stop`.
-- Sandbox: `deploy`, `rollback`, `audit` and PHPCS need a writable `TMPDIR` (the session scratchpad).
+- Docker engine 28.3.3 (restarted 2026-10-06). Running: `asc-dev-wordpress-1`, `asc-dev-db-1`, and another project's `uptime-kuma` (leave it alone). `asc-mysql-test` is stopped (disposable). Stop the dev site with `bin/dev-site.sh stop`.
+- Sandbox: `deploy`, `rollback`, `audit` and PHPCS need a writable `TMPDIR` (the session scratchpad). `audit` uses `ASC_DEV_CACHE` set to a scratchpad Playwright install.

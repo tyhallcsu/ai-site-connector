@@ -53,14 +53,12 @@ class AI_Site_Connector_REST_Controller {
 	public static function register_hooks() {
 		add_action( 'rest_api_init', array( __CLASS__, 'register_routes' ) );
 		// Enforce per-Application-Password scopes + IP allowlist + expiry on
-		// EVERY REST route (plugin namespace and core /wp/v2/*). Runs at
-		// priority 9 — before maybe_stamp_last_request — so denied requests
-		// don't get counted as "successful MCP request".
+		// EVERY REST route (plugin namespace and core /wp/v2/*).
 		add_filter( 'rest_pre_dispatch', array( __CLASS__, 'maybe_enforce_app_password_extras' ), 9, 3 );
-		// Track the most recent authenticated plugin-namespace request so
-		// the admin Connection Test page can show "last successful MCP
-		// request". Wired as a no-op filter — we only read the request URI.
-		add_filter( 'rest_pre_dispatch', array( __CLASS__, 'maybe_stamp_last_request' ), 10, 3 );
+		// Record the most recent successful authenticated plugin-namespace
+		// request for the Connection Test page. Runs after permission
+		// checks and the route callback, so only real successes count (#121).
+		add_filter( 'rest_request_after_callbacks', array( __CLASS__, 'maybe_stamp_last_request' ), 10, 3 );
 	}
 
 	/**
@@ -94,18 +92,39 @@ class AI_Site_Connector_REST_Controller {
 		return $result;
 	}
 
-	public static function maybe_stamp_last_request( $result, $server, $request ) {
-		if ( null !== $result ) {
-			// Denied or short-circuited (e.g. disabled switch): not a successful request.
-			return $result;
+	/**
+	 * Stamp LAST_REQUEST_OPTION after a successful plugin-namespace request.
+	 * Failures (WP_Error, HTTP >= 400) never count, and neither do MCP
+	 * JSON-RPC errors or tool results with isError, which travel as HTTP 200.
+	 *
+	 * @param mixed           $response Callback result: WP_REST_Response, WP_Error or raw data.
+	 * @param array           $handler  Route handler (unused).
+	 * @param WP_REST_Request $request  Request.
+	 * @return mixed The response, unchanged.
+	 */
+	public static function maybe_stamp_last_request( $response, $handler, $request ) {
+		unset( $handler );
+		if ( is_wp_error( $response ) || ! is_user_logged_in() || ! ( $request instanceof WP_REST_Request ) ) {
+			return $response;
 		}
-		if ( is_user_logged_in() && $request instanceof WP_REST_Request ) {
-			$route = (string) $request->get_route();
-			if ( 0 === strpos( $route, '/' . AI_SITE_CONNECTOR_REST_NAMESPACE . '/' ) ) {
-				update_option( self::LAST_REQUEST_OPTION, gmdate( 'c' ), false );
+		$route = (string) $request->get_route();
+		if ( 0 !== strpos( $route, '/' . AI_SITE_CONNECTOR_REST_NAMESPACE . '/' ) ) {
+			return $response;
+		}
+		if ( $response instanceof WP_HTTP_Response ) {
+			if ( $response->get_status() >= 400 ) {
+				return $response;
 			}
+			$data = $response->get_data();
+		} else {
+			$data = $response;
 		}
-		return $result;
+		if ( '/' . AI_SITE_CONNECTOR_REST_NAMESPACE . '/mcp' === $route
+			&& ( ! is_array( $data ) || isset( $data['error'] ) || ! empty( $data['result']['isError'] ) ) ) {
+			return $response;
+		}
+		update_option( self::LAST_REQUEST_OPTION, gmdate( 'c' ), false );
+		return $response;
 	}
 
 	/**

@@ -52,6 +52,30 @@ delete_option( 'ai_site_connector_db_version' );
 delete_option( 'ai_site_connector_log_retention_days' );
 delete_option( 'ai_site_connector_wipe_on_uninstall' );
 delete_option( 'ai_site_connector_disabled' );
+// Settings and policy (#116): a wipe must reinstall to the conservative
+// defaults, not the old tool permissions or delivery targets. Per-password
+// restriction meta stays with the preserved Application Passwords.
+foreach ( array(
+	'ai_site_connector_tool_permissions',
+	'ai_site_connector_read_only_mode',
+	'ai_site_connector_webhook_url',
+	'ai_site_connector_webhook_secret',
+	'ai_site_connector_webhook_format',
+	'ai_site_connector_webhook_event_filter',
+	'ai_site_connector_digest_cadence',
+	'ai_site_connector_digest_recipients',
+	'ai_site_connector_onboarding_completed',
+	'ai_site_connector_last_request_at',
+	'ai_site_connector_cloudflare_api_token',
+	'ai_site_connector_cloudflare_zone_id',
+) as $ai_site_connector_option ) {
+	delete_option( $ai_site_connector_option );
+}
+delete_transient( 'ai_site_connector_openapi_cache' );
+delete_site_transient( 'ai_site_connector_remote_release' );
+// Unused one-time connection-pack download tokens.
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s", $wpdb->esc_like( '_transient_ai_site_connector_pack_token_' ) . '%', $wpdb->esc_like( '_transient_timeout_ai_site_connector_pack_token_' ) . '%' ) );
 // Content-update rollback snapshots (copies of post content) and their index rows.
 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( 'ai_site_connector_snapshot_' ) . '%' ) );
@@ -69,6 +93,9 @@ if ( $ai_site_connector_next ) {
 	wp_unschedule_event( $ai_site_connector_next, 'ai_site_connector_audit_log_prune' );
 }
 wp_clear_scheduled_hook( 'ai_site_connector_audit_log_prune' );
+foreach ( array( 'ai_site_connector_audit_digest', 'ai_site_connector_update_check', 'ai_site_connector_app_password_sweep', 'ai_site_connector_webhook_deliver' ) as $ai_site_connector_hook ) {
+	wp_clear_scheduled_hook( $ai_site_connector_hook );
+}
 
 // 5. Clear any flash transients we may have left behind.
 foreach ( get_users( array( 'fields' => array( 'ID' ) ) ) as $ai_site_connector_user ) {
@@ -79,5 +106,7 @@ unset(
 	$ai_site_connector_opt_in,
 	$ai_site_connector_table,
 	$ai_site_connector_next,
+	$ai_site_connector_option,
+	$ai_site_connector_hook,
 	$ai_site_connector_user
 );

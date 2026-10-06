@@ -271,14 +271,17 @@ class AI_Site_Connector_Admin_Page {
 	 * Mirrors the AI Site Operator role's natural capability surface so the
 	 * defaults are sensible for the typical AI agent. Filterable.
 	 *
+	 * The create/update presets use a POST prefix scope: creating needs the
+	 * collection route and updating needs /{id} (#113). DELETE stays denied.
+	 *
 	 * @return array<int, array{method:string, route:string, label:string}>
 	 */
 	private static function scope_presets() {
 		$presets = array(
 			array( 'method' => 'GET',  'route' => '/wp/v2/posts',     'label' => __( 'Read posts', 'ai-site-connector' ) ),
-			array( 'method' => 'POST', 'route' => '/wp/v2/posts',     'label' => __( 'Create/update posts', 'ai-site-connector' ) ),
+			array( 'method' => 'POST', 'route' => '/wp/v2/posts/*',   'label' => __( 'Create/update posts', 'ai-site-connector' ) ),
 			array( 'method' => 'GET',  'route' => '/wp/v2/pages',     'label' => __( 'Read pages', 'ai-site-connector' ) ),
-			array( 'method' => 'POST', 'route' => '/wp/v2/pages',     'label' => __( 'Create/update pages', 'ai-site-connector' ) ),
+			array( 'method' => 'POST', 'route' => '/wp/v2/pages/*',   'label' => __( 'Create/update pages', 'ai-site-connector' ) ),
 			array( 'method' => 'GET',  'route' => '/wp/v2/media',     'label' => __( 'Read media library', 'ai-site-connector' ) ),
 			array( 'method' => 'POST', 'route' => '/wp/v2/media',     'label' => __( 'Upload media', 'ai-site-connector' ) ),
 			array( 'method' => 'GET',  'route' => '/wp/v2/users/me',  'label' => __( 'Read self', 'ai-site-connector' ) ),
@@ -1726,10 +1729,10 @@ class AI_Site_Connector_Admin_Page {
 				'bad_label' => __( 'ON — every non-read tool is currently denied', 'ai-site-connector' ),
 			),
 			array(
-				'label'   => __( 'Last successful MCP request', 'ai-site-connector' ),
+				'label'   => __( 'Last successful plugin API request (REST or MCP)', 'ai-site-connector' ),
 				'ok'      => '' !== $last,
 				'ok_label'  => $last,
-				'bad_label' => __( 'Never (no request has hit /ai-site-connector/v1/* since plugin activation)', 'ai-site-connector' ),
+				'bad_label' => __( 'None yet (no successful signed-in request to /ai-site-connector/v1/*)', 'ai-site-connector' ),
 			),
 		);
 		?>

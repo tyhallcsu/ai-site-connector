@@ -79,6 +79,34 @@ class AI_Site_Connector_Admin_Page {
 		wp_referer_field();
 	}
 
+	/**
+	 * Explain why Application Passwords are unavailable: the confirmed cause
+	 * and its fix (#133), or $fallback when the cause is unknown.
+	 *
+	 * @param string $fallback Generic text for an unknown cause ('' prints nothing).
+	 */
+	private static function render_app_passwords_blocker( $fallback ) {
+		$blocker = AI_Site_Connector_Plugin::app_passwords_blocker();
+		if ( ! $blocker ) {
+			if ( '' !== $fallback ) {
+				echo '<p class="notice notice-error">' . esc_html( $fallback ) . '</p>';
+			}
+			return;
+		}
+		?>
+		<div class="notice notice-error inline asc-app-passwords-blocker">
+			<p><strong><?php echo esc_html( $blocker['message'] ); ?></strong></p>
+			<p><?php echo esc_html( $blocker['fix'] ); ?></p>
+			<p>
+				<?php if ( current_user_can( 'manage_options' ) ) : ?>
+					<a class="button button-secondary" href="<?php echo esc_url( $blocker['settings_url'] ); ?>"><?php esc_html_e( 'Open Wordfence options', 'ai-site-connector' ); ?></a>
+				<?php endif; ?>
+				<a href="<?php echo esc_url( $blocker['doc_url'] ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'Wordfence documentation for this option', 'ai-site-connector' ); ?></a>
+			</p>
+		</div>
+		<?php
+	}
+
 	private static function flash( $msg, $type = 'success', $extra = array() ) {
 		set_transient(
 			self::FLASH_OPTION . '_' . get_current_user_id(),
@@ -738,6 +766,7 @@ class AI_Site_Connector_Admin_Page {
 					<tr><th><?php esc_html_e( 'Application Passwords', 'ai-site-connector' ); ?></th><td><?php echo wp_kses_post( self::status_badge( AI_Site_Connector_Plugin::app_passwords_available(), __( 'Available', 'ai-site-connector' ), __( 'Disabled or unavailable', 'ai-site-connector' ) ) ); ?></td></tr>
 					<tr><th><?php esc_html_e( 'Authenticated as', 'ai-site-connector' ); ?></th><td><?php echo esc_html( $user->user_login ); ?> (<?php echo esc_html( implode( ', ', (array) $user->roles ) ); ?>)</td></tr>
 				</table>
+				<?php self::render_app_passwords_blocker( '' ); ?>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 					<?php self::nonce_field(); ?>
 					<input type="hidden" name="action" value="ai_site_connector_test_rest" />
@@ -954,7 +983,7 @@ class AI_Site_Connector_Admin_Page {
 		<div class="asc-card">
 			<h2><?php esc_html_e( 'Generate Application Password', 'ai-site-connector' ); ?></h2>
 			<?php if ( ! AI_Site_Connector_Plugin::app_passwords_available() ) : ?>
-				<p class="notice notice-error"><?php esc_html_e( 'Application Passwords are not available on this site. Check WP version, security plugins, or filters disabling the feature.', 'ai-site-connector' ); ?></p>
+				<?php self::render_app_passwords_blocker( __( 'Application Passwords are not available on this site. Check WP version, security plugins, or filters disabling the feature.', 'ai-site-connector' ) ); ?>
 			<?php endif; ?>
 			<?php if ( ! AI_Site_Connector_Plugin::require_https() ) : ?>
 				<p class="notice notice-warning"><?php esc_html_e( 'HTTPS is recommended. Plain HTTP is allowed only if WP_DEBUG or AI_SITE_CONNECTOR_ALLOW_HTTP is true.', 'ai-site-connector' ); ?></p>
@@ -1693,7 +1722,9 @@ class AI_Site_Connector_Admin_Page {
 				'label'   => __( 'Application Passwords available', 'ai-site-connector' ),
 				'ok'      => (bool) $diag['wordpress']['app_passwords_available'],
 				'ok_label'  => __( 'Yes', 'ai-site-connector' ),
-				'bad_label' => __( 'No (security plugin or filter disabled them)', 'ai-site-connector' ),
+				'bad_label' => AI_Site_Connector_Plugin::app_passwords_blocker()
+					? __( 'No — blocked by Wordfence (see Overview for the fix)', 'ai-site-connector' )
+					: __( 'No (security plugin or filter disabled them)', 'ai-site-connector' ),
 			),
 			array(
 				'label'   => __( 'MCP namespace registered', 'ai-site-connector' ),

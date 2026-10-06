@@ -22,7 +22,7 @@ class AI_Site_Connector_Application_Passwords {
 	 */
 	public static function create_for_user( $user_id, $app_name ) {
 		if ( ! AI_Site_Connector_Plugin::app_passwords_available() ) {
-			return new WP_Error( 'app_passwords_unavailable', __( 'Application Passwords are not available on this site.', 'ai-site-connector' ) );
+			return self::unavailable_error();
 		}
 		if ( ! AI_Site_Connector_Plugin::require_https() ) {
 			return new WP_Error( 'https_required', __( 'Refusing to create an Application Password over plain HTTP. Enable HTTPS or define AI_SITE_CONNECTOR_ALLOW_HTTP for local dev only.', 'ai-site-connector' ) );
@@ -81,7 +81,7 @@ class AI_Site_Connector_Application_Passwords {
 
 	public static function revoke( $user_id, $uuid ) {
 		if ( ! AI_Site_Connector_Plugin::app_passwords_available() ) {
-			return new WP_Error( 'app_passwords_unavailable', __( 'Application Passwords are not available on this site.', 'ai-site-connector' ) );
+			return self::unavailable_error();
 		}
 		$result = WP_Application_Passwords::delete_application_password( (int) $user_id, sanitize_text_field( $uuid ) );
 		if ( is_wp_error( $result ) ) {
@@ -119,7 +119,7 @@ class AI_Site_Connector_Application_Passwords {
 	 */
 	public static function rotate( $user_id, $uuid, $new_name = null ) {
 		if ( ! AI_Site_Connector_Plugin::app_passwords_available() ) {
-			return new WP_Error( 'app_passwords_unavailable', __( 'Application Passwords are not available on this site.', 'ai-site-connector' ) );
+			return self::unavailable_error();
 		}
 		$user_id = (int) $user_id;
 		$uuid    = sanitize_text_field( $uuid );
@@ -199,5 +199,19 @@ class AI_Site_Connector_Application_Passwords {
 		$host = wp_parse_url( home_url(), PHP_URL_HOST );
 		$host = $host ? $host : 'site';
 		return sprintf( 'Claude AI Connector - %s - %s', $host, gmdate( 'Y-m-d' ) );
+	}
+
+	/**
+	 * Application Passwords are unavailable: name the confirmed cause and
+	 * its fix when known (#133), otherwise the generic message.
+	 *
+	 * @return WP_Error
+	 */
+	private static function unavailable_error() {
+		$blocker = AI_Site_Connector_Plugin::app_passwords_blocker();
+		if ( $blocker ) {
+			return new WP_Error( 'app_passwords_unavailable', $blocker['message'] . ' ' . $blocker['fix'], array( 'blocked_by' => $blocker['source'] ) );
+		}
+		return new WP_Error( 'app_passwords_unavailable', __( 'Application Passwords are not available on this site.', 'ai-site-connector' ) );
 	}
 }

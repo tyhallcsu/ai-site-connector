@@ -129,7 +129,9 @@ class AI_Site_Connector_Onboarding {
 				'done'  => $is_https && $rest_ok && $apps_ok,
 				'hint'  => $is_https && $rest_ok && $apps_ok
 					? __( 'HTTPS, REST API, and Application Passwords all look healthy.', 'ai-site-connector' )
-					: __( 'One or more connectivity checks failed. Open the Overview tab to investigate.', 'ai-site-connector' ),
+					: ( ( ! $apps_ok && AI_Site_Connector_Plugin::app_passwords_blocker() )
+						? AI_Site_Connector_Plugin::app_passwords_blocker()['message'] . ' ' . AI_Site_Connector_Plugin::app_passwords_blocker()['fix']
+						: __( 'One or more connectivity checks failed. Open the Overview tab to investigate.', 'ai-site-connector' ) ),
 				'cta'   => __( 'Review on Overview', 'ai-site-connector' ),
 				'tab'   => 'overview',
 			),

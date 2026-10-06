@@ -272,23 +272,9 @@ class AI_Site_Connector_Permissions {
 			);
 		}
 
-		$meta = $catalog[ $tool ];
-
-		if ( self::is_disabled() ) {
-			return self::denied( $tool, 'connector_disabled', __( 'AI Site Connector is disabled on this site by an administrator.', 'ai-site-connector' ) );
-		}
-
-		if ( self::is_read_only() && 'read' !== $meta['category'] ) {
-			return self::denied( $tool, 'read_only_mode', __( 'Site is in read-only mode for AI tools.', 'ai-site-connector' ) );
-		}
-
-		if ( ! empty( $meta['wp_cap'] ) && ! current_user_can( $meta['wp_cap'] ) ) {
-			return self::denied( $tool, 'wp_cap', __( 'Authenticated user lacks the WordPress capability for this tool.', 'ai-site-connector' ) );
-		}
-
-		$enabled = self::get_all();
-		if ( empty( $enabled[ $tool ]['enabled'] ) ) {
-			return self::denied( $tool, 'whitelist_off', __( 'This tool is disabled in the AI Site Connector permission settings.', 'ai-site-connector' ) );
+		$reason = self::gate_reason( $tool );
+		if ( 'allowed' !== $reason ) {
+			return self::denied( $tool, $reason, self::gate_message( $reason ) );
 		}
 
 		/** This filter mirrors the one in can() so a programmatic deny still wins. */
@@ -298,6 +284,55 @@ class AI_Site_Connector_Permissions {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Why the tool gate allows or refuses a user, before the
+	 * ai_site_connector_can_execute_tool filter. Writes nothing, so the
+	 * access preview (#124) can ask on behalf of another user.
+	 *
+	 * @param string       $tool Tool slug from the catalog (must exist).
+	 * @param WP_User|null $user User to evaluate; null means the current user.
+	 * @return string allowed, connector_disabled, read_only_mode, wp_cap or whitelist_off.
+	 */
+	public static function gate_reason( $tool, $user = null ) {
+		$catalog = self::catalog();
+		$meta    = $catalog[ $tool ];
+
+		if ( self::is_disabled() ) {
+			return 'connector_disabled';
+		}
+		if ( self::is_read_only() && 'read' !== $meta['category'] ) {
+			return 'read_only_mode';
+		}
+		if ( ! empty( $meta['wp_cap'] ) ) {
+			$has_cap = null === $user ? current_user_can( $meta['wp_cap'] ) : user_can( $user, $meta['wp_cap'] );
+			if ( ! $has_cap ) {
+				return 'wp_cap';
+			}
+		}
+		$enabled = self::get_all();
+		return empty( $enabled[ $tool ]['enabled'] ) ? 'whitelist_off' : 'allowed';
+	}
+
+	/**
+	 * Message for a gate_reason() denial.
+	 *
+	 * @param string $reason Reason code.
+	 * @return string
+	 */
+	public static function gate_message( $reason ) {
+		switch ( $reason ) {
+			case 'connector_disabled':
+				return __( 'AI Site Connector is disabled on this site by an administrator.', 'ai-site-connector' );
+			case 'read_only_mode':
+				return __( 'Site is in read-only mode for AI tools.', 'ai-site-connector' );
+			case 'wp_cap':
+				return __( 'Authenticated user lacks the WordPress capability for this tool.', 'ai-site-connector' );
+			case 'whitelist_off':
+				return __( 'This tool is disabled in the AI Site Connector permission settings.', 'ai-site-connector' );
+		}
+		return '';
 	}
 
 	/**

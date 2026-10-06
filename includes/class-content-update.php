@@ -43,6 +43,9 @@ class AI_Site_Connector_Content_Update {
 	const MAX_SNAPSHOTS   = 10;
 	const PENDING_GRACE   = 300; // Seconds before a pending snapshot counts as interrupted.
 	const MAX_CONTENT     = 1048576; // 1 MB per text field.
+	const DIFF_MAX_BYTES  = 204800;  // Readable diff (#122): skip sides larger than 200 KB.
+	const DIFF_MAX_LINES  = 400;     // Readable diff: output lines before truncation.
+	const DIFF_CONTEXT    = 3;       // Readable diff: unchanged lines around each change.
 	const FIELDS          = array( 'title', 'excerpt', 'content', 'slug', 'status', 'featured_image', 'terms', 'seo' );
 	const ALLOWED_STATUS  = array( 'draft', 'pending', 'publish', 'private' );
 	const CORE_STATUSES   = array( 'draft', 'pending', 'publish', 'private', 'future' );
@@ -89,6 +92,7 @@ class AI_Site_Connector_Content_Update {
 			array(
 				'dry_run'               => true,
 				'expected_modified_gmt' => '',
+				'text_diff'             => false,
 			)
 		);
 		$dry_run = rest_sanitize_boolean( $args['dry_run'] );
@@ -126,6 +130,11 @@ class AI_Site_Connector_Content_Update {
 		}
 		if ( $dry_run ) {
 			$response['reason'] = 'dry_run';
+			// Opt-in readable preview of the content change (#122), built from
+			// the values that would be stored after save filters.
+			if ( rest_sanitize_boolean( $args['text_diff'] ) && isset( $plan['content'] ) ) {
+				$response['diff']['content']['text_diff'] = self::unified_diff( (string) $plan['content']['before_raw'], (string) $plan['content']['after_raw'] );
+			}
 			return $response;
 		}
 
@@ -1077,6 +1086,110 @@ class AI_Site_Connector_Content_Update {
 			);
 		}
 		return $out;
+	}
+
+	/**
+	 * Bounded unified diff (line based, DIFF_CONTEXT lines of context) for
+	 * reviewing a content change before applying it (#122). Sides over
+	 * DIFF_MAX_BYTES are not diffed; output stops after DIFF_MAX_LINES with
+	 * truncated=true. The length/sha256 summary stays authoritative.
+	 *
+	 * @param string $before Stored value now.
+	 * @param string $after  Value that would be stored.
+	 * @return array{format:string, text:string, truncated:bool, omitted:string|null}
+	 */
+	private static function unified_diff( $before, $after ) {
+		$result = array(
+			'format'    => 'unified',
+			'text'      => '',
+			'truncated' => false,
+			'omitted'   => null,
+		);
+		if ( strlen( $before ) > self::DIFF_MAX_BYTES || strlen( $after ) > self::DIFF_MAX_BYTES ) {
+			$result['omitted'] = 'content_too_large';
+			return $result;
+		}
+		if ( ! class_exists( 'Text_Diff', false ) ) {
+			require_once ABSPATH . WPINC . '/Text/Diff.php';
+		}
+		$from = '' === $before ? array() : preg_split( '/\r\n|\r|\n/', $before );
+		$to   = '' === $after ? array() : preg_split( '/\r\n|\r|\n/', $after );
+		$diff = new Text_Diff( 'auto', array( $from, $to ) );
+
+		// Tagged lines with their old/new line numbers.
+		$rows = array();
+		$old  = 0;
+		$new  = 0;
+		foreach ( $diff->getDiff() as $op ) {
+			$orig  = is_array( $op->orig ) ? $op->orig : array();
+			$final = is_array( $op->final ) ? $op->final : array();
+			if ( $op instanceof Text_Diff_Op_copy ) {
+				foreach ( $orig as $line ) {
+					$rows[] = array( ' ', $line, ++$old, ++$new );
+				}
+				continue;
+			}
+			foreach ( $orig as $line ) {
+				$rows[] = array( '-', $line, ++$old, $new );
+			}
+			foreach ( $final as $line ) {
+				$rows[] = array( '+', $line, $old, ++$new );
+			}
+		}
+
+		// Group changed rows with their context into hunks.
+		$keep = array();
+		foreach ( $rows as $i => $row ) {
+			if ( ' ' !== $row[0] ) {
+				for ( $j = max( 0, $i - self::DIFF_CONTEXT ); $j <= min( count( $rows ) - 1, $i + self::DIFF_CONTEXT ); $j++ ) {
+					$keep[ $j ] = true;
+				}
+			}
+		}
+		ksort( $keep );
+		$out   = array();
+		$hunk  = array();
+		$lines = 0;
+		$flush = static function () use ( &$hunk, &$out ) {
+			if ( ! $hunk ) {
+				return;
+			}
+			$old_start = 0;
+			$new_start = 0;
+			$old_len   = 0;
+			$new_len   = 0;
+			foreach ( $hunk as $row ) {
+				if ( '+' !== $row[0] ) {
+					$old_start = $old_start ? $old_start : $row[2];
+					++$old_len;
+				}
+				if ( '-' !== $row[0] ) {
+					$new_start = $new_start ? $new_start : $row[3];
+					++$new_len;
+				}
+			}
+			$out[] = sprintf( '@@ -%d,%d +%d,%d @@', $old_start, $old_len, $new_start, $new_len );
+			foreach ( $hunk as $row ) {
+				$out[] = $row[0] . $row[1];
+			}
+			$hunk = array();
+		};
+		$previous = -2;
+		foreach ( array_keys( $keep ) as $i ) {
+			if ( $i !== $previous + 1 ) {
+				$flush();
+			}
+			if ( $lines >= self::DIFF_MAX_LINES ) {
+				$result['truncated'] = true;
+				break;
+			}
+			$hunk[] = $rows[ $i ];
+			++$lines;
+			$previous = $i;
+		}
+		$flush();
+		$result['text'] = implode( "\n", $out );
+		return $result;
 	}
 
 	private static function summary( $text ) {

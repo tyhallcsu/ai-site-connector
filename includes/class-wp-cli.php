@@ -1126,6 +1126,9 @@ class AI_Site_Connector_CLI {
 	 * [--apply]
 	 * : Write the change. Without it nothing is written.
 	 *
+	 * [--text-diff]
+	 * : With a dry run, include a bounded unified diff of the content change.
+	 *
 	 * [--format=<format>]
 	 * : json|yaml. Default: json.
 	 *
@@ -1175,6 +1178,7 @@ class AI_Site_Connector_CLI {
 			array(
 				'dry_run'               => empty( $assoc['apply'] ),
 				'expected_modified_gmt' => isset( $assoc['expected-modified-gmt'] ) ? (string) $assoc['expected-modified-gmt'] : '',
+				'text_diff'             => ! empty( $assoc['text-diff'] ),
 			)
 		);
 		self::print_content_result( $result, $format );

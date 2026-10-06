@@ -3,7 +3,7 @@
 **Updated:** 2026-10-06 (America/Denver) · **State:** v0.13.1 released, verified and on the dev site. Every owner decision is made (#97, #99, #131) and no issue is blocked. **PAUSED** under credit budget mode. · **Session:** `asc-dev-audit-ship`
 **Repo:** tyhallcsu/ai-site-connector (public). The parent `ess-custom-plugins` directory is not a repo.
 **Primary checkout:** `/Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector`. Its local `main` is `16f5816`, far behind `origin/main`; fast-forward it before use. This session did not modify it.
-**Session worktree:** `.claude/worktrees/asc-dev-audit-ship`, branch `docs/checkpoint-0.13.1` (this checkpoint).
+**Session worktree:** `.claude/worktrees/asc-dev-audit-ship`, branch `docs/audit-0.13.1` (this checkpoint).
 **Rules:** `docs/development/OPERATING_BRIEF.md` · **Dev site:** `docs/development/DEV_SITE.md` · **Log:** `docs/development/WORK_LOG.md` (evidence for everything below)
 
 ## Verified state
@@ -16,6 +16,7 @@
 | Branch protection | `main` requires the `CI gate` check, reported by GitHub Actions. Branches don't have to be up to date, no review is required, admins are not enforced, and force pushes and deletions are off. Agents never use the admin override. | `gh api repos/tyhallcsu/ai-site-connector/branches/main/protection` |
 | CI | 21 jobs; `CI gate` needs all 11 job groups. #160 20/20 (upgrade v0.13.0 → v0.13.1; integration 117/117 × 6 WP builds). #161 21/21. | runs 37491800393, 37492301242 |
 | Dev site | http://localhost:8790 runs **v0.13.1** from the release asset (same sha256). Audit: all tabs clean. Header logo `…mark-128.png?ver=0.13.1`: 128×128 shown at 64×64, HTTP 200, 7,593 B. This local instance is the canonical dev target (#97). | `bin/dev-site.sh status`, `audit` |
+| Dev audit (CLI/REST/MCP) | 20 checks pass on v0.13.1: content update dry run, apply and rollback; inventory; 21 MCP tools and snapshot discovery; #111, #118 and #120 behaviour; bundle; auth. No new issues. One grep hit was a false positive: core route argument names (`password`) in `rest-routes.json`, not secrets. | WORK_LOG 2026-10-06 |
 
 ## Owner decisions / blocked
 

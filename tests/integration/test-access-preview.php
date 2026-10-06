@@ -265,7 +265,7 @@ asc_it(
 
 			asc_assert( false !== strpos( $html, 'id="asc-access-preview"' ), 'preview card missing from the Credentials tab' );
 			asc_assert( false !== strpos( $html, 'rest_forbidden_scope' ), 'rendered result lacks the scope denial' );
-			asc_assert( 1 === preg_match( '/<option value="' . preg_quote( $editor . ':' . $uuid, '/' ) . '" selected/', $html ), 'chosen credential not kept selected' );
+			asc_assert( 1 === preg_match( '/<option value="' . preg_quote( $editor . ':' . $uuid, '/' ) . '"\s+selected/', $html ), 'chosen credential not kept selected' );
 			asc_assert( false === strpos( $html, $plain ), 'the rendered preview shows a password' );
 		} finally {
 			foreach ( $keys as $key ) {

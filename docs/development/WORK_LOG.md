@@ -2,6 +2,47 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-06 — v0.13.0 released
+
+- PR #155 → `2395ea4`; PR CI run 37469725758 20/20 (ZIP install + upgrade
+  v0.12.5 → v0.13.0; integration 116/116 on 6 WordPress builds); main CI run
+  37470047823 20/20. Tag `v0.13.0` → `2395ea4`; release run 37471734711
+  succeeded; stable; `releases/latest` = v0.13.0. Asset
+  `ai-site-connector-v0.13.0.zip`: 1,154,500 B, sha256
+  `189711e10977e835ca0aff54035bafb17c5bc5953534f9d1b12dabe26be12156`;
+  checksum OK, embeds 0.13.0, 71 files, no dev or test paths.
+- First release under the reproducible build (#101): rebuilding the tag
+  from `git archive v0.13.0` gave the same sha256 on macOS (the asset itself was built on Linux CI).
+- Shipped issues (#101 #106 #108 #109 #122 #123 #124 #127 #133)
+  commented with the release link.
+- Dev site still on v0.12.3: Docker Desktop is still hung (`docker ps`
+  times out), so the deploy waits for an owner restart.
+
+## 2026-10-06 — Feature batch (0.13.0 prep)
+
+The owner listed the backlog features to build. Built in this order, one PR each, each squash-merged after a green CI run pinned to its head:
+
+| Issue | PR → merge | Green CI run (head) | Notes |
+|---|---|---|---|
+| #109 | #146 → `a8b0506` | 37464007697 (`7cddc55`) | No behaviour change; the catalog contract test freezes the tool names |
+| #101 | #147 → `60eeb18` | 37464255962 (`b7e3e2e`) | sha256 matched across macOS and Linux |
+| #108 | #148 → `8d1b238` | 37465048676 (`a9b888c`) | The first run caught unregistered CLI commands |
+| #123 | #150 → `5086c93` | 37465229426 (`a52480f`) | 21 MCP tools |
+| #106 | #149 → `7618797` | 37465325105 (`d2dda18`) | The first run caught `has_action` used on an admin-only hook |
+| #133 | #152 → `534e676` | 37466066601 (`adea419`) | Checked against Wordfence 9.0.2 source |
+| #122 | #151 → `f22c386` | 37466136831 (`4955352`) | Merge conflict with #123 resolved, keeping both changes |
+| #127 | #153 → `598054d` | 37466411471 (`a59b22a`) | — |
+| #124 | #154 → `9c47a7e` | 37469211915 (`d669195`) | The first run failed 6/6 on one test regex; see below |
+
+- #124: `Permissions::gate_reason()` is now the side-effect-free core of
+  `require_permission()`, so the preview and enforcement share one order.
+  PHPUnit permission tests unchanged (40/40). The first PR run failed on
+  one assertion because WordPress's `selected()` adds its own leading
+  space. Only the test was wrong; the fix was in the test.
+- Main CI was green after every merge through `598054d`. Integration
+  suite: 116 cases.
+- #125 still waits for #131: the owner must name the approved icon file.
+
 ## 2026-10-06 — v0.12.5 released
 
 - PR #144 → `6edeee1`; PR CI run 37462746859 20/20 (ZIP install + upgrade

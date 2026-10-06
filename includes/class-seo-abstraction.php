@@ -195,7 +195,7 @@ class AI_Site_Connector_SEO {
 	 *   @type array  $would_write field => { meta_key, old, new } for every key that changes
 	 *                             (an og_image change also lists the paired `og_image_id`).
 	 *   On 'write_failed' also: failed[], rolled_back[], rollback_failed[] (field names).
-	 *   @type array  $skipped     field => reason ('unknown_field' | 'unsupported_field' | 'invalid_url').
+	 *   @type array  $skipped     field => reason ('unknown_field' | 'unsupported_field' | 'invalid_url' | 'invalid_type').
 	 *   @type string $plugin      Detected SEO plugin.
 	 * }
 	 */
@@ -224,6 +224,27 @@ class AI_Site_Connector_SEO {
 		if ( ! current_user_can( 'edit_post', $post_id ) ) {
 			$response['reason']  = 'forbidden_post';
 			$response['blocked'] = true;
+			return $response;
+		}
+
+		// Refuse the whole request when a value has the wrong type. Coercing an
+		// array, object, null or (outside noindex) a boolean to '' would turn a
+		// malformed value into a deletion of existing metadata (#117). An
+		// explicit '' still clears a field on purpose.
+		$invalid = array();
+		foreach ( $data as $field => $new_value ) {
+			$field = (string) $field;
+			if ( ! in_array( $field, self::FIELDS, true ) ) {
+				continue;
+			}
+			if ( ! is_scalar( $new_value ) || ( is_bool( $new_value ) && 'noindex' !== $field ) ) {
+				$invalid[ $field ] = 'invalid_type';
+			}
+		}
+		if ( $invalid ) {
+			$response['skipped'] = $invalid;
+			$response['blocked'] = true;
+			$response['reason']  = 'invalid_value';
 			return $response;
 		}
 

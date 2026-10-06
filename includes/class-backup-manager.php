@@ -434,9 +434,11 @@ class AI_Site_Connector_Backup_Manager {
 		$fs->delete( trailingslashit( $staged ) . self::MANIFEST );
 
 		// 3. Swap by rename. Deactivate silently so no hooks of either version run mid-swap.
-		$was_active = is_plugin_active( AI_SITE_CONNECTOR_BASENAME );
+		// Record the scope so a network activation is restored as such (#130).
+		$activation = AI_Site_Connector_Plugin::activation_state();
+		$was_active = $activation['active'];
 		if ( $was_active ) {
-			deactivate_plugins( AI_SITE_CONNECTOR_BASENAME, true );
+			deactivate_plugins( AI_SITE_CONNECTOR_BASENAME, true, $activation['network'] ? true : null );
 		}
 		$swapped  = false;
 		$restored = true;
@@ -459,9 +461,7 @@ class AI_Site_Connector_Backup_Manager {
 					)
 				);
 			}
-			if ( $was_active ) {
-				activate_plugin( AI_SITE_CONNECTOR_BASENAME, '', false, true );
-			}
+			AI_Site_Connector_Plugin::restore_activation( $activation, true );
 			return self::rollback_failed(
 				$to_version,
 				sprintf(
@@ -474,7 +474,7 @@ class AI_Site_Connector_Backup_Manager {
 		$fs->delete( $retired, true );
 
 		if ( $was_active ) {
-			$activate = activate_plugin( AI_SITE_CONNECTOR_BASENAME, '', false, true );
+			$activate = AI_Site_Connector_Plugin::restore_activation( $activation, true );
 			if ( is_wp_error( $activate ) ) {
 				AI_Site_Connector_Audit_Log::record(
 					'update_rollback_failed',

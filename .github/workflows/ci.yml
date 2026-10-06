@@ -369,3 +369,55 @@ jobs:
           WP_PORT: 8765
           WP_CLI_MEMORY_LIMIT: 512M
         run: tests/runtime-smoke.sh
+
+  # Network activation must survive the self-updater's reactivation and a
+  # rollback (#130). The runtime smoke is single-site, so this installs a
+  # two-site network and runs tests/multisite/activation.php.
+  multisite-activation:
+    name: Multisite activation
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: asc_multisite
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: mysqli, curl, json
+          tools: none
+          ini-values: memory_limit=512M
+
+      - name: Install WP-CLI
+        run: |
+          curl -L https://github.com/wp-cli/builds/raw/gh-pages/phar/wp-cli.phar -o /tmp/wp
+          chmod +x /tmp/wp
+          sudo mv /tmp/wp /usr/local/bin/wp
+
+      - name: Network-activate on a two-site network, then check update and rollback scope
+        run: |
+          set -e
+          WP_DIR=/tmp/asc-multisite
+          mkdir -p "$WP_DIR"
+          wp core download --path="$WP_DIR" --quiet
+          wp config create --path="$WP_DIR" --dbname=asc_multisite --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check --quiet
+          wp core multisite-install --path="$WP_DIR" --url=http://localhost --title="ASC multisite" \
+            --admin_user=admin --admin_password=multisite-ci-only --admin_email=admin@example.invalid --skip-email --quiet
+          wp site create --path="$WP_DIR" --slug=second --quiet
+          rsync -a --exclude='.git/' --exclude='vendor/' --exclude='build/' ./ "$WP_DIR/wp-content/plugins/ai-site-connector/"
+          wp plugin activate ai-site-connector --network --path="$WP_DIR"
+          wp eval-file "$WP_DIR/wp-content/plugins/ai-site-connector/tests/multisite/activation.php" --path="$WP_DIR" --user=admin
+          wp plugin list --path="$WP_DIR" --fields=name,status --format=csv | grep -x 'ai-site-connector,active-network'

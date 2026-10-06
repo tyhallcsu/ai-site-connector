@@ -403,7 +403,9 @@ class AI_Site_Connector_Updater {
 		// never re-activates — fixing that gap is the whole point of this
 		// handler (see issue #44). If the plugin wasn't active to begin with,
 		// we leave it deactivated.
-		$was_active = is_plugin_active( AI_SITE_CONNECTOR_BASENAME );
+		// Record the scope too: network activation must survive the update (#130).
+		$activation = AI_Site_Connector_Plugin::activation_state();
+		$was_active = $activation['active'];
 
 		AI_Site_Connector_Audit_Log::record(
 			'update_started',
@@ -481,7 +483,7 @@ class AI_Site_Connector_Updater {
 				// activate_plugin( $plugin, $redirect, $network_wide, $silent )
 				// Silent=false so the plugin's activation hook runs (re-registers
 				// crons + roles + onboarding option).
-				$activate = activate_plugin( AI_SITE_CONNECTOR_BASENAME, '', is_network_admin(), false );
+				$activate = AI_Site_Connector_Plugin::restore_activation( $activation, false );
 				if ( is_wp_error( $activate ) ) {
 					$reactivation_failed = true;
 					AI_Site_Connector_Audit_Log::record(

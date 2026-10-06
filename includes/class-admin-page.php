@@ -1676,7 +1676,7 @@ class AI_Site_Connector_Admin_Page {
 				<li><a href="https://github.com/tyhallcsu/ai-site-connector/blob/main/README.md" target="_blank" rel="noopener">README</a></li>
 				<li><a href="https://github.com/tyhallcsu/ai-site-connector/blob/main/docs/CLAUDE_CONNECTION_GUIDE.md" target="_blank" rel="noopener">Claude / Codex connection guide</a></li>
 				<li><a href="https://github.com/tyhallcsu/ai-site-connector/blob/main/docs/SECURITY_MODEL.md" target="_blank" rel="noopener">Security model</a></li>
-				<li><a href="https://github.com/tyhallcsu/ai-site-connector/blob/main/docs/FEATURES.md" target="_blank" rel="noopener">Features (v0.2.0)</a></li>
+				<li><a href="https://github.com/tyhallcsu/ai-site-connector/blob/main/docs/FEATURES.md" target="_blank" rel="noopener">Features</a></li>
 				<li><a href="https://make.wordpress.org/core/2020/11/05/application-passwords-integration-guide/" target="_blank" rel="noopener">WordPress core: Application Passwords integration guide</a></li>
 			</ul>
 		</div>

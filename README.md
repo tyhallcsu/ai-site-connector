@@ -414,6 +414,8 @@ Used by `/content/update` (the `seo` field), the content inventory and the diagn
 
 `POST /content/update` · MCP `wp_update_content` — and `POST /content/rollback` · MCP `wp_rollback_content`.
 
+Agents should use `wp_update_content` for edits. The older `wp_update_post` still works but writes immediately with no preview, snapshot or rollback; its tool description and the generated agent instructions say so.
+
 - **Off by default and dry-run by default.** Without `dry_run: false` nothing is written; real writes also need the `write_content` tool permission (default OFF), and SEO fields `update_seo`. Read-only mode and `wp ai-connector disable` block writes.
 - **Fields:** `title`, `excerpt`, `content`, `slug`, `status` (`draft`, `pending`, `publish`, `private`), `featured_image` (attachment ID, `0` removes), `terms` (`{taxonomy: [term ID (int) or slug (string)]}`, existing terms only, replaces the set), `seo` (fields the active SEO plugin supports). Optional `expected_modified_gmt` refuses the update if the post changed since you read it.
 - **Validation under the caller's current permissions:** `edit_post`, publish capability, `assign_terms`, readable image attachment, unique slug, public REST-enabled post types in a core status. Trash, delete, scheduling and term creation are not supported.

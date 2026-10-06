@@ -70,7 +70,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 }
 ```
 
-Restart Claude Desktop. The 9 tools (`wp_health`, `wp_site_info`, `wp_list_posts`, `wp_get_post`, `wp_create_post`, `wp_update_post`, `wp_list_pages`, `wp_list_plugins`, `wp_list_themes`) appear in the tool picker.
+Restart Claude Desktop. Every tool the site offers appears in the tool picker. The list comes from the site itself (`tools/list`), including `wp_update_content` / `wp_rollback_content` for safe edits.
 
 For 99% of installs this is overkill — the `mcp-remote` config from the plugin's Credentials tab does the same job without the path edit.
 

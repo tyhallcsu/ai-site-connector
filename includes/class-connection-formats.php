@@ -254,6 +254,10 @@ class AI_Site_Connector_Connection_Formats {
 			'Auth header:         Authorization: Basic base64(username:application_password)',
 			'Plugin health:       ' . $health_url,
 			'',
+			'To change existing content, use the MCP tool wp_update_content (REST: POST ' . $rest_base . AI_SITE_CONNECTOR_REST_NAMESPACE . '/content/update).',
+			'It is a dry run by default: review the diff, then repeat with dry_run=false. Keep the returned snapshot_id; wp_rollback_content undoes the change.',
+			'Avoid wp_update_post for edits: it writes immediately with no preview or rollback.',
+			'',
 			'Do not commit this password to git. Revoke it from Tools → AI Site Connector when access is no longer needed.',
 		);
 		return array(

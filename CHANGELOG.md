@@ -6,6 +6,50 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.12.4] - 2026-10-06
+
+Patch: seven fixes from an independent code audit. **Behaviour changes:**
+legacy MCP post tools now refuse unknown post types and report failed REST
+calls as tool errors.
+
+### Fixed
+
+- Content updates (#117): an SEO value that is an array, object, null or
+  (outside `noindex`) a boolean is refused with a 400 naming the field. Such
+  values used to be coerced to an empty string, which deleted the existing
+  metadata. An explicit `""` still clears a field.
+- MCP legacy tools (#111): `wp_get_post`, `wp_create_post`,
+  `wp_update_post`, `wp_list_posts` / `wp_list_pages` and the
+  site/plugin/theme info tools return `isError: true` with status, code and
+  message when the underlying REST call fails. They used to report success.
+- MCP legacy tools (#118): `post_type` must be registered with
+  `show_in_rest`. Custom types use their own REST route; unknown types and
+  typos (e.g. `pages`) are refused instead of silently creating a blog post.
+- Credentials (#113): the "Create/update posts" and "Create/update pages"
+  scope presets now allow updating existing items (`POST /wp/v2/posts/{id}`).
+  DELETE, reads and other collections stay denied. Credentials created
+  earlier keep their stored scope: to allow updates, regenerate them or add
+  `POST /wp/v2/posts/*`.
+- Uninstall (#116): an opted-in wipe also removes tool permissions,
+  read-only mode, webhook and digest settings (including the webhook
+  secret), onboarding state, Cloudflare settings, plugin transients and
+  unused pack tokens. The default preserve-everything path is unchanged.
+- OpenAPI (#120): templated routes such as `/content/snapshots/{id}` declare
+  their variables as required path parameters, so generated clients
+  substitute them.
+- Connection Test (#121): the timestamp is recorded only for requests that
+  actually succeeded. Denied, missing and failed MCP calls no longer refresh
+  it. The label now reads "Last successful plugin API request (REST or MCP)".
+
+### Compatibility and upgrade
+
+- CI: integration suite (104 cases) on WordPress 5.6, 6.5, 6.8, 6.9, 7.0
+  (PHP 8.0) and current stable (PHP 8.3); syntax checks on PHP 7.4–8.4.
+  Requirements unchanged.
+- MCP clients that relied on `wp_create_post` falling back to posts for an
+  unknown `post_type` now get an error and must send `post`, `page` or
+  another REST-enabled type.
+
 ## [0.12.3] - 2026-10-05
 
 Patch for two P1 defects: rollback could destroy the installed plugin, and

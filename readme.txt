@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.12.3
+Stable tag: 0.12.4
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,11 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.12.4 =
+* Fixed: content updates refuse wrong-typed SEO values instead of deleting the existing metadata.
+* Fixed: legacy MCP post tools report failed REST calls as errors and refuse unknown post types instead of creating blog posts.
+* Fixed: "Create/update posts/pages" credential presets allow updating existing items; opted-in uninstall wipe removes all plugin settings; OpenAPI declares path parameters; Connection Test timestamp counts only successful requests.
+
 = 0.12.3 =
 * Fixed: rollback only offers verified, complete backups and checks everything before touching the installed plugin; an interrupted backup can no longer turn a rollback into a missing plugin.
 * Fixed: Claude Desktop and Cursor snippets in connection packs point mcp-remote at /wp-json/ai-site-connector/v1/mcp (was /wp-json/mcp). Re-generate packs made with 0.12.2 or earlier, or fix the URL by hand.

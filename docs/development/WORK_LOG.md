@@ -2,6 +2,18 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-06 — P2 batch from the second audit (0.12.4 prep)
+
+- PR #137 → `6e02b3a` (closes #117, #111, #118): CI 19/19, integration
+  101/101. The first run caught two test mistakes (simulated SEO plugin
+  slug; `nav_menu_item` is REST-enabled since WP 5.9), fixed before merge.
+- PR #138 → `c34af14` (closes #121, #120, #116, #113): CI 19/19 on the PR
+  merged with main, integration 104/104 on 6 WordPress builds. The runtime
+  smoke seeds settings and verifies the wipe.
+- The local disk filled during this work (297 MiB free), blocking local
+  runs. Work was pushed as drafts and verified by GitHub CI instead. Space
+  later recovered (1.5 GiB free) without action from this session.
+
 ## 2026-10-05 — v0.12.3 released (P1 fixes #114, #119)
 
 - PR #135 → `4bef824`; PR CI run 37380234124 19/19 (ZIP install + upgrade

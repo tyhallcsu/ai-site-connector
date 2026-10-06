@@ -53,7 +53,8 @@ asc_it(
 			asc_assert_same( 'skipped', $skipped['status'], 'skip filter honoured' );
 			asc_assert_same( $before, $count(), 'a skipped check minted a password' );
 
-			asc_assert( false !== has_action( 'admin_post_ai_site_connector_live_signin_check' ), 'Connection Test handler not registered' );
+			// Admin hooks only register inside wp-admin (is_admin()); check the handler exists.
+			asc_assert( is_callable( array( 'AI_Site_Connector_Admin_Page', 'handle_live_signin_check' ) ), 'Connection Test handler missing' );
 		} finally {
 			asc_it_delete_user( $user_id );
 		}

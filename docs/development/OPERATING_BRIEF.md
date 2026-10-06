@@ -129,6 +129,8 @@ Review existing continue-on-error jobs honestly. Track supported-version failure
 
 Repository settings are separate from workflow files. If required-check configuration needs unavailable admin access, document the exact setting/check names and continue with explicit manual gates; do not claim protection is configured when it is not.
 
+Current state (#99, 2026-10-06): `main` has classic branch protection that requires the `CI gate` check. That job passes only when every CI job succeeded. Branches don't have to be up to date, no review is required, and admins are not enforced, so the owner can still merge during a GitHub Actions outage. Agents never use that override.
+
 Verify GitHub event/token behavior before automating tags or chained workflows. Do not assume a bot-created event necessarily starts the expected downstream run. Prove the intended chain works without recursive triggers or new broadly privileged credentials.
 
 ## 8. Release policy: coherent checkpoints, not tag spam

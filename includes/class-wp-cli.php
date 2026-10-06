@@ -1079,6 +1079,155 @@ class AI_Site_Connector_CLI {
 	}
 
 	/**
+	 * Safely update one post: the same service as REST /content/update and
+	 * MCP wp_update_content (#108).
+	 *
+	 * Dry run by default: prints the before/after plan and writes nothing.
+	 * --apply writes, which also needs the write_content tool permission
+	 * (update_seo for SEO fields) and is refused in read-only mode or while
+	 * the site-wide switch is off. A snapshot is stored first; keep the
+	 * printed snapshot_id for `wp ai-connector rollback-content`.
+	 *
+	 * ## OPTIONS
+	 *
+	 * <post_id>
+	 * : Post ID.
+	 *
+	 * [--title=<title>]
+	 * : New title.
+	 *
+	 * [--excerpt=<excerpt>]
+	 * : New excerpt.
+	 *
+	 * [--content=<content>]
+	 * : New post content (HTML or block markup).
+	 *
+	 * [--content-file=<path>]
+	 * : Read the new content from a file; "-" reads STDIN.
+	 *
+	 * [--slug=<slug>]
+	 * : New slug.
+	 *
+	 * [--status=<status>]
+	 * : draft, pending, publish or private.
+	 *
+	 * [--featured-image=<id>]
+	 * : Attachment ID; 0 removes the featured image.
+	 *
+	 * [--terms=<json>]
+	 * : JSON object of taxonomy => list of existing term IDs or slugs.
+	 *
+	 * [--seo=<json>]
+	 * : JSON object of SEO fields (title, description, canonical, og_title, ...).
+	 *
+	 * [--expected-modified-gmt=<datetime>]
+	 * : Refuse if the post was modified after this UTC time.
+	 *
+	 * [--apply]
+	 * : Write the change. Without it nothing is written.
+	 *
+	 * [--format=<format>]
+	 * : json|yaml. Default: json.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *   wp ai-connector update-content 42 --user=editor --title="New title"
+	 *   wp ai-connector update-content 42 --user=editor --content-file=body.html --apply
+	 */
+	public function update_content( $args, $assoc ) {
+		self::require_user_context();
+		$changes = array();
+		foreach ( array( 'title', 'excerpt', 'content', 'slug', 'status' ) as $field ) {
+			if ( isset( $assoc[ $field ] ) ) {
+				$changes[ $field ] = (string) $assoc[ $field ];
+			}
+		}
+		if ( isset( $assoc['content-file'] ) ) {
+			if ( isset( $changes['content'] ) ) {
+				WP_CLI::error( 'Use either --content or --content-file, not both.' );
+			}
+			$path = (string) $assoc['content-file'];
+			$body = '-' === $path ? file_get_contents( 'php://stdin' ) : ( is_readable( $path ) ? file_get_contents( $path ) : false ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Local file or STDIN chosen by the operator.
+			if ( false === $body ) {
+				WP_CLI::error( sprintf( 'Cannot read --content-file %s.', $path ) );
+			}
+			$changes['content'] = $body;
+		}
+		if ( isset( $assoc['featured-image'] ) ) {
+			$changes['featured_image'] = (int) $assoc['featured-image'];
+		}
+		foreach ( array( 'terms', 'seo' ) as $field ) {
+			if ( isset( $assoc[ $field ] ) ) {
+				$decoded = json_decode( (string) $assoc[ $field ], true );
+				if ( ! is_array( $decoded ) ) {
+					WP_CLI::error( sprintf( '--%s must be a JSON object.', $field ) );
+				}
+				$changes[ $field ] = $decoded;
+			}
+		}
+		if ( empty( $changes ) ) {
+			WP_CLI::error( 'Nothing to change: pass at least one field, e.g. --title.' );
+		}
+		$format = self::format( $assoc, array( 'json', 'yaml' ) );
+		$result = AI_Site_Connector_Content_Update::update(
+			isset( $args[0] ) ? (int) $args[0] : 0,
+			$changes,
+			array(
+				'dry_run'               => empty( $assoc['apply'] ),
+				'expected_modified_gmt' => isset( $assoc['expected-modified-gmt'] ) ? (string) $assoc['expected-modified-gmt'] : '',
+			)
+		);
+		self::print_content_result( $result, $format );
+	}
+
+	/**
+	 * Roll back an update made with update-content, REST or MCP, by its
+	 * snapshot_id (#108). Dry run by default. Restores only the fields the
+	 * update touched and refuses (reason: conflict) if any of them changed
+	 * afterwards.
+	 *
+	 * ## OPTIONS
+	 *
+	 * <post_id>
+	 * : Post ID.
+	 *
+	 * <snapshot_id>
+	 * : snapshot_id returned by the update.
+	 *
+	 * [--apply]
+	 * : Restore. Without it nothing is written.
+	 *
+	 * [--format=<format>]
+	 * : json|yaml. Default: json.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *   wp ai-connector rollback-content 42 <snapshot_id> --user=editor --apply
+	 */
+	public function rollback_content( $args, $assoc ) {
+		self::require_user_context();
+		$format = self::format( $assoc, array( 'json', 'yaml' ) );
+		$result = AI_Site_Connector_Content_Update::rollback( (int) $args[0], (string) $args[1], empty( $assoc['apply'] ) );
+		self::print_content_result( $result, $format );
+	}
+
+	/**
+	 * Print a content update/rollback result, or exit 1 with the error code,
+	 * message and any detail (e.g. which fields were refused).
+	 *
+	 * @param array|WP_Error $result Service result.
+	 * @param string         $format json|yaml.
+	 */
+	private static function print_content_result( $result, $format ) {
+		if ( is_wp_error( $result ) ) {
+			$data   = $result->get_error_data();
+			$detail = is_array( $data ) ? array_diff_key( $data, array( 'status' => true ) ) : array();
+			WP_CLI::error( $result->get_error_code() . ': ' . $result->get_error_message() . ( $detail ? ' ' . wp_json_encode( $detail ) : '' ) );
+		}
+		WP_CLI::print_value( $result, array( 'format' => $format ) );
+	}
+
+	/**
 	 * Per-user results need a user: without --user, WordPress runs as
 	 * nobody and these commands would print an empty, plausible-looking result.
 	 */

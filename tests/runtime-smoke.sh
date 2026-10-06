@@ -436,6 +436,40 @@ if wp_cli ai-connector routes --format=xml --path="$WP_DIR" >/dev/null 2>&1; the
 	exit 1
 fi
 
+log "Testing WP-CLI safe content update and rollback (#108)."
+CU_POST="$(wp_cli post create --post_title='CLI update fixture' --post_status=draft --porcelain --user=admin --path="$WP_DIR")"
+if wp_cli ai-connector update-content "$CU_POST" --title='No user' --path="$WP_DIR" >/dev/null 2>&1; then
+	echo "update-content ran without --user" >&2
+	exit 1
+fi
+wp_cli ai-connector update-content "$CU_POST" --title='CLI dry run' --user=admin --path="$WP_DIR" | jq -e '.reason == "dry_run"' >/dev/null \
+	|| { echo "update-content without --apply was not a dry run" >&2; exit 1; }
+[ "$(wp_cli post get "$CU_POST" --field=post_title --path="$WP_DIR")" = "CLI update fixture" ] \
+	|| { echo "update-content dry run changed the post" >&2; exit 1; }
+if wp_cli ai-connector update-content "$CU_POST" --title='No permission' --apply --user=admin --path="$WP_DIR" >/dev/null 2>&1; then
+	echo "update-content --apply wrote without the write_content permission" >&2
+	exit 1
+fi
+wp_cli eval '$p = (array) get_option( "ai_site_connector_tool_permissions", array() ); $p["write_content"] = true; update_option( "ai_site_connector_tool_permissions", $p );' --path="$WP_DIR"
+wp_cli ai-connector disable --yes --user=admin --path="$WP_DIR" >/dev/null
+if wp_cli ai-connector update-content "$CU_POST" --title='While disabled' --apply --user=admin --path="$WP_DIR" >/dev/null 2>&1; then
+	echo "update-content --apply wrote while the connector was disabled" >&2
+	exit 1
+fi
+wp_cli ai-connector enable --yes --user=admin --path="$WP_DIR" >/dev/null
+CU_SNAPSHOT="$(wp_cli ai-connector update-content "$CU_POST" --title='CLI applied' --apply --user=admin --path="$WP_DIR" | jq -r '.snapshot_id')"
+[ "$(wp_cli post get "$CU_POST" --field=post_title --path="$WP_DIR")" = "CLI applied" ] \
+	|| { echo "update-content --apply did not write" >&2; exit 1; }
+{ [ -n "$CU_SNAPSHOT" ] && [ "$CU_SNAPSHOT" != "null" ]; } \
+	|| { echo "update-content --apply returned no snapshot_id" >&2; exit 1; }
+wp_cli ai-connector rollback-content "$CU_POST" "$CU_SNAPSHOT" --user=admin --path="$WP_DIR" | jq -e '.dry_run == true' >/dev/null \
+	|| { echo "rollback-content without --apply was not a dry run" >&2; exit 1; }
+wp_cli ai-connector rollback-content "$CU_POST" "$CU_SNAPSHOT" --apply --user=admin --path="$WP_DIR" >/dev/null
+[ "$(wp_cli post get "$CU_POST" --field=post_title --path="$WP_DIR")" = "CLI update fixture" ] \
+	|| { echo "rollback-content --apply did not restore the title" >&2; exit 1; }
+wp_cli eval '$p = (array) get_option( "ai_site_connector_tool_permissions", array() ); unset( $p["write_content"] ); update_option( "ai_site_connector_tool_permissions", $p );' --path="$WP_DIR"
+wp_cli post delete "$CU_POST" --force --path="$WP_DIR" >/dev/null
+
 log "Checking tools_catalog metadata schema."
 wp_cli eval '
 $cat = AI_Site_Connector_REST_Controller::tools_catalog();

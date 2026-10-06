@@ -412,7 +412,7 @@ Used by `/content/update` (the `seo` field), the content inventory and the diagn
 
 ## Safe content updates
 
-`POST /content/update` · MCP `wp_update_content` — and `POST /content/rollback` · MCP `wp_rollback_content`.
+`POST /content/update` · MCP `wp_update_content` · WP-CLI `wp ai-connector update-content` — and `POST /content/rollback` · MCP `wp_rollback_content` · WP-CLI `wp ai-connector rollback-content`. The CLI commands are dry runs unless you pass `--apply`, and need `--user=<login>` (e.g. `wp ai-connector update-content 42 --user=editor --title="New" --apply`).
 
 Agents should use `wp_update_content` for edits. The older `wp_update_post` still works but writes immediately with no preview, snapshot or rollback; its tool description and the generated agent instructions say so.
 

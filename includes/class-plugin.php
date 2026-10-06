@@ -78,6 +78,8 @@ class AI_Site_Connector_Plugin {
 			WP_CLI::add_command( 'ai-connector export', array( 'AI_Site_Connector_CLI', 'export' ) );
 			WP_CLI::add_command( 'ai-connector disable', array( 'AI_Site_Connector_CLI', 'disable' ) );
 			WP_CLI::add_command( 'ai-connector enable', array( 'AI_Site_Connector_CLI', 'enable' ) );
+			WP_CLI::add_command( 'ai-connector update-content', array( 'AI_Site_Connector_CLI', 'update_content' ) );
+			WP_CLI::add_command( 'ai-connector rollback-content', array( 'AI_Site_Connector_CLI', 'rollback_content' ) );
 		}
 	}
 

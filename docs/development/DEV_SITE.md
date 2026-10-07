@@ -57,6 +57,20 @@ writable `TMPDIR` (e.g. the session scratchpad).
   one after taking a fresh snapshot. Only do this when a deploy damaged dev data.
 - `destroy --yes-destroy-dev-data` deletes containers and volumes. It is never
   part of routine cleanup.
+- **Docker Desktop hangs.** Seen twice: on 2026-10-05 after the disk filled,
+  and overnight on 2026-10-06/07 with 50 GiB free. `docker ps` never
+  returns, and `docker desktop restart` hangs too. To recover:
+  1. Quit Docker Desktop.
+  2. If `pgrep -f com.docker.backend` still finds it, stop it with TERM,
+     then KILL.
+  3. Wait until no `com.docker` processes remain, apart from the privileged
+     `com.docker.vmnetd`. Relaunching too early only re-activates the
+     exiting instance.
+  4. Relaunch with `open -a /Applications/Docker.app`.
+  5. Run `bin/dev-site.sh up`, because the dev containers do not restart on
+     their own. MySQL recovers from a killed container.
+  Restarting Docker also restarts other projects' containers, such as
+  `uptime-kuma`, so tell the owner.
 
 ## Inspecting the site
 

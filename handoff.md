@@ -3,7 +3,7 @@
 **Updated:** 2026-10-06 (America/Denver) · **State:** v0.13.1 released, verified and on the dev site. Every owner decision is made (#97, #99, #131) and no issue is blocked. **PAUSED** under credit budget mode. · **Session:** `asc-dev-audit-ship`
 **Repo:** tyhallcsu/ai-site-connector (public). The parent `ess-custom-plugins` directory is not a repo.
 **Primary checkout:** `/Users/tylerhall/Documents/GitHub/ess-custom-plugins/ai-site-connector`. Its local `main` is `16f5816`, far behind `origin/main`; fast-forward it before use. This session did not modify it.
-**Session worktree:** `.claude/worktrees/asc-dev-audit-ship`, branch `docs/audit-0.13.1` (this checkpoint).
+**Session worktree:** `.claude/worktrees/asc-dev-audit-ship`, branch `docs/docker-recovery` (this checkpoint).
 **Rules:** `docs/development/OPERATING_BRIEF.md` · **Dev site:** `docs/development/DEV_SITE.md` · **Log:** `docs/development/WORK_LOG.md` (evidence for everything below)
 
 ## Verified state
@@ -43,5 +43,5 @@ Without Docker, these all pass locally: `composer test`, `composer lint`, `compo
 ## Workers / services
 
 - Subagents: none. Background watchers: none running.
-- Docker engine 28.3.3 (restarted 2026-10-06). Running: `asc-dev-wordpress-1`, `asc-dev-db-1`, and another project's `uptime-kuma` (leave it alone). `asc-mysql-test` is stopped (disposable). Stop the dev site with `bin/dev-site.sh stop`.
+- Docker Desktop hung twice (2026-10-05 and overnight 2026-10-06/07). It was recovered both times, and `DEV_SITE.md` has the steps. Engine 28.3.3. Running: `asc-dev-wordpress-1`, `asc-dev-db-1`, and another project's `uptime-kuma` (leave it alone). `asc-mysql-test` is stopped (disposable). Stop the dev site with `bin/dev-site.sh stop`.
 - Sandbox: `deploy`, `rollback`, `audit` and PHPCS need a writable `TMPDIR` (the session scratchpad). `audit` uses `ASC_DEV_CACHE` set to a scratchpad Playwright install.

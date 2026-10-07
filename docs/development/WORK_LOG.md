@@ -2,6 +2,30 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-07 — Docker hung again; live sign-in check verified on dev
+
+- **Docker hang:** Docker Desktop hung again overnight, with 50 GiB free.
+  `docker info` and `docker ps` timed out, and the queued live sign-in
+  check had blocked on a `docker compose ps` call.
+- **Recovery:**
+  - I stopped my own stuck processes, quit Docker, and the backend
+    survived TERM and was killed.
+  - The first relaunch reached the still-exiting instance and never
+    started. A second `open -a /Applications/Docker.app` did start it.
+  - `uptime-kuma` restarted on its own.
+  - The dev containers had exited (the database was killed, exit 137), and
+    `bin/dev-site.sh up` brought them back.
+  - The site is healthy on 0.13.1: plugin active, `/health` returns 200,
+    and the deploy record matches.
+  - `DEV_SITE.md` now has these recovery steps.
+- **Live sign-in check (#106), headless, on the Connection Test tab:**
+  - It signed in as `ai-agent` over HTTP inside Docker, got HTTP 200, and
+    reported the temporary password revoked.
+  - Afterwards `ai-agent` has only its two connection-pack passwords from
+    2026-10-05, so nothing was left behind.
+  - The page returned to the Connection Test tab.
+- No defects found.
+
 ## 2026-10-06 — Real upgrade path 0.13.0 → 0.13.1 on the dev site
 
 Headless check of the route most users will take: the dev site on v0.13.0,

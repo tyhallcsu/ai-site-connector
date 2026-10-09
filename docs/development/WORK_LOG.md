@@ -2,6 +2,40 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-08 — #166 and #167 shipped to main; #170 filed
+
+- **PR #168 → `fb45bec` (closes #166).**
+  - Every `bin/dev-site.sh` command first gives Docker
+    `ASC_DEV_DOCKER_TIMEOUT` seconds (default 15) to answer `docker info`,
+    and otherwise exits with a pointer to the runbook.
+  - `status` warns when the installed plugin differs from the deploy
+    record, and `rollback` then refuses without `--allow-stale-record`.
+  - `tests/dev-site-guard.sh` runs in Plugin structure with a fake
+    `docker`: hung (gives up in 2 s), stopped, and bad timeout.
+  - On the real dev site, `status` warned after an out-of-band
+    `wp plugin install` of 0.13.0, and `rollback` exited 1. A redeploy of
+    v0.13.1 resynced the record.
+  - CI 21/21 after re-running one job (see the 504 note below).
+- **PR #169 → `dcdf376` (closes #167):** `wp ai-connector access-preview`,
+  a wrapper over `explain()`.
+  - It needs an administrator `--user` and supports table, json and yaml.
+  - Exit codes: 0 allowed, 1 denied, 2 depends.
+  - The runtime smoke covers the admin requirement, all three exit codes,
+    JSON equal to `explain()`, and no audit writes.
+  - The second run failed on a test bug, not the command: piping WP-CLI
+    into `grep -q` let WP-CLI hit SIGPIPE, which `pipefail` reported. The
+    test now matches captured output. CI 21/21 on `72920a4`.
+- **504 outage:** around 05:40 UTC on 2026-10-09 (late on 2026-10-08
+  local time), a download host returned "504 Gateway Time-out". It broke
+  every job that installs WordPress until the jobs were re-run.
+  - The run still reported success when only WP 6.5 compat failed,
+    because the compat matrix has `continue-on-error`; `CI gate` passed
+    too.
+  - Filed **#170 (P2)**: make the compat rows blocking and retry
+    downloads.
+  - The gate wording in `ci.yml` and `OPERATING_BRIEF.md` now states this
+    exception.
+
 ## 2026-10-07 — Docker hung again; live sign-in check verified on dev
 
 - **Docker hang:** Docker Desktop hung again overnight, with 50 GiB free.

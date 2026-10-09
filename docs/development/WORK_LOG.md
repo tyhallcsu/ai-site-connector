@@ -2,6 +2,33 @@
 
 Concise, dated, evidence-backed. Newest first.
 
+## 2026-10-09 — #170 fixed; v0.14.0 released
+
+- **PR #172 → `5900481` (closes #170).**
+  - `wordpress-version-compat` lost `continue-on-error`, so a failing row
+    now fails `CI gate`.
+  - WP-CLI phar downloads use `curl -f` with retries. `wp core download`
+    and the ZIP smoke's GitHub fetches retry with backoff and fail loudly.
+  - CI 21/21. The gate reported `wordpress-version-compat: success`, and
+    integration passed 117/117 on all 6 builds.
+- **Release:** PR #173 → `48a2851`. PR CI run 37913909226 21/21 (ZIP
+  install + upgrade v0.13.1 → v0.14.0; integration 117/117 × 6). Main CI
+  run 37914223152 21/21.
+  - Tag `v0.14.0` → `48a2851`; release run 37914458451 succeeded; stable;
+    `releases/latest` = v0.14.0.
+  - Asset: 314,945 B, sha256
+    `ce60d54f443b229f550dc49c5c409643b2d17d00cd0ad546da9bf709f7c18177`,
+    69 files, embeds 0.14.0, no dev paths. A local rebuild from the tag
+    archive gave the same sha256. #167 commented.
+- **Dev site:** deployed v0.14.0 (same sha256); audit clean on every tab.
+  `wp ai-connector access-preview` on real data:
+  - `ai-agent` + `mcp:wp_update_content` on post 8: DENIED, exit 1,
+    `asc_forbidden_post`. A real dry-run `update-content 8 --user=ai-agent`
+    failed with the same code, so the prediction matched enforcement.
+  - `rest:site_capability_report`: denied (route and tool need
+    `manage_options`).
+  - Without an administrator `--user`: refused.
+
 ## 2026-10-08 — #166 and #167 shipped to main; #170 filed
 
 - **PR #168 → `fb45bec` (closes #166).**

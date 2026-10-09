@@ -1178,6 +1178,109 @@ class AI_Site_Connector_CLI {
 	}
 
 	/**
+	 * Explain whether a user, optionally through one of their Application
+	 * Passwords, could run an operation, and which check would refuse it
+	 * (#167): Credentials → Effective access preview (#124) on the command
+	 * line. Read-only: nothing is minted, sent, written or run, and no
+	 * password is printed.
+	 *
+	 * Exit code: 0 allowed, 1 denied, 2 depends on the request or cannot be
+	 * decided here.
+	 *
+	 * ## OPTIONS
+	 *
+	 * <user>
+	 * : User to evaluate: ID, login or email.
+	 *
+	 * --operation=<operation>
+	 * : mcp:<tool> (e.g. mcp:wp_update_content), rest:<tool> (e.g.
+	 * rest:export_page_content) or custom_route with --method and --route.
+	 *
+	 * [--uuid=<uuid>]
+	 * : Application Password UUID. Omit to evaluate the role alone.
+	 *
+	 * [--method=<method>]
+	 * : HTTP method for custom_route.
+	 * ---
+	 * default: GET
+	 * ---
+	 *
+	 * [--route=<route>]
+	 * : REST route for custom_route, e.g. /wp/v2/posts/12.
+	 *
+	 * [--post=<id>]
+	 * : Post ID for post-level checks.
+	 *
+	 * [--dry-run]
+	 * : Preview a dry run of a content update or rollback.
+	 *
+	 * [--format=<format>]
+	 * : table, json or yaml.
+	 * ---
+	 * default: table
+	 * ---
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp ai-connector access-preview ai-agent --operation=mcp:wp_update_content --post=12 --user=admin
+	 *     wp ai-connector access-preview 5 --uuid=<uuid> --operation=custom_route --method=POST --route=/wp/v2/posts/12 --format=json --user=admin
+	 */
+	public function access_preview( $args, $assoc ) {
+		self::require_admin_context();
+		$format = self::format( $assoc, array( 'table', 'json', 'yaml' ) );
+		$ref    = (string) $args[0];
+		if ( ctype_digit( $ref ) ) {
+			$user = get_user_by( 'id', (int) $ref );
+		} else {
+			$user = is_email( $ref ) ? get_user_by( 'email', $ref ) : get_user_by( 'login', $ref );
+		}
+		if ( ! $user ) {
+			WP_CLI::error( sprintf( 'User not found: %s', $ref ) );
+		}
+		$result = AI_Site_Connector_Access_Preview::explain(
+			array(
+				'user_id'   => $user->ID,
+				'uuid'      => isset( $assoc['uuid'] ) ? (string) $assoc['uuid'] : '',
+				'operation' => isset( $assoc['operation'] ) ? (string) $assoc['operation'] : '',
+				'method'    => isset( $assoc['method'] ) ? (string) $assoc['method'] : 'GET',
+				'route'     => isset( $assoc['route'] ) ? (string) $assoc['route'] : '',
+				'post_id'   => isset( $assoc['post'] ) ? (int) $assoc['post'] : 0,
+				'dry_run'   => (bool) \WP_CLI\Utils\get_flag_value( $assoc, 'dry-run', false ),
+			)
+		);
+		if ( is_wp_error( $result ) ) {
+			$hint = 'asc_preview_operation' === $result->get_error_code()
+				? ' Operations: ' . implode( ', ', array_keys( AI_Site_Connector_Access_Preview::operations() ) ) . ', ' . AI_Site_Connector_Access_Preview::CUSTOM . '.'
+				: '';
+			WP_CLI::error( $result->get_error_message() . $hint );
+		}
+		if ( 'table' === $format ) {
+			WP_CLI::log( sprintf( '%s: %s, %s', strtoupper( $result['verdict'] ), $result['user'], $result['operation'] ) );
+			foreach ( $result['denials'] as $denial ) {
+				WP_CLI::log( '  refused by ' . $denial );
+			}
+			$rows = array();
+			foreach ( $result['checks'] as $check ) {
+				$rows[] = array(
+					'area'   => $check['group'],
+					'check'  => $check['label'],
+					'result' => $check['status'],
+					'why'    => $check['detail'],
+				);
+			}
+			\WP_CLI\Utils\format_items( 'table', $rows, array( 'area', 'check', 'result', 'why' ) );
+		} else {
+			WP_CLI::print_value( $result, array( 'format' => $format ) );
+		}
+		$codes = array(
+			'allowed'     => 0,
+			'denied'      => 1,
+			'conditional' => 2,
+		);
+		WP_CLI::halt( $codes[ $result['verdict'] ] );
+	}
+
+	/**
 	 * Print a content update/rollback result, or exit 1 with the error code,
 	 * message and any detail (e.g. which fields were refused).
 	 *

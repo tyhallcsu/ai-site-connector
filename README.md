@@ -414,6 +414,8 @@ Used by `/content/update` (the `seo` field), the content inventory and the diagn
 
 `POST /content/update` · MCP `wp_update_content` · WP-CLI `wp ai-connector update-content` — and `POST /content/rollback` · MCP `wp_rollback_content` · WP-CLI `wp ai-connector rollback-content`. The CLI commands are dry runs unless you pass `--apply`, and need `--user=<login>` (e.g. `wp ai-connector update-content 42 --user=editor --title="New" --apply`).
 
+**Effective access preview.** Tools → AI Site Connector → Credentials explains, check by check, whether a credential can run an MCP tool, a REST tool or any REST route, and which check would refuse it. The same check runs on the command line, for example `wp ai-connector access-preview ai-agent --operation=mcp:wp_update_content --post=42 --user=admin`. Add `--uuid=<uuid>` to evaluate one Application Password and `--format=json` for scripts. The command needs an administrator `--user`. It exits 0 when the operation is allowed, 1 when it is denied, and 2 when the result depends on the request. Nothing is sent or written, and no password is shown.
+
 Agents should use `wp_update_content` for edits. The older `wp_update_post` still works but writes immediately with no preview, snapshot or rollback; its tool description and the generated agent instructions say so.
 
 - **Off by default and dry-run by default.** Without `dry_run: false` nothing is written; real writes also need the `write_content` tool permission (default OFF), and SEO fields `update_seo`. Read-only mode and `wp ai-connector disable` block writes.

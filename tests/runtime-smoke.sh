@@ -468,6 +468,39 @@ wp_cli ai-connector rollback-content "$CU_POST" "$CU_SNAPSHOT" --apply --user=ad
 [ "$(wp_cli post get "$CU_POST" --field=post_title --path="$WP_DIR")" = "CLI update fixture" ] \
 	|| { echo "rollback-content --apply did not restore the title" >&2; exit 1; }
 wp_cli eval '$p = (array) get_option( "ai_site_connector_tool_permissions", array() ); unset( $p["write_content"] ); update_option( "ai_site_connector_tool_permissions", $p );' --path="$WP_DIR"
+
+log "Testing WP-CLI access-preview (#167)."
+if wp_cli ai-connector access-preview admin --operation=mcp:wp_health --path="$WP_DIR" >/dev/null 2>&1; then
+	echo "access-preview ran without an administrator --user" >&2
+	exit 1
+fi
+audit_rows() {
+	wp_cli eval 'global $wpdb; echo $wpdb->get_var( "SELECT COUNT(*) FROM " . AI_Site_Connector_Audit_Log::table_name() );' --path="$WP_DIR"
+}
+# The password itself is discarded; only its UUID is used.
+wp_cli user application-password create admin smoke-access-preview --porcelain --path="$WP_DIR" >/dev/null
+AP_UUID="$(wp_cli user application-password list admin --name=smoke-access-preview --field=uuid --path="$WP_DIR")"
+wp_cli eval "AI_Site_Connector_App_Password_Meta::set_expires_at( get_user_by( 'login', 'admin' )->ID, '$AP_UUID', time() - 60 );" --path="$WP_DIR"
+AP_ROWS="$(audit_rows)"
+wp_cli ai-connector access-preview admin --operation=mcp:wp_health --user=admin --format=json --path="$WP_DIR" | jq -e '.verdict == "allowed"' >/dev/null \
+	|| { echo "access-preview: wp_health for an administrator was not allowed (exit 0)" >&2; exit 1; }
+# Capture first: piping into grep -q makes WP-CLI hit SIGPIPE, which pipefail reports.
+AP_TABLE="$(wp_cli ai-connector access-preview admin --operation=mcp:wp_health --user=admin --path="$WP_DIR")"
+grep -q '^ALLOWED' <<< "$AP_TABLE" \
+	|| { echo "access-preview: table output lacks the verdict line: $AP_TABLE" >&2; exit 1; }
+AP_RC=0
+AP_OUT="$(wp_cli ai-connector access-preview admin --uuid="$AP_UUID" --operation=mcp:wp_health --user=admin --format=json --path="$WP_DIR")" || AP_RC=$?
+[ "$AP_RC" -eq 1 ] || { echo "access-preview: expired credential exited $AP_RC, expected 1" >&2; exit 1; }
+printf '%s' "$AP_OUT" | jq -e '.verdict == "denied" and (.denials | join(" ") | contains("rest_application_password_expired"))' >/dev/null \
+	|| { echo "access-preview: expired credential not named: $AP_OUT" >&2; exit 1; }
+AP_PHP="$(wp_cli eval "echo wp_json_encode( AI_Site_Connector_Access_Preview::explain( array( 'user_id' => get_user_by( 'login', 'admin' )->ID, 'uuid' => '$AP_UUID', 'operation' => 'mcp:wp_health' ) ) );" --user=admin --path="$WP_DIR")"
+[ "$(printf '%s' "$AP_OUT" | jq -S .)" = "$(printf '%s' "$AP_PHP" | jq -S .)" ] \
+	|| { echo "access-preview JSON differs from AI_Site_Connector_Access_Preview::explain()" >&2; exit 1; }
+AP_RC=0
+wp_cli ai-connector access-preview admin --operation=rest:export_page_content --user=admin --format=json --path="$WP_DIR" >/dev/null || AP_RC=$?
+[ "$AP_RC" -eq 2 ] || { echo "access-preview: post-level check without --post exited $AP_RC, expected 2" >&2; exit 1; }
+[ "$(audit_rows)" = "$AP_ROWS" ] || { echo "access-preview wrote audit log entries" >&2; exit 1; }
+wp_cli user application-password delete admin "$AP_UUID" --path="$WP_DIR" >/dev/null
 wp_cli post delete "$CU_POST" --force --path="$WP_DIR" >/dev/null
 
 log "Checking tools_catalog metadata schema."

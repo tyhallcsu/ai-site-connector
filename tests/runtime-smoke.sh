@@ -20,6 +20,21 @@ else
 fi
 
 SERVER_PID=""
+# Download hosts fail now and then; one 504 broke every WordPress job on
+# 2026-10-09 (#170). Retry with backoff, then fail loudly.
+retry() {
+	local attempt=1
+	until "$@"; do
+		if [ "$attempt" -ge 4 ]; then
+			echo "Giving up after $attempt attempts: $*" >&2
+			return 1
+		fi
+		echo "Attempt $attempt failed; retrying in $((attempt * 10))s: $*" >&2
+		sleep $((attempt * 10))
+		attempt=$((attempt + 1))
+	done
+}
+
 log() {
 	printf '[runtime-smoke] %s\n' "$*"
 }
@@ -93,7 +108,7 @@ log "Preparing MySQL database ${WP_DB_NAME}."
 mysql "${mysql_args[@]}" -e "DROP DATABASE IF EXISTS \`${WP_DB_NAME}\`; CREATE DATABASE \`${WP_DB_NAME}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
 log "Downloading WordPress ${WP_VERSION}."
-wp_cli core download --path="$WP_DIR" --version="$WP_VERSION" --quiet
+retry wp_cli core download --path="$WP_DIR" --version="$WP_VERSION" --quiet --force
 log "Creating wp-config.php."
 wp_cli config create \
 	--path="$WP_DIR" \

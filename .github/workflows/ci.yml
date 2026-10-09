@@ -274,7 +274,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends default-mysql-client curl jq rsync zip unzip
-          curl -L https://github.com/wp-cli/builds/raw/gh-pages/phar/wp-cli.phar -o /tmp/wp
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 https://github.com/wp-cli/builds/raw/gh-pages/phar/wp-cli.phar -o /tmp/wp
           chmod +x /tmp/wp
           sudo mv /tmp/wp /usr/local/bin/wp
 
@@ -321,7 +321,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends default-mysql-client curl jq rsync
-          curl -L https://github.com/wp-cli/builds/raw/gh-pages/phar/wp-cli.phar -o /tmp/wp
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 https://github.com/wp-cli/builds/raw/gh-pages/phar/wp-cli.phar -o /tmp/wp
           php /tmp/wp --info
           chmod +x /tmp/wp
           sudo mv /tmp/wp /usr/local/bin/wp
@@ -338,11 +338,10 @@ jobs:
         run: tests/runtime-smoke.sh
 
   wordpress-version-compat:
-    # Surfaces breakage on older / pinned WP versions without blocking releases.
-    # Promote to required once individual rows are stable (issue #52).
+    # Every row must pass. They have been stable since #52, and CI gate
+    # counts them (#170).
     name: WP ${{ matrix.wp }} compat
     runs-on: ubuntu-latest
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -378,7 +377,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends default-mysql-client curl jq rsync
-          curl -L https://github.com/wp-cli/builds/raw/gh-pages/phar/wp-cli.phar -o /tmp/wp
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 https://github.com/wp-cli/builds/raw/gh-pages/phar/wp-cli.phar -o /tmp/wp
           php /tmp/wp --info
           chmod +x /tmp/wp
           sudo mv /tmp/wp /usr/local/bin/wp
@@ -427,7 +426,7 @@ jobs:
 
       - name: Install WP-CLI
         run: |
-          curl -L https://github.com/wp-cli/builds/raw/gh-pages/phar/wp-cli.phar -o /tmp/wp
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 https://github.com/wp-cli/builds/raw/gh-pages/phar/wp-cli.phar -o /tmp/wp
           chmod +x /tmp/wp
           sudo mv /tmp/wp /usr/local/bin/wp
 
@@ -436,7 +435,11 @@ jobs:
           set -e
           WP_DIR=/tmp/asc-multisite
           mkdir -p "$WP_DIR"
-          wp core download --path="$WP_DIR" --quiet
+          for attempt in 1 2 3 4; do
+            wp core download --path="$WP_DIR" --quiet --force && break
+            [ "$attempt" -lt 4 ] || { echo "WordPress download failed after $attempt attempts" >&2; exit 1; }
+            sleep $((attempt * 10))
+          done
           wp config create --path="$WP_DIR" --dbname=asc_multisite --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check --quiet
           wp core multisite-install --path="$WP_DIR" --url=http://localhost --title="ASC multisite" \
             --admin_user=admin --admin_password=multisite-ci-only --admin_email=admin@example.invalid --skip-email --quiet
@@ -450,9 +453,7 @@ jobs:
   # The one check `main` requires (#99): it passes only when every job listed
   # in `needs` succeeded. Add new jobs to `needs`; matrix entries and new jobs
   # need no settings change. It runs even when a job fails or is cancelled,
-  # and then fails itself. Exception: wordpress-version-compat has
-  # continue-on-error, so a failing compat row still reports success here
-  # (#170 tracks making it blocking).
+  # and then fails itself. That includes every WP compat row (#170).
   ci-gate:
     name: CI gate
     if: always()

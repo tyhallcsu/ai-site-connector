@@ -484,8 +484,10 @@ wp_cli eval "AI_Site_Connector_App_Password_Meta::set_expires_at( get_user_by( '
 AP_ROWS="$(audit_rows)"
 wp_cli ai-connector access-preview admin --operation=mcp:wp_health --user=admin --format=json --path="$WP_DIR" | jq -e '.verdict == "allowed"' >/dev/null \
 	|| { echo "access-preview: wp_health for an administrator was not allowed (exit 0)" >&2; exit 1; }
-wp_cli ai-connector access-preview admin --operation=mcp:wp_health --user=admin --path="$WP_DIR" | grep -q '^ALLOWED' \
-	|| { echo "access-preview: table output lacks the verdict line" >&2; exit 1; }
+# Capture first: piping into grep -q makes WP-CLI hit SIGPIPE, which pipefail reports.
+AP_TABLE="$(wp_cli ai-connector access-preview admin --operation=mcp:wp_health --user=admin --path="$WP_DIR")"
+grep -q '^ALLOWED' <<< "$AP_TABLE" \
+	|| { echo "access-preview: table output lacks the verdict line: $AP_TABLE" >&2; exit 1; }
 AP_RC=0
 AP_OUT="$(wp_cli ai-connector access-preview admin --uuid="$AP_UUID" --operation=mcp:wp_health --user=admin --format=json --path="$WP_DIR")" || AP_RC=$?
 [ "$AP_RC" -eq 1 ] || { echo "access-preview: expired credential exited $AP_RC, expected 1" >&2; exit 1; }

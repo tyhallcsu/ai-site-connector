@@ -136,6 +136,10 @@ jobs:
           done
           echo "All required files present."
 
+      # Fake docker on PATH: no Docker needed (#166).
+      - name: Dev-site Docker guard
+        run: bash tests/dev-site-guard.sh
+
       # Header, AI_SITE_CONNECTOR_VERSION, readme Stable tag and the MCP
       # example package must agree (previously only header vs readme).
       - name: Version fields agree

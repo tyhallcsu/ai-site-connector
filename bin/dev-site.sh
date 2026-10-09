@@ -10,7 +10,8 @@
 #       --allow-unmerged                   permit a commit that is not on origin/main
 #   bin/dev-site.sh deploy --release TAG   install a published GitHub release asset
 #   bin/dev-site.sh status                 URL, versions, deployed SHA and artifact checksum
-#   bin/dev-site.sh rollback               reinstall the previously deployed artifact
+#   bin/dev-site.sh rollback               reinstall the previously deployed artifact; refuses
+#       --allow-stale-record               when the plugin was changed outside this script
 #   bin/dev-site.sh seed                   add synthetic fixture content (idempotent)
 #   bin/dev-site.sh wp ARGS...             run WP-CLI against the dev site
 #   bin/dev-site.sh with-admin -- CMD...   run CMD with ASC_DEV_URL, ASC_DEV_ADMIN_USER and
@@ -29,6 +30,8 @@
 #
 # ASC_DEV_PORT (default 8790) changes the port. Use the same value for every
 # command: the site URL is stored in the database at install time.
+# ASC_DEV_DOCKER_TIMEOUT (default 15) is how many seconds Docker gets to answer
+# before a command gives up instead of hanging on a stuck daemon.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -66,6 +69,39 @@ compose() {
 	docker compose -f "$COMPOSE_FILE" "$@"
 }
 
+# A hung Docker daemon makes every docker call block forever (#166), so each
+# command first asks the engine with a bounded probe.
+DOCKER_TIMEOUT="${ASC_DEV_DOCKER_TIMEOUT:-15}"
+
+engine_status() {
+	local ticks=0 pid
+	docker info >/dev/null 2>&1 &
+	pid=$!
+	while kill -0 "$pid" 2>/dev/null; do
+		if [ "$ticks" -ge $((DOCKER_TIMEOUT * 5)) ]; then
+			kill -9 "$pid" 2>/dev/null || true
+			wait "$pid" 2>/dev/null || true
+			return 124
+		fi
+		sleep 0.2
+		ticks=$((ticks + 1))
+	done
+	wait "$pid"
+}
+
+require_engine() {
+	case "$DOCKER_TIMEOUT" in
+		'' | *[!0-9]*) die "ASC_DEV_DOCKER_TIMEOUT must be a whole number of seconds" ;;
+	esac
+	local rc=0
+	engine_status || rc=$?
+	case "$rc" in
+		0) ;;
+		124) die "Docker did not answer within ${DOCKER_TIMEOUT}s; the daemon looks hung. Recover it with the steps under 'Docker Desktop hangs' in docs/development/DEV_SITE.md." ;;
+		*) die "Docker is not running or not reachable. Start Docker Desktop, then retry." ;;
+	esac
+}
+
 # WP-CLI in a throwaway container that shares the site's volumes.
 wp_cli() {
 	compose run --rm -T cli wp "$@"
@@ -90,6 +126,11 @@ is_running() {
 
 require_running() {
 	is_running || die "the dev site is not running. Start it with: bin/dev-site.sh up"
+}
+
+# Installed plugin version, or empty when it is not installed.
+installed_version() {
+	wp_cli plugin get "$PLUGIN_SLUG" --field=version 2>/dev/null | tr -d '\r' || true
 }
 
 make_work_dir() {
@@ -281,13 +322,26 @@ cmd_deploy() {
 }
 
 cmd_rollback() {
+	local allow_stale=0
+	case "${1:-}" in
+		"") ;;
+		--allow-stale-record) allow_stale=1 ;;
+		*) die "unknown rollback option: $1" ;;
+	esac
 	require_running
 	command -v jq >/dev/null 2>&1 || die "jq is required"
 	make_work_dir
 
-	local current previous artifact zip_sha backup now record
+	local current previous artifact zip_sha backup now record installed recorded
 	current="$(read_state current.json)"
 	[ -n "$current" ] || die "nothing has been deployed yet"
+	# A WordPress update changes the plugin without touching the record (#166),
+	# so "previous" may no longer be what the operator expects.
+	installed="$(installed_version)"
+	recorded="$(printf '%s' "$current" | jq -r .version)"
+	if [ "$installed" != "$recorded" ] && [ "$allow_stale" -ne 1 ]; then
+		die "the installed plugin (${installed:-none}) is not the recorded deployment ($recorded); it was changed outside bin/dev-site.sh. Redeploy first, or pass --allow-stale-record to roll back to $(printf '%s' "$current" | jq -r '.previous.version // "?"') anyway"
+	fi
 	previous="$(printf '%s' "$current" | jq -c '.previous // empty')"
 	[ -n "$previous" ] || die "no previous deployment is recorded"
 	artifact="$(printf '%s' "$previous" | jq -r .artifact)"
@@ -316,7 +370,8 @@ cmd_status() {
 		return 0
 	fi
 	echo "Dev site:     $SITE_URL  (wp-admin: $SITE_URL/wp-admin/, user $ADMIN_USER)"
-	compose run --rm -T cli sh -c "
+	local info installed current recorded
+	info="$(compose run --rm -T cli sh -c "
 		echo \"Environment:  \$(wp eval 'echo wp_get_environment_type();') · search engines discouraged: \$(wp option get blog_public | sed 's/^0\$/yes/;s/^1\$/NO/')\"
 		echo \"WordPress:    \$(wp core version) · PHP \$(wp eval 'echo PHP_VERSION;') · DB \$(wp eval 'global \$wpdb; echo \$wpdb->db_server_info();')\"
 		if wp plugin is-installed $PLUGIN_SLUG; then
@@ -324,12 +379,18 @@ cmd_status() {
 		else
 			echo 'Plugin:       not installed (bin/dev-site.sh deploy)'
 		fi
-	" 2>/dev/null
-	local current
+	" 2>/dev/null)"
+	printf '%s\n' "$info"
+	installed="$(printf '%s\n' "$info" | sed -n "s/^Plugin:  *$PLUGIN_SLUG \([^ ]*\) .*/\1/p")"
 	current="$(read_state current.json)"
 	if [ -n "$current" ]; then
 		printf '%s' "$current" | jq -r '"Deployed:     \(.version) from \(.source) · \(.sha)\n              zip sha256 \(.zip_sha256) · \(.action) at \(.deployed_at)"
 			+ (if .previous then "\nPrevious:     \(.previous.version) from \(.previous.source) · \(.previous.sha)" else "" end)'
+		recorded="$(printf '%s' "$current" | jq -r .version)"
+		if [ -n "$installed" ] && [ "$installed" != "$recorded" ]; then
+			echo "Warning:      installed $installed is not the recorded deployment ($recorded): it was changed outside"
+			echo "              bin/dev-site.sh (for example a WordPress update). Redeploy to resync; rollback refuses until then."
+		fi
 	else
 		echo "Deployed:     nothing recorded yet"
 	fi
@@ -383,10 +444,14 @@ if [ $# -gt 0 ]; then
 	shift
 fi
 case "$command" in
+	"" | -h | --help | help) ;;
+	*) require_engine ;;
+esac
+case "$command" in
 	up) cmd_up ;;
 	deploy) cmd_deploy "$@" ;;
 	status) cmd_status ;;
-	rollback) cmd_rollback ;;
+	rollback) cmd_rollback "$@" ;;
 	seed) cmd_seed ;;
 	wp)
 		require_running

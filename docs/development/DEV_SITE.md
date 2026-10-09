@@ -53,13 +53,20 @@ writable `TMPDIR` (e.g. the session scratchpad).
 
 - `rollback` reinstalls the previous artifact (checksum re-verified) and
   snapshots the database first. It does **not** restore the database.
+- The record only knows about this script's deploys (#166). If the plugin
+  changes another way, for example through a WordPress update, `status`
+  prints a warning naming both versions. `rollback` then refuses unless you
+  pass `--allow-stale-record`. Redeploy to resync.
 - `backups` lists snapshots; `restore-db FILE --yes-overwrite-dev-db` restores
   one after taking a fresh snapshot. Only do this when a deploy damaged dev data.
 - `destroy --yes-destroy-dev-data` deletes containers and volumes. It is never
   part of routine cleanup.
 - **Docker Desktop hangs.** Seen twice: on 2026-10-05 after the disk filled,
   and overnight on 2026-10-06/07 with 50 GiB free. `docker ps` never
-  returns, and `docker desktop restart` hangs too. To recover:
+  returns, and `docker desktop restart` hangs too. Since #166, every
+  command first gives Docker `ASC_DEV_DOCKER_TIMEOUT` seconds (default 15)
+  to answer. If it doesn't, the command exits with a pointer here instead
+  of hanging. To recover:
   1. Quit Docker Desktop.
   2. If `pgrep -f com.docker.backend` still finds it, stop it with TERM,
      then KILL.

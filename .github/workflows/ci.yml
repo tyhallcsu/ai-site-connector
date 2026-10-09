@@ -450,7 +450,9 @@ jobs:
   # The one check `main` requires (#99): it passes only when every job listed
   # in `needs` succeeded. Add new jobs to `needs`; matrix entries and new jobs
   # need no settings change. It runs even when a job fails or is cancelled,
-  # and then fails itself.
+  # and then fails itself. Exception: wordpress-version-compat has
+  # continue-on-error, so a failing compat row still reports success here
+  # (#170 tracks making it blocking).
   ci-gate:
     name: CI gate
     if: always()

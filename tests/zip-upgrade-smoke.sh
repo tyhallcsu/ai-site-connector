@@ -42,18 +42,33 @@ if [ -z "$PREV_VERSION" ]; then
 	if [ -n "${GITHUB_TOKEN:-}" ]; then
 		auth=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
 	fi
-	PREV_VERSION="$(curl -fsSL ${auth[@]+"${auth[@]}"} "https://api.github.com/repos/${REPO}/releases?per_page=20" \
+	PREV_VERSION="$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 ${auth[@]+"${auth[@]}"} "https://api.github.com/repos/${REPO}/releases?per_page=20" \
 		| jq -r --arg v "v$NEW_VERSION" '[.[] | select(.draft == false and .prerelease == false and .tag_name != $v)][0].tag_name' | sed 's/^v//')"
 fi
 test -n "$PREV_VERSION" && [ "$PREV_VERSION" != "null" ] || { echo "Could not resolve previous release." >&2; exit 1; }
 PREV_ZIP="$WORK/prev.zip"
 log "Downloading previous release v$PREV_VERSION."
-curl -fsSL -o "$PREV_ZIP" "https://github.com/${REPO}/releases/download/v${PREV_VERSION}/ai-site-connector-v${PREV_VERSION}.zip"
+curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o "$PREV_ZIP" "https://github.com/${REPO}/releases/download/v${PREV_VERSION}/ai-site-connector-v${PREV_VERSION}.zip"
+
+# Download hosts fail now and then; one 504 broke every WordPress job on
+# 2026-10-09 (#170). Retry with backoff, then fail loudly.
+retry() {
+	local attempt=1
+	until "$@"; do
+		if [ "$attempt" -ge 4 ]; then
+			echo "Giving up after $attempt attempts: $*" >&2
+			return 1
+		fi
+		echo "Attempt $attempt failed; retrying in $((attempt * 10))s: $*" >&2
+		sleep $((attempt * 10))
+		attempt=$((attempt + 1))
+	done
+}
 
 fresh_site() {
 	mysql "${mysql_args[@]}" -e "DROP DATABASE IF EXISTS \`${WP_DB_NAME}\`; CREATE DATABASE \`${WP_DB_NAME}\`;" 2>/dev/null
 	rm -rf "$WORK/wp"
-	wp_cli core download --version="$WP_VERSION" --quiet
+	retry wp_cli core download --version="$WP_VERSION" --quiet --force
 	wp_cli config create --dbname="$WP_DB_NAME" --dbuser="$WP_DB_USER" --dbpass="$WP_DB_PASSWORD" --dbhost="$WP_DB_HOST" --skip-check --quiet
 	wp_cli core install --url=http://127.0.0.1 --title=zip-smoke --admin_user=admin --admin_password='zip-smoke-ignore' --admin_email=admin@example.test --skip-email --quiet
 }

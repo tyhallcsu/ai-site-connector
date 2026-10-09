@@ -4,7 +4,7 @@ Tags: rest-api, application-passwords, claude, ai, codex, automation
 Requires at least: 5.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.13.1
+Stable tag: 0.14.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -37,6 +37,9 @@ The plugin stores ONLY metadata (uuid, name, created, last_used). The plaintext 
 Yes — use the apply_filters( 'ai_site_connector_operator_caps', $caps ) filter.
 
 == Changelog ==
+= 0.14.0 =
+* New: WP-CLI command wp ai-connector access-preview explains whether a credential can run an MCP tool, a REST tool or any REST route, and which check would refuse it. It exits 0 when allowed, 1 when denied and 2 when the result depends on the request. Read-only: nothing is sent, written or run, and no password is printed.
+
 = 0.13.1 =
 * Changed: the plugin download is about 73% smaller (1.15 MB to about 313 KB). Brand source images are no longer shipped; nothing at runtime used them.
 * Changed: the admin header shows the approved icon as a small, versioned PNG, so upgraded sites never show a cached old image.

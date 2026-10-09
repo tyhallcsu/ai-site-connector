@@ -6,6 +6,42 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-09
+
+Minor: a WP-CLI command for the effective-access preview. No REST, MCP or
+database changes.
+
+### Added
+
+- `wp ai-connector access-preview` (#167): the Credentials tab's
+  effective-access preview (#124) on the command line. It explains whether
+  a user, optionally through one Application Password, could run an MCP
+  tool, a REST tool or any REST route, and which check would refuse it.
+  - It needs an administrator `--user`.
+  - `--format=table|json|yaml`.
+  - Exit codes: 0 allowed, 1 denied, 2 depends on the request.
+  - Read-only: nothing is minted, sent, written or run, and no password is
+    printed.
+
+### Development
+
+These are not shipped in the plugin ZIP.
+
+- `main` requires one `CI gate` check (#99). It passes only when every CI
+  job succeeded, including each WordPress compatibility row (#170).
+- CI downloads (WP-CLI, WordPress, release ZIPs) retry with backoff and
+  fail with a clear message, instead of saving an error page as the
+  download (#170).
+- `bin/dev-site.sh` gives up after a bounded wait when Docker hangs,
+  instead of blocking forever (#166). `status` warns when the dev site's
+  plugin differs from the deploy record, and `rollback` then refuses.
+
+### Testing
+
+- The runtime smoke covers `access-preview`: the administrator
+  requirement, all three exit codes, JSON output equal to the preview
+  service, and no audit writes.
+
 ## [0.13.1] - 2026-10-06
 
 Patch: a 73% smaller plugin download. No REST, MCP or database changes.

@@ -35,3 +35,6 @@ tests/.cache/
 # Backups
 *.bak
 *.orig
+
+# Local Claude Code session state and worktrees
+.claude/

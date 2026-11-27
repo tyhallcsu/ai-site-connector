@@ -38,3 +38,6 @@ tests/.cache/
 
 # Local Claude Code session state and worktrees
 .claude/
+
+# Local composer lockfile (CI resolves dependencies without a lock)
+composer.lock

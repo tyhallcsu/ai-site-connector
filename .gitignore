@@ -41,3 +41,7 @@ tests/.cache/
 
 # Local composer lockfile (CI resolves dependencies without a lock)
 composer.lock
+
+# Root-level duplicates of docs/development/ session prompts
+/03-dev-audit-discover-and-ship.md
+/ai-site-connector-autonomous-development-prompt.md
